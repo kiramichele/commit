@@ -9,17 +9,17 @@ import os
 
 load_dotenv()
 
-from routers import auth, classrooms, assignments, submissions, commits, playground
+from routers import auth, classrooms, assignments, submissions, commits, playground, admin
 
 app = FastAPI(
     title="Commit Platform API",
     version="0.1.0",
-    docs_url="/docs",       # Swagger UI at /docs
+    docs_url="/docs",
     redoc_url="/redoc",
 )
 
 # ============================================================
-# CORS — allow the Next.js frontend to call this API
+# CORS
 # ============================================================
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
@@ -40,6 +40,7 @@ app.include_router(assignments.router,  prefix="/assignments", tags=["assignment
 app.include_router(submissions.router,  prefix="/submissions", tags=["submissions"])
 app.include_router(commits.router,      prefix="/commits",     tags=["commits"])
 app.include_router(playground.router,   prefix="/playground",  tags=["playground"])
+app.include_router(admin.router,        prefix="/admin",       tags=["admin"])
 
 
 # ============================================================
@@ -48,7 +49,6 @@ app.include_router(playground.router,   prefix="/playground",  tags=["playground
 @app.get("/")
 async def root():
     return {"status": "ok", "app": "Commit Platform API"}
-
 
 @app.get("/health")
 async def health():

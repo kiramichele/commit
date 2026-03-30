@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
 import random
-import string
 
 from auth_deps import CurrentUser, get_current_user, require_teacher
 from db import supabase_admin, get_user_client
@@ -57,7 +56,6 @@ def generate_join_code() -> str:
 
 
 def unique_join_code() -> str:
-    """Generates a join code guaranteed to be unique in the DB."""
     for _ in range(10):
         code = generate_join_code()
         existing = (
@@ -77,7 +75,7 @@ def unique_join_code() -> str:
 
 @router.get("/")
 async def list_classrooms(user: CurrentUser = Depends(get_current_user)):
-    """Returns classrooms for the current user (teacher: own, student: joined)."""
+    """Returns classrooms for the current user."""
     client = get_user_client(user.access_token)
 
     if user.role in ("teacher", "admin"):
@@ -97,7 +95,7 @@ async def list_classrooms(user: CurrentUser = Depends(get_current_user)):
             .execute()
         )
 
-    return response.data
+    return response.data or []
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -106,7 +104,6 @@ async def create_classroom(
     user: CurrentUser = Depends(require_teacher),
 ):
     """Creates a new classroom. Enforces free tier limit."""
-    # Check classroom limit for free tier
     existing = (
         supabase_admin.table("classrooms")
         .select("id", count="exact")
@@ -116,7 +113,6 @@ async def create_classroom(
     )
     current_count = existing.count or 0
 
-    # TODO: check if teacher has pro subscription before enforcing limit
     if current_count >= FREE_TIER_CLASSROOM_LIMIT:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -126,7 +122,7 @@ async def create_classroom(
 
     join_code = unique_join_code()
 
-    response = (
+    result = (
         supabase_admin.table("classrooms")
         .insert({
             "teacher_id": user.profile_id,
@@ -139,12 +135,13 @@ async def create_classroom(
             "standup_frequency_days": body.standup_frequency_days,
             "discussion_enabled": body.discussion_enabled,
         })
-        .select()
-        .single()
         .execute()
     )
 
-    return response.data
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create classroom.")
+
+    return result.data[0]
 
 
 @router.get("/{classroom_id}")
@@ -152,7 +149,7 @@ async def get_classroom(
     classroom_id: str,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Returns a single classroom. RLS ensures access control."""
+    """Returns a single classroom."""
     client = get_user_client(user.access_token)
     response = (
         client.table("classrooms")
@@ -172,23 +169,21 @@ async def update_classroom(
     body: ClassroomUpdate,
     user: CurrentUser = Depends(require_teacher),
 ):
-    """Updates classroom settings. Only the owning teacher can do this."""
+    """Updates classroom settings."""
     updates = body.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update.")
 
-    response = (
+    result = (
         supabase_admin.table("classrooms")
         .update(updates)
         .eq("id", classroom_id)
         .eq("teacher_id", user.profile_id)
-        .select()
-        .single()
         .execute()
     )
-    if not response.data:
+    if not result.data:
         raise HTTPException(status_code=404, detail="Classroom not found or access denied.")
-    return response.data
+    return result.data[0]
 
 
 @router.delete("/{classroom_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -211,7 +206,7 @@ async def list_students(
     response = supabase_admin.rpc(
         "classroom_progress_summary", {"p_classroom_id": classroom_id}
     ).execute()
-    return response.data
+    return response.data or []
 
 
 @router.post("/{classroom_id}/students", status_code=status.HTTP_201_CREATED)
@@ -220,11 +215,7 @@ async def add_student(
     body: StudentCreate,
     user: CurrentUser = Depends(require_teacher),
 ):
-    """
-    Teacher creates a student account and adds them to the classroom.
-    Uses the service role to create the auth user.
-    """
-    # Verify teacher owns this classroom
+    """Teacher creates a student account and adds them to the classroom."""
     classroom = (
         supabase_admin.table("classrooms")
         .select("id")
@@ -236,7 +227,6 @@ async def add_student(
     if not classroom.data:
         raise HTTPException(status_code=404, detail="Classroom not found or access denied.")
 
-    # Check student count limit (45 per classroom)
     members = (
         supabase_admin.table("classroom_members")
         .select("id", count="exact")
@@ -244,12 +234,8 @@ async def add_student(
         .execute()
     )
     if (members.count or 0) >= 45:
-        raise HTTPException(
-            status_code=403,
-            detail="Classroom is at the 45 student limit.",
-        )
+        raise HTTPException(status_code=403, detail="Classroom is at the 45 student limit.")
 
-    # Call the DB function to create auth user + profile + membership
     result = supabase_admin.rpc(
         "create_student_account",
         {
@@ -269,8 +255,8 @@ async def get_suspicious_commits(
     classroom_id: str,
     user: CurrentUser = Depends(require_teacher),
 ):
-    """Returns commits flagged as potentially suspicious for this classroom."""
+    """Returns commits flagged as potentially suspicious."""
     response = supabase_admin.rpc(
         "flag_suspicious_commits", {"p_classroom_id": classroom_id}
     ).execute()
-    return response.data
+    return response.data or []
