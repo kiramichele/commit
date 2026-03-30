@@ -100,6 +100,64 @@ async def run_code(
 
 
 # ============================================================
+# TEACHER — VIEW SUBMISSIONS
+# These must come BEFORE /{submission_id} routes to avoid
+# FastAPI matching "assignment" as a submission_id
+# ============================================================
+
+@router.get("/assignment/{assignment_id}")
+async def list_assignment_submissions(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns all submissions for an assignment (teacher only)."""
+    submissions = (
+        supabase_admin.table("submissions")
+        .select("*, profiles!submissions_student_id_fkey(display_name, email)")
+        .eq("assignment_id", assignment_id)
+        .order("submitted_at", desc=True)
+        .execute()
+    )
+
+    result = []
+    for s in (submissions.data or []):
+        commit_count = (
+            supabase_admin.table("code_commits")
+            .select("id", count="exact")
+            .eq("submission_id", s["id"])
+            .execute()
+        )
+        s["commit_count"] = commit_count.count or 0
+        result.append(s)
+
+    return result
+
+
+@router.patch("/grade/{submission_id}")
+async def grade_submission(
+    submission_id: str,
+    body: GradeSubmission,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Teacher grades a submission."""
+    from datetime import datetime, timezone
+    result = (
+        supabase_admin.table("submissions")
+        .update({
+            "grade": body.grade,
+            "teacher_feedback": body.feedback,
+            "graded_at": datetime.now(timezone.utc).isoformat(),
+            "graded_by": user.profile_id,
+        })
+        .eq("id", submission_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    return result.data[0]
+
+
+# ============================================================
 # SUBMISSIONS
 # ============================================================
 
@@ -108,10 +166,7 @@ async def open_submission(
     assignment_id: str,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """
-    Gets or creates a submission for the current student.
-    Called when a student opens an assignment.
-    """
+    """Gets or creates a submission for the current student."""
     result = supabase_admin.rpc(
         "get_or_create_submission",
         {
@@ -224,6 +279,11 @@ async def submit_assignment(
     return submission.data
 
 
+# ============================================================
+# COMMIT HISTORY
+# These wildcard routes must come LAST
+# ============================================================
+
 @router.get("/{submission_id}/commits")
 async def get_commit_history(
     submission_id: str,
@@ -258,59 +318,3 @@ async def get_commit_code(
     if not commit.data:
         raise HTTPException(status_code=404, detail="Commit not found.")
     return commit.data
-
-
-# ============================================================
-# TEACHER — VIEW SUBMISSIONS
-# ============================================================
-
-@router.get("/assignment/{assignment_id}")
-async def list_assignment_submissions(
-    assignment_id: str,
-    user: CurrentUser = Depends(require_teacher),
-):
-    """Returns all submissions for an assignment (teacher only)."""
-    submissions = (
-        supabase_admin.table("submissions")
-        .select("*, profiles!submissions_student_id_fkey(display_name, email)")
-        .eq("assignment_id", assignment_id)
-        .order("submitted_at", desc=True, nulls_first=False)
-        .execute()
-    )
-
-    result = []
-    for s in (submissions.data or []):
-        commit_count = (
-            supabase_admin.table("code_commits")
-            .select("id", count="exact")
-            .eq("submission_id", s["id"])
-            .execute()
-        )
-        s["commit_count"] = commit_count.count or 0
-        result.append(s)
-
-    return result
-
-
-@router.patch("/{submission_id}/grade")
-async def grade_submission(
-    submission_id: str,
-    body: GradeSubmission,
-    user: CurrentUser = Depends(require_teacher),
-):
-    """Teacher grades a submission."""
-    from datetime import datetime, timezone
-    result = (
-        supabase_admin.table("submissions")
-        .update({
-            "grade": body.grade,
-            "teacher_feedback": body.feedback,
-            "graded_at": datetime.now(timezone.utc).isoformat(),
-            "graded_by": user.profile_id,
-        })
-        .eq("id", submission_id)
-        .execute()
-    )
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Submission not found.")
-    return result.data[0]

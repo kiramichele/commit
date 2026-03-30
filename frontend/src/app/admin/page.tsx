@@ -69,8 +69,9 @@ export default function AdminPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!loading && (!profile || profile.role !== 'admin')) router.push('/login')
-  }, [profile, loading])
+    if (loading) return
+    if (!profile || profile.role !== 'admin') router.push('/login')
+}, [profile, loading])
 
   useEffect(() => {
     if (!profile || profile.role !== 'admin') return

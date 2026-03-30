@@ -342,7 +342,7 @@ export default function ClassroomPage() {
                           )}
                         </div>
                       </div>
-                      <Link href={`/classroom/${classroomId}/assignment/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      <Link href={`/classroom/${classroomId}/submissions/${a.id}`}>
                         view submissions
                       </Link>
                     </div>

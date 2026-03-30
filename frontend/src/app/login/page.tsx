@@ -16,17 +16,19 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const data = await api.post<{ access_token: string; refresh_token: string; profile: { role: string } }>(
-        '/auth/login', { email, password }
-      )
+      const data = await api.post<{
+        access_token: string
+        refresh_token: string
+        profile: { role: string }
+      }>('/auth/login', { email, password })
+
       saveSession(data.access_token, data.refresh_token)
-      if (data.profile.role === 'teacher' || data.profile.role === 'admin') {
-        router.push('/dashboard')
-      } else {
-        router.push('/learn')
-      }
+
+      if (data.profile.role === 'admin') router.push('/admin')
+      else if (data.profile.role === 'teacher') router.push('/dashboard')
+      else router.push('/learn')
     } catch (err: any) {
-      setError(err.message || 'Something went wrong.')
+      setError(err.message || 'Invalid email or password.')
     } finally {
       setLoading(false)
     }
@@ -36,7 +38,6 @@ export default function LoginPage() {
     <main style={{ minHeight: '100vh', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-      {/* NAV */}
       <nav style={{ padding: '0 2.5rem', height: '64px', display: 'flex', alignItems: 'center', borderBottom: '1px solid rgba(26,86,219,0.08)' }}>
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
           <div style={{ width: '32px', height: '32px', background: '#1A56DB', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", fontSize: '12px', color: 'white', fontWeight: 500 }}>{'>'}_</div>
@@ -44,7 +45,6 @@ export default function LoginPage() {
         </Link>
       </nav>
 
-      {/* FORM */}
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
         <div style={{ width: '100%', maxWidth: '400px' }}>
 
@@ -54,6 +54,7 @@ export default function LoginPage() {
           </div>
 
           <div style={{ background: 'white', borderRadius: '14px', padding: '2rem', border: '1px solid rgba(14,45,110,0.08)', boxShadow: '0 4px 24px rgba(14,45,110,0.06)' }}>
+
             {error && (
               <div style={{ background: '#FEE2E2', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '12px 16px', marginBottom: '1.25rem', fontSize: '14px', color: '#991B1B' }}>
                 {error}
@@ -65,22 +66,23 @@ export default function LoginPage() {
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0E2D6E', marginBottom: '6px' }}>email</label>
                 <input
                   type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
                   placeholder="you@school.edu"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
                 />
               </div>
+
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 500, color: '#0E2D6E', marginBottom: '6px' }}>password</label>
                 <input
                   type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
                   placeholder="••••••••"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
                 />
               </div>
 
               <button
                 type="submit" disabled={loading}
-                style={{ width: '100%', padding: '12px', background: loading ? '#93C5FD' : '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '15px', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif', transition: 'background 0.15s" }}
+                style={{ width: '100%', padding: '12px', background: loading ? '#93C5FD' : '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '15px', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}
               >
                 {loading ? 'signing in...' : 'sign in →'}
               </button>
@@ -91,6 +93,7 @@ export default function LoginPage() {
             are you a teacher?{' '}
             <Link href="/signup" style={{ color: '#1A56DB', fontWeight: 500, textDecoration: 'none' }}>apply for an account</Link>
           </p>
+
         </div>
       </div>
     </main>

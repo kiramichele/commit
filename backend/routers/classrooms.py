@@ -216,6 +216,8 @@ async def add_student(
     user: CurrentUser = Depends(require_teacher),
 ):
     """Teacher creates a student account and adds them to the classroom."""
+
+    # Verify teacher owns this classroom
     classroom = (
         supabase_admin.table("classrooms")
         .select("id")
@@ -227,6 +229,7 @@ async def add_student(
     if not classroom.data:
         raise HTTPException(status_code=404, detail="Classroom not found or access denied.")
 
+    # Check student count limit
     members = (
         supabase_admin.table("classroom_members")
         .select("id", count="exact")
@@ -236,18 +239,41 @@ async def add_student(
     if (members.count or 0) >= 45:
         raise HTTPException(status_code=403, detail="Classroom is at the 45 student limit.")
 
-    result = supabase_admin.rpc(
-        "create_student_account",
-        {
-            "p_email": body.email,
-            "p_password": body.password,
-            "p_display_name": body.display_name,
-            "p_classroom_id": classroom_id,
-            "p_teacher_id": user.profile_id,
-        },
-    ).execute()
+    # Create auth user via Supabase Admin API
+    try:
+        auth_response = supabase_admin.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not create user: {str(e)}")
 
-    return {"profile_id": result.data, "display_name": body.display_name}
+    auth_user = auth_response.user
+    if not auth_user:
+        raise HTTPException(status_code=500, detail="Failed to create auth user.")
+
+    # Create profile
+    profile_result = supabase_admin.table("profiles").insert({
+        "auth_user_id": str(auth_user.id),
+        "role": "student",
+        "display_name": body.display_name,
+        "email": body.email,
+        "approval_status": "approved",
+    }).execute()
+
+    if not profile_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create profile.")
+
+    profile_id = profile_result.data[0]["id"]
+
+    # Add to classroom
+    supabase_admin.table("classroom_members").insert({
+        "classroom_id": classroom_id,
+        "student_id": profile_id,
+    }).execute()
+
+    return {"profile_id": profile_id, "display_name": body.display_name}
 
 
 @router.get("/{classroom_id}/suspicious-commits")
