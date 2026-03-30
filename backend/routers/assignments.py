@@ -65,7 +65,6 @@ async def create_assignment(
     user: CurrentUser = Depends(require_teacher),
 ):
     """Creates a new assignment in a classroom."""
-    # Verify teacher owns this classroom
     classroom = (
         supabase_admin.table("classrooms")
         .select("id")
@@ -80,7 +79,7 @@ async def create_assignment(
     if body.scaffold_level not in ('block_pseudo', 'typed_pseudo', 'block_python', 'typed_python'):
         raise HTTPException(status_code=400, detail="Invalid scaffold level.")
 
-    response = (
+    result = (
         supabase_admin.table("assignments")
         .insert({
             "classroom_id": body.classroom_id,
@@ -93,11 +92,13 @@ async def create_assignment(
             "due_date": body.due_date or None,
             "allow_collab": body.allow_collab,
         })
-        .select()
-        .single()
         .execute()
     )
-    return response.data
+
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to create assignment.")
+
+    return result.data[0]
 
 
 @router.get("/{assignment_id}")
@@ -130,7 +131,6 @@ async def update_assignment(
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update.")
 
-    # Verify teacher owns the classroom this assignment belongs to
     existing = (
         supabase_admin.table("assignments")
         .select("classroom_id")
@@ -152,15 +152,15 @@ async def update_assignment(
     if not classroom.data:
         raise HTTPException(status_code=403, detail="Access denied.")
 
-    response = (
+    result = (
         supabase_admin.table("assignments")
         .update(updates)
         .eq("id", assignment_id)
-        .select()
-        .single()
         .execute()
     )
-    return response.data
+    if not result.data:
+        raise HTTPException(status_code=500, detail="Failed to update assignment.")
+    return result.data[0]
 
 
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)

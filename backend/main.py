@@ -18,9 +18,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# ============================================================
-# CORS
-# ============================================================
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 app.add_middleware(
@@ -31,21 +28,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================================
-# ROUTERS
-# ============================================================
 app.include_router(auth.router,         prefix="/auth",        tags=["auth"])
 app.include_router(classrooms.router,   prefix="/classrooms",  tags=["classrooms"])
 app.include_router(assignments.router,  prefix="/assignments", tags=["assignments"])
-app.include_router(submissions.router,  prefix="/submissions", tags=["submissions"])
+app.include_router(submissions.router,  prefix="/code",        tags=["code"])
 app.include_router(commits.router,      prefix="/commits",     tags=["commits"])
 app.include_router(playground.router,   prefix="/playground",  tags=["playground"])
 app.include_router(admin.router,        prefix="/admin",       tags=["admin"])
 
-
-# ============================================================
-# HEALTH CHECK
-# ============================================================
 @app.get("/")
 async def root():
     return {"status": "ok", "app": "Commit Platform API"}
