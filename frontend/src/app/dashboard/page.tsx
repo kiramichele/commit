@@ -99,6 +99,9 @@ export default function DashboardPage() {
           <span style={{ fontWeight: 700, fontSize: '16px', color: '#0E2D6E', letterSpacing: '-0.02em' }}>commit</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <Link href="/curriculum" style={{ fontSize: '13px', color: '#5F5E5A', textDecoration: 'none', fontWeight: 500 }}>
+            curriculum
+          </Link>
           <span style={{ fontSize: '14px', color: '#5F5E5A' }}>hey, {profile.display_name.split(' ')[0]} 👋</span>
           <button onClick={handleLogout} style={{ fontSize: '13px', color: '#888780', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>sign out</button>
         </div>
@@ -169,8 +172,6 @@ export default function DashboardPage() {
                   {c.description && (
                     <p style={{ margin: '0 0 1rem', fontSize: '13px', color: '#888780', lineHeight: 1.6 }}>{c.description}</p>
                   )}
-
-                  {/* FLAGS */}
                   <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                     {c.sequential_unlock && <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', fontWeight: 500 }}>sequential</span>}
                     {c.collab_enabled && <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', background: '#DCFCE7', color: '#166534', fontWeight: 500 }}>collab on</span>}
@@ -193,8 +194,8 @@ export default function DashboardPage() {
                   <Link href={`/classroom/${c.id}`} style={{ flex: 1, padding: '8px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textAlign: 'center', textDecoration: 'none' }}>
                     open classroom
                   </Link>
-                  <Link href={`/classroom/${c.id}/settings`} style={{ padding: '8px 14px', background: 'transparent', color: '#5F5E5A', borderRadius: '8px', fontSize: '13px', fontWeight: 500, textDecoration: 'none', border: '1px solid rgba(14,45,110,0.12)' }}>
-                    settings
+                  <Link href={`/classroom/${c.id}/gradebook`} style={{ padding: '8px 14px', background: 'transparent', color: '#5F5E5A', borderRadius: '8px', fontSize: '13px', fontWeight: 500, textDecoration: 'none', border: '1px solid rgba(14,45,110,0.12)' }}>
+                    gradebook
                   </Link>
                 </div>
               </div>

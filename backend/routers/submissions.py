@@ -280,6 +280,67 @@ async def submit_assignment(
 
 
 # ============================================================
+# COMMIT DIFF
+# Must come before the wildcard /{submission_id}/commits routes
+# ============================================================
+
+@router.get("/{submission_id}/diff")
+async def get_commit_diff(
+    submission_id: str,
+    from_commit: str,
+    to_commit: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a structured diff between two commits."""
+    from difflib import SequenceMatcher
+
+    from_data = (
+        supabase_admin.table("code_commits")
+        .select("code_snapshot, message")
+        .eq("id", from_commit)
+        .eq("submission_id", submission_id)
+        .single()
+        .execute()
+    )
+    to_data = (
+        supabase_admin.table("code_commits")
+        .select("code_snapshot, message")
+        .eq("id", to_commit)
+        .eq("submission_id", submission_id)
+        .single()
+        .execute()
+    )
+
+    if not from_data.data or not to_data.data:
+        raise HTTPException(status_code=404, detail="Commit not found.")
+
+    a_lines = (from_data.data["code_snapshot"] or "").splitlines()
+    b_lines = (to_data.data["code_snapshot"] or "").splitlines()
+
+    matcher = SequenceMatcher(None, a_lines, b_lines)
+    hunks = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        hunks.append({
+            "tag": tag,
+            "old_lines": a_lines[i1:i2],
+            "new_lines": b_lines[j1:j2],
+            "old_start": i1 + 1,
+            "new_start": j1 + 1,
+        })
+
+    lines_added = sum(len(h["new_lines"]) for h in hunks if h["tag"] in ("insert", "replace"))
+    lines_removed = sum(len(h["old_lines"]) for h in hunks if h["tag"] in ("delete", "replace"))
+
+    return {
+        "from_commit": {"id": from_commit, "message": from_data.data["message"]},
+        "to_commit": {"id": to_commit, "message": to_data.data["message"]},
+        "hunks": hunks,
+        "lines_added": lines_added,
+        "lines_removed": lines_removed,
+    }
+
+
+# ============================================================
 # COMMIT HISTORY
 # These wildcard routes must come LAST
 # ============================================================

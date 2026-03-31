@@ -2,13 +2,14 @@
 # COMMIT PLATFORM — Classrooms Router
 # ============================================================
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 import random
+import uuid
 
 from auth_deps import CurrentUser, get_current_user, require_teacher
-from db import supabase_admin, get_user_client
+from db import supabase_admin, supabase_anon, get_user_client
 
 router = APIRouter()
 
@@ -70,7 +71,163 @@ def unique_join_code() -> str:
 
 
 # ============================================================
-# ROUTES
+# PUBLIC — Join flow (no auth required)
+# These must come BEFORE /{classroom_id} to avoid FastAPI
+# matching "preview" or "join" as a classroom_id
+# ============================================================
+
+class StudentJoin(BaseModel):
+    join_code: str
+    display_name: str
+    email: str
+    password: str
+    avatar_url: Optional[str] = None
+
+
+@router.get("/preview/{join_code}")
+async def preview_classroom(join_code: str):
+    """Returns basic classroom info for the join page. No auth required."""
+    response = (
+        supabase_admin.table("classrooms")
+        .select("id, name, teacher_id")
+        .eq("join_code", join_code.upper())
+        .eq("archived", False)
+        .single()
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    # Get teacher name
+    teacher = (
+        supabase_admin.table("profiles")
+        .select("display_name")
+        .eq("id", response.data["teacher_id"])
+        .single()
+        .execute()
+    )
+
+    # Get student count
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("id", count="exact")
+        .eq("classroom_id", response.data["id"])
+        .execute()
+    )
+
+    return {
+        "id": response.data["id"],
+        "name": response.data["name"],
+        "teacher_name": teacher.data["display_name"] if teacher.data else "Unknown",
+        "student_count": members.count or 0,
+    }
+
+
+@router.post("/join")
+async def join_classroom(body: StudentJoin):
+    """Student self-registers and joins a classroom. No auth required."""
+    # Find classroom
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("join_code", body.join_code.upper())
+        .eq("archived", False)
+        .single()
+        .execute()
+    )
+    if not classroom.data:
+        raise HTTPException(status_code=404, detail="Invalid join code.")
+
+    classroom_id = classroom.data["id"]
+
+    # Check student limit
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("id", count="exact")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    )
+    if (members.count or 0) >= 45:
+        raise HTTPException(status_code=403, detail="This classroom is full.")
+
+    # Create auth user
+    try:
+        auth_response = supabase_admin.auth.admin.create_user({
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": True,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not create account: {str(e)}")
+
+    auth_user = auth_response.user
+    if not auth_user:
+        raise HTTPException(status_code=500, detail="Failed to create account.")
+
+    # Create profile
+    profile_data = {
+        "auth_user_id": str(auth_user.id),
+        "role": "student",
+        "display_name": body.display_name,
+        "email": body.email,
+        "approval_status": "approved",
+    }
+
+    profile_result = supabase_admin.table("profiles").insert(profile_data).execute()
+    if not profile_result.data:
+        raise HTTPException(status_code=500, detail="Failed to create profile.")
+
+    profile_id = profile_result.data[0]["id"]
+
+    # Add to classroom
+    supabase_admin.table("classroom_members").insert({
+        "classroom_id": classroom_id,
+        "student_id": profile_id,
+    }).execute()
+
+    # Sign in to get tokens
+    try:
+        session = supabase_anon.auth.sign_in_with_password({
+            "email": body.email,
+            "password": body.password,
+        })
+    except Exception:
+        raise HTTPException(status_code=500, detail="Account created but could not sign in.")
+
+    return {
+        "access_token": session.session.access_token,
+        "refresh_token": session.session.refresh_token,
+        "profile": {
+            "id": profile_id,
+            "display_name": body.display_name,
+            "role": "student",
+        },
+    }
+
+@router.post("/upload-avatar")
+async def upload_avatar(file: UploadFile = File(...)):
+    BUCKET = "avatars"
+    if file.content_type not in ["image/jpeg","image/png","image/webp","image/gif"]:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, WebP, or GIF allowed.")
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Photo must be under 5MB.")
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"avatars/{uuid.uuid4()}.{ext}"
+    try:
+        try:
+            supabase_admin.storage.create_bucket(BUCKET, options={"public": True})
+        except:
+            pass
+        supabase_admin.storage.from_(BUCKET).upload(filename, contents, file_options={"content-type": file.content_type})
+        url = supabase_admin.storage.from_(BUCKET).get_public_url(filename)
+        return {"url": url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not upload photo: {str(e)}")
+
+
+# ============================================================
+# ROUTES (authenticated)
 # ============================================================
 
 @router.get("/")

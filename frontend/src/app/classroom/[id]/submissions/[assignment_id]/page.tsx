@@ -4,7 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
-0
+import DiffViewer from '@/components/DiffViewer'
 interface Assignment {
   id: string
   title: string
@@ -45,9 +45,6 @@ export default function SubmissionsPage() {
   const params = useParams()
   const classroomId = params.id as string
   const assignmentId = params['assignment_id'] as string
-  
-  console.log('params:', params)
-  console.log('profile:', profile)
 
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [submissions, setSubmissions] = useState<Submission[]>([])
@@ -60,6 +57,10 @@ export default function SubmissionsPage() {
   const [feedback, setFeedback] = useState('')
   const [grading, setGrading] = useState(false)
   const [gradeSuccess, setGradeSuccess] = useState(false)
+
+  const [compareMode, setCompareMode] = useState(false)
+  const [compareFrom, setCompareFrom] = useState<CommitHistory | null>(null)
+  const [compareTo, setCompareTo] = useState<CommitHistory | null>(null)
 
   useEffect(() => {
     if (!loading && !profile) router.push('/login')
@@ -92,6 +93,9 @@ export default function SubmissionsPage() {
     setGrade(sub.grade?.toString() || '')
     setFeedback(sub.teacher_feedback || '')
     setViewingCommit(null)
+    setCompareMode(false)
+    setCompareFrom(null)
+    setCompareTo(null)
     setCommitsLoading(true)
     try {
       const data = await api.get<CommitHistory[]>(`/code/${sub.id}/commits`)
@@ -108,7 +112,7 @@ export default function SubmissionsPage() {
     setGrading(true)
     setGradeSuccess(false)
     try {
-      await api.patch(`/code/${selected.id}/grade`, {
+      await api.patch(`/code/grade/${selected.id}`, {
         grade: parseFloat(grade),
         feedback: feedback || null,
       })
@@ -125,6 +129,25 @@ export default function SubmissionsPage() {
     } finally {
       setGrading(false)
     }
+  }
+
+  const handleCompareClick = (c: CommitHistory) => {
+    if (!compareFrom) {
+      setCompareFrom(c)
+      setCompareTo(null)
+      return
+    }
+    if (compareFrom.id === c.id) {
+      setCompareFrom(null)
+      return
+    }
+    setCompareTo(c)
+  }
+
+  const exitCompare = () => {
+    setCompareMode(false)
+    setCompareFrom(null)
+    setCompareTo(null)
   }
 
   const formatDate = (iso: string | null) => {
@@ -247,8 +270,17 @@ export default function SubmissionsPage() {
 
                 {/* COMMIT TIMELINE */}
                 <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
-                  <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888780', marginBottom: '12px' }}>
-                    commit history ({selected.commit_count})
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888780' }}>
+                      commit history ({selected.commit_count})
+                    </div>
+                    {commits.length >= 2 && (
+                      compareMode ? (
+                        <button onClick={exitCompare} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: 'rgba(245,158,11,0.1)', color: '#854D0E', border: '1px solid rgba(245,158,11,0.3)', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>exit compare</button>
+                      ) : (
+                        <button onClick={() => { setCompareMode(true); setViewingCommit(null) }} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: '#EBF1FD', color: '#0C447C', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontWeight: 600 }}>compare</button>
+                      )
+                    )}
                   </div>
                   {commitsLoading ? (
                     <p style={{ fontSize: '13px', color: '#888780', margin: 0 }}>loading commits...</p>
@@ -260,10 +292,14 @@ export default function SubmissionsPage() {
                       {commits.map((c, i) => {
                         const isLast = i === commits.length - 1
                         const isViewing = viewingCommit?.id === c.id
+                        const isFrom = compareMode && compareFrom?.id === c.id
+                        const isTo = compareMode && compareTo?.id === c.id
+                        const dotBg = isFrom ? '#F59E0B' : isTo || isViewing ? '#1A56DB' : isLast ? '#EBF1FD' : 'white'
+                        const dotShadow = isFrom ? '0 0 0 3px rgba(245,158,11,0.2)' : isLast || isTo ? '0 0 0 3px rgba(26,86,219,0.15)' : 'none'
                         return (
-                          <div key={c.id} onClick={() => setViewingCommit(isViewing ? null : c)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '80px', cursor: 'pointer', position: 'relative', zIndex: 1, padding: '0 4px' }}>
-                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: isViewing ? '#1A56DB' : isLast ? '#EBF1FD' : 'white', border: `2px solid ${isViewing ? '#1A56DB' : '#1A56DB'}`, flexShrink: 0, boxShadow: isLast ? '0 0 0 3px rgba(26,86,219,0.15)' : 'none' }} />
-                            <div style={{ fontSize: '10px', color: isViewing ? '#1A56DB' : '#5F5E5A', textAlign: 'center', lineHeight: 1.3, maxWidth: '72px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isViewing ? 600 : 400 }}>{c.message}</div>
+                          <div key={c.id} onClick={() => compareMode ? handleCompareClick(c) : setViewingCommit(isViewing ? null : c)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', minWidth: '80px', cursor: 'pointer', position: 'relative', zIndex: 1, padding: '0 4px' }}>
+                            <div style={{ width: '20px', height: '20px', borderRadius: '50%', background: dotBg, border: `2px solid ${isFrom ? '#F59E0B' : '#1A56DB'}`, flexShrink: 0, boxShadow: dotShadow }} />
+                            <div style={{ fontSize: '10px', color: isFrom ? '#854D0E' : isTo || isViewing ? '#1A56DB' : '#5F5E5A', textAlign: 'center', lineHeight: 1.3, maxWidth: '72px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: isFrom || isTo || isViewing ? 600 : 400 }}>{c.message}</div>
                             <div style={{ fontSize: '10px', color: '#888780', fontFamily: "'DM Mono', monospace" }}>{c.line_count}L</div>
                           </div>
                         )
@@ -274,7 +310,18 @@ export default function SubmissionsPage() {
 
                 {/* CODE VIEW */}
                 <div style={{ flex: 1, background: '#1C1C1E', overflow: 'auto' }}>
-                  {viewingCommit ? (
+                  {compareMode && compareFrom && compareTo ? (
+                    <DiffViewer
+                      oldCode={compareFrom.code_snapshot}
+                      newCode={compareTo.code_snapshot}
+                      oldLabel={compareFrom.message}
+                      newLabel={compareTo.message}
+                    />
+                  ) : compareMode ? (
+                    <div style={{ padding: '3rem', textAlign: 'center', color: 'rgba(255,255,255,0.3)', fontSize: '13px', fontFamily: "'DM Sans', sans-serif" }}>
+                      {compareFrom ? 'now pick a second commit to compare' : 'click a commit to start comparing'}
+                    </div>
+                  ) : viewingCommit ? (
                     <div>
                       <div style={{ padding: '8px 1rem', background: '#2A2A2C', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '12px', color: 'rgba(255,255,255,0.6)' }}>
                         viewing: <strong style={{ color: 'white' }}>{viewingCommit.message}</strong>

@@ -36,10 +36,11 @@ export default function LearnPage() {
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
-    if (!loading && !profile) router.push('/login')
-    if (!loading && profile?.role === 'teacher') router.push('/dashboard')
-    if (!loading && profile?.role === 'admin') router.push('/admin')
-  }, [profile, loading])
+  if (loading) return
+  if (!profile) router.push('/login')
+  if (profile?.role === 'teacher') router.push('/dashboard')
+  if (profile?.role === 'admin') router.push('/admin')
+}, [profile, loading])
 
   useEffect(() => {
     if (!profile || profile.role !== 'student') return

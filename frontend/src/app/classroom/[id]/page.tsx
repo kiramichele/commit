@@ -4,8 +4,9 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import HelpQueue from '@/components/HelpQueue'
 
-type Tab = 'students' | 'assignments' | 'settings'
+type Tab = 'students' | 'assignments' | 'help queue' | 'settings'
 
 interface Classroom {
   id: string
@@ -80,10 +81,7 @@ export default function ClassroomPage() {
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
 
-  // New student form
   const [newStudent, setNewStudent] = useState({ display_name: '', email: '', password: '' })
-
-  // New assignment form
   const [newAssignment, setNewAssignment] = useState<NewAssignment>({
     title: '', instructions: '', due_date: '', min_commits: 3,
     scaffold_level: 'typed_python', starter_code: '',
@@ -144,7 +142,7 @@ export default function ClassroomPage() {
     setActionError('')
     setActionLoading(true)
     try {
-      await api.post(`/assignments/`, {
+      await api.post('/assignments/', {
         classroom_id: classroomId,
         title: newAssignment.title,
         instructions: newAssignment.instructions,
@@ -193,15 +191,14 @@ export default function ClassroomPage() {
     fontWeight: 500 as const, color: '#0E2D6E', marginBottom: '5px',
   }
 
+  const helpCount = students.filter(s => s.open_help_request).length
+
   if (loading || !profile || !classroom) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
       <p style={{ color: '#888780' }}>{dataLoading ? 'loading classroom...' : 'classroom not found.'}</p>
     </div>
   )
-
-  const helpCount = students.filter(s => s.open_help_request).length
-  const submittedCount = (a: Assignment) => 0 // placeholder until submissions endpoint is built
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif" }}>
@@ -218,16 +215,20 @@ export default function ClassroomPage() {
 
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '10px' }}>
           {helpCount > 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF9C3', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '99px', padding: '4px 12px', fontSize: '12px', fontWeight: 600, color: '#854D0E' }}>
+            <button onClick={() => setTab('help queue')} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#FEF9C3', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '99px', padding: '4px 12px', fontSize: '12px', fontWeight: 600, color: '#854D0E', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
               <span style={{ width: '6px', height: '6px', background: '#F59E0B', borderRadius: '50%', display: 'inline-block' }} />
               {helpCount} help request{helpCount !== 1 ? 's' : ''}
-            </div>
+            </button>
           )}
           <button onClick={copyCode} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.15)', background: copiedCode ? '#DCFCE7' : 'white', color: copiedCode ? '#166534' : '#5F5E5A', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.15s' }}>
             <span style={{ fontFamily: "'DM Mono', monospace", letterSpacing: '0.06em' }}>{classroom.join_code}</span>
             {copiedCode ? 'copied!' : 'copy code'}
           </button>
         </div>
+
+        <Link href={`/classroom/${classroomId}/gradebook`} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.15)', background: 'white', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none' }}>
+  gradebook
+</Link>
       </nav>
 
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem' }}>
@@ -249,9 +250,12 @@ export default function ClassroomPage() {
 
         {/* TABS */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid rgba(14,45,110,0.08)', width: 'fit-content' }}>
-          {(['students', 'assignments', 'settings'] as Tab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 20px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", background: tab === t ? '#1A56DB' : 'transparent', color: tab === t ? 'white' : '#5F5E5A', transition: 'all 0.15s' }}>
+          {(['students', 'assignments', 'help queue', 'settings'] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 20px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", background: tab === t ? '#1A56DB' : 'transparent', color: tab === t ? 'white' : '#5F5E5A', transition: 'all 0.15s', position: 'relative' }}>
               {t}
+              {t === 'help queue' && helpCount > 0 && (
+                <span style={{ position: 'absolute', top: '4px', right: '4px', width: '8px', height: '8px', background: '#F59E0B', borderRadius: '50%' }} />
+              )}
             </button>
           ))}
         </div>
@@ -272,13 +276,11 @@ export default function ClassroomPage() {
               </div>
             ) : (
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
-                {/* TABLE HEADER */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px', gap: '1rem', padding: '10px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
                   {['student', 'submitted', 'late', 'last commit', 'status'].map(h => (
                     <div key={h} style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780' }}>{h}</div>
                   ))}
                 </div>
-
                 {students.map((s, i) => (
                   <div key={s.student_id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px', gap: '1rem', padding: '12px 1.25rem', alignItems: 'center', borderBottom: i < students.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', background: s.open_help_request ? 'rgba(254,249,195,0.4)' : 'transparent' }}>
                     <div>
@@ -342,7 +344,7 @@ export default function ClassroomPage() {
                           )}
                         </div>
                       </div>
-                      <Link href={`/classroom/${classroomId}/submissions/${a.id}`}>
+                      <Link href={`/classroom/${classroomId}/submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         view submissions
                       </Link>
                     </div>
@@ -353,18 +355,29 @@ export default function ClassroomPage() {
           </div>
         )}
 
+        {/* ── HELP QUEUE TAB ── */}
+        {tab === 'help queue' && (
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0E2D6E' }}>help queue</h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>refreshes every 30 seconds</p>
+            </div>
+            <HelpQueue classroomId={classroomId} />
+          </div>
+        )}
+
         {/* ── SETTINGS TAB ── */}
         {tab === 'settings' && (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.5rem' }}>
             <h3 style={{ margin: '0 0 1.5rem', fontSize: '15px', fontWeight: 700, color: '#0E2D6E' }}>classroom settings</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               {[
-                { label: 'Sequential lesson unlock', desc: 'Students must complete each lesson before the next unlocks', key: 'sequential_unlock', value: classroom.sequential_unlock },
-                { label: 'Collaboration enabled', desc: 'Allow students to work together in real time on assignments', key: 'collab_enabled', value: classroom.collab_enabled },
-                { label: 'Stand-up meetings', desc: 'Students post regular progress updates', key: 'standup_enabled', value: classroom.standup_enabled },
-                { label: 'Discussion boards', desc: 'Open discussion threads on lessons and assignments', key: 'discussion_enabled', value: classroom.discussion_enabled },
+                { label: 'Sequential lesson unlock', desc: 'Students must complete each lesson before the next unlocks', value: classroom.sequential_unlock },
+                { label: 'Collaboration enabled', desc: 'Allow students to work together in real time on assignments', value: classroom.collab_enabled },
+                { label: 'Stand-up meetings', desc: 'Students post regular progress updates', value: classroom.standup_enabled },
+                { label: 'Discussion boards', desc: 'Open discussion threads on lessons and assignments', value: classroom.discussion_enabled },
               ].map(setting => (
-                <div key={setting.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.08)', gap: '1rem' }}>
+                <div key={setting.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.08)', gap: '1rem' }}>
                   <div>
                     <div style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E', marginBottom: '2px' }}>{setting.label}</div>
                     <div style={{ fontSize: '12px', color: '#888780' }}>{setting.desc}</div>

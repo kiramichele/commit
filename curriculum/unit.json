@@ -1,0 +1,31 @@
+# Example curriculum folder structure
+# Put this at commit/curriculum/
+
+# ── unit-01-digital-information/unit.json ──────────────────
+{
+  "order": 1,
+  "title": "Unit 1: Digital Information",
+  "description": "How computers represent and store data using binary, encoding, and compression."
+}
+
+# ── unit-01-digital-information/lesson-01-what-is-data/meta.json ──
+{
+  "order": 1,
+  "title": "What is Data?",
+  "scaffold_level": "typed_python",
+  "estimated_minutes": 20,
+  "has_coding_exercise": false,
+  "coding_instructions": "",
+  "coding_starter_code": ""
+}
+
+# ── unit-01-digital-information/lesson-02-binary/meta.json ──
+{
+  "order": 2,
+  "title": "Binary and Number Systems",
+  "scaffold_level": "typed_python",
+  "estimated_minutes": 25,
+  "has_coding_exercise": true,
+  "coding_instructions": "Write a Python function that converts a decimal number to binary without using Python's built-in bin() function.",
+  "coding_starter_code": "def decimal_to_binary(n):\n    # Your code here\n    pass\n\n# Test it\nprint(decimal_to_binary(10))  # Should print: 1010\nprint(decimal_to_binary(255)) # Should print: 11111111"
+}

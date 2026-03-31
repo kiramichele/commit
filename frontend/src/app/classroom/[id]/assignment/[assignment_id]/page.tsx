@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import ReadAloud from '@/components/ReadAloud'
 
 interface Assignment {
   id: string
@@ -55,10 +56,15 @@ export default function AssignmentEditorPage() {
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState('')
   const [flashCommit, setFlashCommit] = useState(false)
+  const [helpRequested, setHelpRequested] = useState(false)
+  const [helpRequestId, setHelpRequestId] = useState<string | null>(null)
+  const [helpNote, setHelpNote] = useState('')
+  const [showHelpModal, setShowHelpModal] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    if (!loading && !profile) router.push('/login')
+    if (loading) return
+    if (!profile) router.push('/login')
   }, [profile, loading])
 
   useEffect(() => {
@@ -76,6 +82,15 @@ export default function AssignmentEditorPage() {
       setSubmission(data.submission)
       setCommits(data.commits)
       setCode(data.submission.final_code || data.assignment.starter_code || '')
+
+      // Check for existing open help request
+      const helpReq = await api.get<{ id: string } | null>(
+        `/help/student/${data.submission.id}`
+      ).catch(() => null)
+      if (helpReq) {
+        setHelpRequested(true)
+        setHelpRequestId(helpReq.id)
+      }
     } catch (e: any) {
       setError(e.message || 'Could not load assignment.')
     } finally {
@@ -94,10 +109,10 @@ export default function AssignmentEditorPage() {
       if (result.stderr && !result.stdout) {
         setOutput(result.stderr)
         setOutputError(true)
-}       else {
+      } else {
         setOutput(result.output || result.stdout || '(no output)')
         setOutputError(false)
-}
+      }
     } catch (e: any) {
       setOutput(e.message || 'Execution failed.')
       setOutputError(true)
@@ -144,12 +159,37 @@ export default function AssignmentEditorPage() {
     }
   }
 
+  const handleHelpRequest = async () => {
+    if (!submission) return
+    if (helpRequested && helpRequestId) {
+      await api.delete(`/help/${helpRequestId}`)
+      setHelpRequested(false)
+      setHelpRequestId(null)
+    } else {
+      setShowHelpModal(true)
+    }
+  }
+
+  const submitHelpRequest = async () => {
+    if (!submission) return
+    try {
+      const result = await api.post<{ id: string }>('/help/', {
+        submission_id: submission.id,
+        classroom_id: classroomId,
+        note: helpNote.trim() || null,
+      })
+      setHelpRequested(true)
+      setHelpRequestId(result.id)
+      setShowHelpModal(false)
+      setHelpNote('')
+    } catch (e: any) {
+      setError(e.message || 'Could not send help request.')
+    }
+  }
+
   const viewCommit = async (commit: Commit) => {
     if (selectedCommit === commit.id) {
-      setSelectedCommit(null)
-      setViewingCode(null)
-      setViewingMsg(null)
-      return
+      setSelectedCommit(null); setViewingCode(null); setViewingMsg(null); return
     }
     setSelectedCommit(commit.id)
     setViewingMsg(commit.message)
@@ -164,9 +204,7 @@ export default function AssignmentEditorPage() {
   const restoreCommit = () => {
     if (viewingCode) {
       setCode(viewingCode)
-      setSelectedCommit(null)
-      setViewingCode(null)
-      setViewingMsg(null)
+      setSelectedCommit(null); setViewingCode(null); setViewingMsg(null)
     }
   }
 
@@ -212,30 +250,31 @@ export default function AssignmentEditorPage() {
             <div style={{ width: '26px', height: '26px', background: '#1A56DB', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", fontSize: '10px', color: 'white' }}>{'>'}_</div>
           </Link>
           <span style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
-          <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', fontWeight: 500 }}>{assignment?.title}</span>
+          <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', fontWeight: 500 }}>{assignment?.title}</span>
           {isSubmitted && <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '99px', background: '#DCFCE7', color: '#166534' }}>submitted</span>}
           {submission?.is_late && <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '99px', background: '#FEE2E2', color: '#991B1B' }}>late</span>}
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* COMMIT COUNT */}
           <div style={{ fontSize: '12px', color: flashCommit ? '#22C55E' : 'rgba(255,255,255,0.4)', transition: 'color 0.3s', fontFamily: "'DM Mono', monospace" }}>
             {commits.length} / {assignment?.min_commits} commits
           </div>
-
-          {/* RUN */}
           <button onClick={handleRun} disabled={running || isSubmitted} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: running || isSubmitted ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif", opacity: isSubmitted ? 0.5 : 1 }}>
             {running ? '◌ running...' : '▶ run'}
           </button>
-
-          {/* COMMIT */}
           {!isSubmitted && (
             <button onClick={() => setShowCommitPanel(p => !p)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: showCommitPanel ? '#185FA5' : '#1A56DB', color: 'white', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
               ◎ commit
             </button>
           )}
-
-          {/* SUBMIT */}
+          {!isSubmitted && (
+            <button
+              onClick={handleHelpRequest}
+              style={{ padding: '7px 16px', background: helpRequested ? '#FEF9C3' : 'rgba(255,255,255,0.1)', color: helpRequested ? '#854D0E' : 'rgba(255,255,255,0.7)', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+            >
+              {helpRequested ? '✋ help requested' : '✋ raise hand'}
+            </button>
+          )}
           {!isSubmitted && (
             <button onClick={handleSubmit} disabled={!readyToSubmit || submitLoading} style={{ padding: '7px 16px', background: readyToSubmit ? 'white' : 'rgba(255,255,255,0.1)', color: readyToSubmit ? '#0E2D6E' : 'rgba(255,255,255,0.3)', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: readyToSubmit ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}>
               {submitLoading ? 'submitting...' : commitsNeeded > 0 ? `${commitsNeeded} more commit${commitsNeeded !== 1 ? 's' : ''} needed` : 'submit →'}
@@ -248,12 +287,7 @@ export default function AssignmentEditorPage() {
       {showCommitPanel && (
         <div style={{ background: '#0E2D6E', padding: '12px 1.5rem', display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
           <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' }}>commit message:</span>
-          <input
-            autoFocus value={commitMsg} onChange={e => setCommitMsg(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter' && commitMsg.trim().length >= 3) handleCommit() }}
-            placeholder="describe what you changed..."
-            style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', color: 'white', outline: 'none', fontFamily: "'DM Sans', sans-serif" }}
-          />
+          <input autoFocus value={commitMsg} onChange={e => setCommitMsg(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && commitMsg.trim().length >= 3) handleCommit() }} placeholder="describe what you changed..." style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '8px 12px', fontSize: '13px', color: 'white', outline: 'none', fontFamily: "'DM Sans', sans-serif" }} />
           <button onClick={handleCommit} disabled={committing || commitMsg.trim().length < 3} style={{ padding: '8px 20px', background: commitMsg.trim().length >= 3 ? '#22C55E' : 'rgba(255,255,255,0.1)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 700, cursor: commitMsg.trim().length >= 3 ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap', transition: 'background 0.15s' }}>
             {committing ? 'saving...' : 'save version ↵'}
           </button>
@@ -273,34 +307,50 @@ export default function AssignmentEditorPage() {
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '280px 1fr 320px', minHeight: 0 }}>
 
         {/* LEFT — INSTRUCTIONS */}
-        <div style={{ background: '#242426', borderRight: '1px solid rgba(255,255,255,0.06)', overflowY: 'auto', padding: '1.25rem' }}>
-          <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '12px' }}>instructions</div>
-          {assignment?.instructions ? (
-            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{assignment.instructions}</p>
-          ) : (
-            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', margin: 0 }}>no instructions provided.</p>
-          )}
+        <div style={{ background: '#242426', borderRight: '1px solid rgba(255,255,255,0.06)', overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '10px' }}>instructions</div>
+
+            {/* READ ALOUD — on instructions */}
+            {assignment?.instructions && (
+              <div style={{ marginBottom: '10px' }}>
+                <ReadAloud text={assignment.instructions} isPro={false} />
+              </div>
+            )}
+
+            {assignment?.instructions ? (
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.8, margin: 0, whiteSpace: 'pre-wrap' }}>{assignment.instructions}</p>
+            ) : (
+              <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.3)', margin: 0 }}>no instructions provided.</p>
+            )}
+          </div>
 
           {assignment?.due_date && (
-            <div style={{ marginTop: '1.5rem', padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', borderLeft: '3px solid #1A56DB' }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.04)', borderRadius: '8px', borderLeft: '3px solid #1A56DB' }}>
               <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '4px' }}>due date</div>
               <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.7)' }}>{new Date(assignment.due_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
             </div>
           )}
 
           {submission?.grade != null && (
-            <div style={{ marginTop: '1rem', padding: '10px 12px', background: 'rgba(34,197,94,0.08)', borderRadius: '8px', borderLeft: '3px solid #22C55E' }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(34,197,94,0.08)', borderRadius: '8px', borderLeft: '3px solid #22C55E' }}>
               <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#22C55E', marginBottom: '4px' }}>grade</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#22C55E' }}>{submission.grade}</div>
-              {submission.teacher_feedback && <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '6px', lineHeight: 1.6 }}>{submission.teacher_feedback}</p>}
+              {submission.teacher_feedback && (
+                <>
+                  <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', marginTop: '6px', lineHeight: 1.6 }}>{submission.teacher_feedback}</p>
+                  {/* READ ALOUD — on teacher feedback */}
+                  <div style={{ marginTop: '8px' }}>
+                    <ReadAloud text={submission.teacher_feedback} isPro={false} />
+                  </div>
+                </>
+              )}
             </div>
           )}
         </div>
 
         {/* CENTER — EDITOR + OUTPUT */}
         <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-
-          {/* EDITOR */}
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             {viewingCode !== null && (
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, background: '#0E2D6E', padding: '8px 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
@@ -311,26 +361,8 @@ export default function AssignmentEditorPage() {
                 </div>
               </div>
             )}
-            <textarea
-              ref={textareaRef}
-              value={viewingCode !== null ? viewingCode : code}
-              onChange={e => { if (viewingCode === null && !isSubmitted) setCode(e.target.value) }}
-              onKeyDown={handleTab}
-              readOnly={viewingCode !== null || isSubmitted}
-              spellCheck={false}
-              style={{
-                width: '100%', height: '100%',
-                background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E',
-                color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD',
-                fontFamily: "'DM Mono', monospace", fontSize: '14px',
-                lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem',
-                border: 'none', outline: 'none', resize: 'none',
-                boxSizing: 'border-box',
-              }}
-            />
+            <textarea ref={textareaRef} value={viewingCode !== null ? viewingCode : code} onChange={e => { if (viewingCode === null && !isSubmitted) setCode(e.target.value) }} onKeyDown={handleTab} readOnly={viewingCode !== null || isSubmitted} spellCheck={false} style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
           </div>
-
-          {/* OUTPUT */}
           <div style={{ height: '160px', background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>output</span>
@@ -345,7 +377,14 @@ export default function AssignmentEditorPage() {
         {/* RIGHT — COMMIT TIMELINE */}
         <div style={{ background: '#242426', borderLeft: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
-            <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)', marginBottom: '2px' }}>version history</div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>version history</div>
+              {commits.length >= 2 && submission && (
+                <Link href={`/classroom/${classroomId}/assignment/${assignmentId}/diff/${submission.id}`} style={{ fontSize: '11px', color: '#1A56DB', textDecoration: 'none', fontWeight: 600 }}>
+                  compare →
+                </Link>
+              )}
+            </div>
             <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)' }}>{commits.length} commit{commits.length !== 1 ? 's' : ''} · {commitsNeeded > 0 ? `${commitsNeeded} more needed` : 'ready to submit'}</div>
           </div>
 
@@ -357,17 +396,13 @@ export default function AssignmentEditorPage() {
               </div>
             ) : (
               <div style={{ position: 'relative' }}>
-                {/* VERTICAL LINE */}
                 <div style={{ position: 'absolute', left: '28px', top: '12px', bottom: '12px', width: '1.5px', background: 'rgba(26,86,219,0.3)' }} />
-
                 {commits.map((commit, i) => {
                   const isLast = i === commits.length - 1
                   const isSelected = selectedCommit === commit.id
                   return (
                     <div key={commit.id} onClick={() => viewCommit(commit)} style={{ display: 'flex', gap: '12px', padding: '8px 1.25rem', cursor: 'pointer', background: isSelected ? 'rgba(26,86,219,0.15)' : 'transparent', transition: 'background 0.1s', position: 'relative' }}>
-                      {/* DOT */}
                       <div style={{ width: '14px', height: '14px', borderRadius: '50%', background: isLast ? '#1A56DB' : '#2A2A2C', border: `2px solid ${isLast ? '#1A56DB' : 'rgba(26,86,219,0.5)'}`, flexShrink: 0, marginTop: '3px', boxShadow: isLast ? '0 0 0 3px rgba(26,86,219,0.2)' : 'none', zIndex: 1, position: 'relative' }} />
-
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '12px', fontWeight: isLast ? 600 : 400, color: isLast ? 'white' : 'rgba(255,255,255,0.7)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{commit.message}</div>
                         <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.3)', fontFamily: "'DM Mono', monospace" }}>{commit.line_count} lines · {formatTime(commit.committed_at)}</div>
@@ -379,23 +414,35 @@ export default function AssignmentEditorPage() {
             )}
           </div>
 
-          {/* SUBMIT AREA */}
-          {!isSubmitted && (
-            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+            {!isSubmitted ? (
               <button onClick={handleSubmit} disabled={!readyToSubmit || submitLoading} style={{ width: '100%', padding: '10px', background: readyToSubmit ? '#1A56DB' : 'rgba(255,255,255,0.06)', color: readyToSubmit ? 'white' : 'rgba(255,255,255,0.3)', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: readyToSubmit ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif", transition: 'all 0.2s' }}>
                 {submitLoading ? 'submitting...' : commitsNeeded > 0 ? `need ${commitsNeeded} more commit${commitsNeeded !== 1 ? 's' : ''}` : 'submit assignment →'}
               </button>
-            </div>
-          )}
-
-          {isSubmitted && (
-            <div style={{ padding: '1rem 1.25rem', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0, textAlign: 'center' }}>
-              <div style={{ fontSize: '12px', color: '#22C55E', fontWeight: 600 }}>✓ submitted</div>
-              {submission?.is_late && <div style={{ fontSize: '11px', color: '#F09595', marginTop: '2px' }}>submitted late</div>}
-            </div>
-          )}
+            ) : (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '12px', color: '#22C55E', fontWeight: 600 }}>✓ submitted</div>
+                {submission?.is_late && <div style={{ fontSize: '11px', color: '#F09595', marginTop: '2px' }}>submitted late</div>}
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* HELP MODAL */}
+      {showHelpModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(14,45,110,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={e => { if (e.target === e.currentTarget) setShowHelpModal(false) }}>
+          <div style={{ background: 'white', borderRadius: '14px', padding: '1.5rem', width: '100%', maxWidth: '400px' }}>
+            <h3 style={{ margin: '0 0 0.5rem', fontSize: '15px', fontWeight: 700, color: '#0E2D6E' }}>raise your hand</h3>
+            <p style={{ margin: '0 0 1rem', fontSize: '13px', color: '#888780' }}>optionally describe what you're stuck on</p>
+            <textarea value={helpNote} onChange={e => setHelpNote(e.target.value)} placeholder="e.g. I'm getting a TypeError on line 5 and I don't understand why..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.15)', fontSize: '13px', outline: 'none', boxSizing: 'border-box', fontFamily: "'DM Sans', sans-serif", resize: 'vertical', lineHeight: 1.6 }} />
+            <div style={{ display: 'flex', gap: '8px', marginTop: '1rem' }}>
+              <button onClick={() => setShowHelpModal(false)} style={{ flex: 1, padding: '9px', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.15)', background: 'transparent', color: '#5F5E5A', fontWeight: 500, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>cancel</button>
+              <button onClick={submitHelpRequest} style={{ flex: 1, padding: '9px', borderRadius: '8px', border: 'none', background: '#F59E0B', color: 'white', fontWeight: 600, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>✋ raise hand</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-from routers import auth, classrooms, assignments, submissions, commits, playground, admin
+from routers import auth, classrooms, assignments, submissions, commits, playground, admin, help_requests, curriculum
 
 app = FastAPI(
     title="Commit Platform API",
@@ -28,17 +28,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router,         prefix="/auth",        tags=["auth"])
-app.include_router(classrooms.router,   prefix="/classrooms",  tags=["classrooms"])
-app.include_router(assignments.router,  prefix="/assignments", tags=["assignments"])
-app.include_router(submissions.router,  prefix="/code",        tags=["code"])
-app.include_router(commits.router,      prefix="/commits",     tags=["commits"])
-app.include_router(playground.router,   prefix="/playground",  tags=["playground"])
-app.include_router(admin.router,        prefix="/admin",       tags=["admin"])
+app.include_router(auth.router,           prefix="/auth",         tags=["auth"])
+app.include_router(classrooms.router,     prefix="/classrooms",   tags=["classrooms"])
+app.include_router(assignments.router,    prefix="/assignments",  tags=["assignments"])
+app.include_router(submissions.router,    prefix="/code",         tags=["code"])
+app.include_router(commits.router,        prefix="/commits",      tags=["commits"])
+app.include_router(playground.router,     prefix="/playground",   tags=["playground"])
+app.include_router(admin.router,          prefix="/admin",        tags=["admin"])
+app.include_router(help_requests.router,  prefix="/help",         tags=["help"])
+app.include_router(curriculum.router,     prefix="/curriculum",   tags=["curriculum"])
+
 
 @app.get("/")
 async def root():
     return {"status": "ok", "app": "Commit Platform API"}
+
 
 @app.get("/health")
 async def health():

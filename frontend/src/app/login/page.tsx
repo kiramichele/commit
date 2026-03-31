@@ -89,10 +89,8 @@ export default function LoginPage() {
             </form>
           </div>
 
-          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '14px', color: '#888780' }}>
-            are you a teacher?{' '}
-            <Link href="/signup" style={{ color: '#1A56DB', fontWeight: 500, textDecoration: 'none' }}>apply for an account</Link>
-          </p>
+          <p>are you a teacher? <Link href="/signup">apply for an account</Link></p>
+          <p>are you a student? <Link href="/join">join a classroom →</Link></p>
 
         </div>
       </div>
