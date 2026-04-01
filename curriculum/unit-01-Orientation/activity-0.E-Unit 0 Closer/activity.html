@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity 0.E — Unit 0 Closer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --rule: #d4cfc7;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .act-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .act-header-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .act-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--teal); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .act-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5); line-height: 1; }
+  .act-badge-num { font-family: var(--display); font-size: 18px; font-weight: 900; color: #c0eedd; line-height: 1.15; }
+  .act-header-text { flex: 1; }
+  .act-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--teal); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .act-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--teal); }
+  .act-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .act-title em { font-style: italic; color: var(--teal); }
+  .act-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .act-meta-item { display: flex; align-items: center; gap: 5px; }
+  .meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── BODY ── */
+  .act-body { max-width: 720px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OPENING ── */
+  .opening-box { background: var(--teal); border-radius: 8px; padding: 28px 32px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .opening-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.03) 12px, rgba(255,255,255,0.03) 13px); }
+  .opening-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(192,238,221,0.7); margin-bottom: 10px; position: relative; z-index: 1; }
+  .opening-text { font-size: 16px; color: rgba(255,255,255,0.9); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--teal); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── CONFIDENCE CHECK ── */
+  .confidence-grid { display: flex; flex-direction: column; gap: 2px; margin: 20px 0 28px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .conf-row { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; padding: 13px 18px; border-bottom: 1px solid var(--rule); background: var(--paper); }
+  .conf-row:last-child { border-bottom: none; }
+  .conf-row:nth-child(even) { background: var(--paper-warm); }
+  .conf-topic { font-size: 14px; color: var(--ink); }
+  .conf-topic-sub { font-size: 12px; color: var(--ink-faint); font-style: italic; margin-top: 2px; }
+  .conf-stars { display: flex; gap: 4px; }
+  .conf-star { width: 26px; height: 26px; border-radius: 4px; border: 1.5px solid var(--rule); background: var(--paper); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.12s; color: var(--rule); font-style: normal; }
+  .conf-star:hover { border-color: var(--gold); color: var(--gold); }
+  .conf-star.active { background: var(--gold-light); border-color: var(--gold); color: var(--gold); }
+
+  /* ── REFLECTION ── */
+  .reflect-pair { display: flex; flex-direction: column; gap: 16px; margin: 20px 0 28px; }
+  .reflect-item { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .reflect-q { padding: 14px 18px; background: var(--paper-warm); border-bottom: 1px solid var(--rule); }
+  .reflect-q-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--teal); margin-bottom: 5px; }
+  .reflect-q-text { font-size: 15px; line-height: 1.5; color: var(--ink); }
+  .reflect-textarea { width: 100%; border: none; padding: 14px 18px; font-family: var(--serif); font-size: 15px; color: var(--ink); background: var(--paper); resize: vertical; min-height: 90px; line-height: 1.65; display: block; }
+  .reflect-textarea:focus { outline: none; background: #fffef8; }
+  .reflect-textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+  /* ── GOAL CARD ── */
+  .goal-card { border: 1.5px solid var(--teal); border-radius: 10px; overflow: hidden; margin: 20px 0 28px; }
+  .goal-card-header { background: var(--teal); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+  .goal-card-title { font-family: var(--display); font-size: 18px; font-weight: 700; color: white; }
+  .goal-card-sub { font-family: var(--mono); font-size: 10px; color: rgba(255,255,255,0.55); letter-spacing: 0.08em; }
+  .goal-card-body { padding: 0; }
+  .goal-field { border-bottom: 1px solid var(--teal-light); }
+  .goal-field:last-child { border-bottom: none; }
+  .goal-field-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--teal); padding: 12px 18px 4px; }
+  .goal-field-desc { font-size: 12px; color: var(--ink-faint); font-style: italic; padding: 0 18px 8px; }
+  .goal-textarea { width: 100%; border: none; border-top: 1px solid var(--paper-dark); padding: 12px 18px; font-family: var(--serif); font-size: 15px; color: var(--ink); background: var(--paper); resize: none; line-height: 1.55; display: block; min-height: 72px; }
+  .goal-textarea:focus { outline: none; background: #fffef8; }
+  .goal-textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+  /* ── CALLOUT ── */
+  .callout { margin: 20px 0; padding: 16px 20px; border-radius: 6px; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── UNIT COMPLETE BANNER ── */
+  .unit-complete { margin: 36px 0 0; background: var(--ink); border-radius: 10px; padding: 32px 36px; text-align: center; position: relative; overflow: hidden; }
+  .unit-complete::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .unit-complete-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--teal); margin-bottom: 12px; position: relative; z-index: 1; }
+  .unit-complete-title { font-family: var(--display); font-size: 32px; font-weight: 900; color: #e8c9a0; line-height: 1.1; margin-bottom: 14px; position: relative; z-index: 1; }
+  .unit-complete-text { font-size: 15px; color: rgba(250,248,244,0.65); line-height: 1.7; max-width: 480px; margin: 0 auto 24px; position: relative; z-index: 1; }
+  .next-unit-btn { display: inline-flex; align-items: center; gap: 8px; background: var(--accent); color: white; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 12px 24px; border-radius: 4px; border: none; cursor: pointer; transition: background 0.15s; position: relative; z-index: 1; text-decoration: none; }
+  .next-unit-btn:hover { background: #a33215; }
+
+  /* ── SUBMIT ── */
+  .submit-strip { margin-top: 36px; padding: 20px 24px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; }
+  .submit-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+  .submit-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .submit-checklist { display: flex; flex-direction: column; gap: 6px; }
+  .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-muted); font-family: var(--mono); cursor: pointer; }
+  .check-box { width: 16px; height: 16px; border: 1.5px solid var(--rule); border-radius: 3px; background: var(--paper); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .check-box.checked { background: var(--green); border-color: var(--green); }
+  .check-box.checked::after { content: ''; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translate(1px, -1px); display: block; }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .act-header-inner { animation: fadeUp 0.4s ease both; }
+
+  @media (max-width: 600px) {
+    .act-header { padding: 20px; }
+    .act-body { padding: 28px 20px 48px; }
+    .conf-row { grid-template-columns: 1fr; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="act-header">
+  <div class="act-header-inner">
+    <div class="act-badge">
+      <span class="act-badge-label">Act</span>
+      <span class="act-badge-num">0.E</span>
+    </div>
+    <div class="act-header-text">
+      <div class="act-eyebrow">Unit 0 · Activity 0.E · AP Computer Science Principles</div>
+      <h1 class="act-title">Unit 0 closer — <em>where are you starting from?</em></h1>
+      <div class="act-meta">
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--teal)"></span>Reflection</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--gold)"></span>~15 min</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--teal)"></span>End of Unit 0</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="act-body">
+
+  <div class="opening-box">
+    <div class="opening-label">Not a test</div>
+    <p class="opening-text">This is a snapshot, not a grade. There are no right answers — only honest ones. Your confidence ratings and reflections help your teacher see where to slow down in Unit 1. Your goal card will come back to you at the end of the year. Take your time.</p>
+  </div>
+
+  <!-- ── CONFIDENCE CHECK ── -->
+  <div class="section-rule"><span class="section-rule-label">Part 1 — confidence check</span></div>
+  <h2>How confident do you feel about each topic?</h2>
+
+  <p>Rate yourself from 1 (never heard of it) to 5 (could explain it to someone else). This is not graded. Be honest — overrating yourself helps no one, including you.</p>
+
+  <div class="confidence-grid" id="conf-grid"></div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">Your teacher sees this</div>
+    <p>Your confidence ratings are aggregated across the whole class into a heatmap. If 80% of students rate "AP pseudocode" at 1 or 2, your teacher knows to spend more time on it before the exam. <strong>Your honest rating makes the class better for everyone.</strong></p>
+  </div>
+
+  <!-- ── REFLECTION ── -->
+  <div class="section-rule"><span class="section-rule-label">Part 2 — reflection</span></div>
+  <h2>Two questions</h2>
+
+  <div class="reflect-pair">
+    <div class="reflect-item">
+      <div class="reflect-q">
+        <div class="reflect-q-label">Question 1</div>
+        <div class="reflect-q-text">What's one thing you learned in Unit 0 that genuinely surprised you — something you didn't expect to encounter in a CS class?</div>
+      </div>
+      <textarea class="reflect-textarea" placeholder="I didn't expect to learn about... because..."></textarea>
+    </div>
+    <div class="reflect-item">
+      <div class="reflect-q">
+        <div class="reflect-q-label">Question 2</div>
+        <div class="reflect-q-text">What's one thing from Unit 0 you're still confused about? Be specific — "I don't get it" isn't useful. "I don't understand why AP pseudocode uses ← instead of =" is.</div>
+      </div>
+      <textarea class="reflect-textarea" placeholder="I'm still confused about... specifically..."></textarea>
+    </div>
+  </div>
+
+  <!-- ── GOAL CARD ── -->
+  <div class="section-rule"><span class="section-rule-label">Part 3 — goal card</span></div>
+  <h2>Three goals for the year</h2>
+
+  <p>Write one goal in each category. These will be saved and returned to you at the end of the course — the last week of school, before the AP exam results arrive. Future you will read what you wrote today.</p>
+
+  <div class="callout callout-teal">
+    <div class="callout-label">What makes a good goal</div>
+    <p>Specific beats vague. <strong>"Understand how recommendation algorithms actually work"</strong> is better than <strong>"learn CS."</strong> <strong>"Build something I'm proud enough to show someone"</strong> is better than <strong>"do well in class."</strong> Write something you actually care about.</p>
+  </div>
+
+  <div class="goal-card">
+    <div class="goal-card-header">
+      <div>
+        <div class="goal-card-title">My goals for AP CSP</div>
+        <div class="goal-card-sub">Saved at the start of the year · Returned at the end</div>
+      </div>
+    </div>
+    <div class="goal-card-body">
+      <div class="goal-field">
+        <div class="goal-field-label">Academic goal</div>
+        <div class="goal-field-desc">Something you want to understand or achieve in this class</div>
+        <textarea class="goal-textarea" placeholder="By the end of this year, I want to understand..."></textarea>
+      </div>
+      <div class="goal-field">
+        <div class="goal-field-label">Skill goal</div>
+        <div class="goal-field-desc">Something you want to be able to do that you can't do today</div>
+        <textarea class="goal-textarea" placeholder="By the end of this year, I want to be able to..."></textarea>
+      </div>
+      <div class="goal-field">
+        <div class="goal-field-label">Curiosity goal</div>
+        <div class="goal-field-desc">Something about computing you're genuinely curious about</div>
+        <textarea class="goal-textarea" placeholder="I'm curious about... and I want to find out..."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SUBMIT ── -->
+  <div class="submit-strip">
+    <div class="submit-label">Before you submit</div>
+    <div class="submit-title">Checklist</div>
+    <div class="submit-checklist">
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I rated my confidence on all 10 topics honestly
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I answered both reflection questions with specific examples
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I filled in all three goal card fields
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        My goals are specific enough that future me will know what I meant
+      </label>
+    </div>
+  </div>
+
+  <!-- ── UNIT COMPLETE ── -->
+  <div class="unit-complete">
+    <div class="unit-complete-label">Unit 0 complete</div>
+    <div class="unit-complete-title">You're ready for Unit 1.</div>
+    <p class="unit-complete-text">You've covered what CS is, how Commit works, what the AP exam expects, how data about you gets collected and sold, and how programs think. That's a real foundation. Unit 1 builds directly on all of it.</p>
+    <a class="next-unit-btn" href="#">Start Unit 1 — Creative Development →</a>
+  </div>
+
+</main>
+
+<script>
+  const topics = [
+    { label: 'What computer science actually is', sub: 'vs what movies say it is' },
+    { label: 'How to use Commit', sub: 'editor, commits, submission, feedback' },
+    { label: 'The AP CSP exam format', sub: 'MCQ structure, Create PT, score scale' },
+    { label: 'The Create PT rubric', sub: '6 rows, what earns each point' },
+    { label: 'Active vs passive data', sub: 'what you share vs what gets collected' },
+    { label: 'Metadata', sub: 'data about data, and why it matters' },
+    { label: 'Data brokers', sub: 'what they collect, who they sell to' },
+    { label: 'Input → Process → Output', sub: 'the IPO pattern in every program' },
+    { label: 'AP pseudocode notation', sub: '←, DISPLAY, REPEAT, FOR EACH, PROCEDURE' },
+    { label: 'The 1-indexing difference', sub: 'AP pseudocode lists start at 1, Python at 0' },
+  ];
+
+  const grid = document.getElementById('conf-grid');
+  const ratings = new Array(topics.length).fill(0);
+
+  topics.forEach((topic, i) => {
+    const row = document.createElement('div');
+    row.className = 'conf-row';
+    row.innerHTML = `
+      <div>
+        <div class="conf-topic">${topic.label}</div>
+        <div class="conf-topic-sub">${topic.sub}</div>
+      </div>
+      <div class="conf-stars" id="stars-${i}">
+        ${[1,2,3,4,5].map(n => `<div class="conf-star" onclick="setRating(${i},${n})" title="${n}">${n}</div>`).join('')}
+      </div>`;
+    grid.appendChild(row);
+  });
+
+  function setRating(topicIdx, val) {
+    ratings[topicIdx] = val;
+    const stars = document.querySelectorAll(`#stars-${topicIdx} .conf-star`);
+    stars.forEach((s, i) => s.classList.toggle('active', i < val));
+  }
+
+  function toggleCheck(label) {
+    label.querySelector('.check-box').classList.toggle('checked');
+  }
+</script>
+
+</body>
+</html>

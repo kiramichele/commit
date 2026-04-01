@@ -1,0 +1,12 @@
+{
+  "order": 13,
+  "title": "Pseudocode translator",
+  "scaffold_level": "typed_python",
+  "estimated_minutes": 15,
+  "exercises": [
+    {
+      "type": "coding",
+      "instructions": "Translate pseudocode into working Python code."
+    }
+  ]
+}

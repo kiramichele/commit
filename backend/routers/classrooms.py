@@ -7,9 +7,11 @@ from pydantic import BaseModel
 from typing import Optional
 import random
 import uuid
+import os
 
 from auth_deps import CurrentUser, get_current_user, require_teacher
 from db import supabase_admin, supabase_anon, get_user_client
+from email_service import send_student_joined_notification
 
 router = APIRouter()
 
@@ -45,6 +47,12 @@ class StudentCreate(BaseModel):
     display_name: str
     email: str
     password: str
+
+
+class ClassroomSettings(BaseModel):
+    late_submissions_allowed: Optional[bool] = None
+    late_penalty_per_day: Optional[float] = None
+    late_penalty_max: Optional[float] = None
 
 
 # ============================================================
@@ -83,6 +91,32 @@ class StudentJoin(BaseModel):
     password: str
     avatar_url: Optional[str] = None
 
+
+# ============================================================
+# ADD THIS ROUTE TO backend/routers/classrooms.py
+# ============================================================
+# This must go BEFORE any /{classroom_id} wildcard routes
+# so FastAPI doesn't match "my" as a classroom ID
+# ============================================================
+
+@router.get("/my")
+async def get_my_classrooms(
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns all classrooms the current student is a member of."""
+    result = (
+        supabase_admin.table("classroom_members")
+        .select("classroom_id, classrooms(id, name, description, join_code, sequential_unlock, archived)")
+        .eq("student_id", user.profile_id)
+        .execute()
+    )
+
+    classrooms = []
+    for row in (result.data or []):
+        if row.get("classrooms") and not row["classrooms"].get("archived"):
+            classrooms.append(row["classrooms"])
+
+    return classrooms
 
 @router.get("/preview/{join_code}")
 async def preview_classroom(join_code: str):
@@ -194,6 +228,22 @@ async def join_classroom(body: StudentJoin):
     except Exception:
         raise HTTPException(status_code=500, detail="Account created but could not sign in.")
 
+    # Notify teacher that student joined
+    try:
+        classroom_data = supabase_admin.table("classrooms").select("name, teacher_id, profiles!classrooms_teacher_id_fkey(display_name, email)").eq("id", classroom_id).single().execute()
+        if classroom_data.data and classroom_data.data.get("profiles"):
+            teacher = classroom_data.data["profiles"]
+            send_student_joined_notification(
+                teacher_email=teacher["email"],
+                teacher_name=teacher["display_name"],
+                student_name=body.display_name,
+                student_email=body.email,
+                classroom_name=classroom_data.data["name"],
+                classroom_url=f"{os.getenv('APP_URL', 'http://localhost:3000')}/classroom/{classroom_id}",
+            )
+    except Exception as e:
+        print(f"Student joined email failed: {e}")
+
     return {
         "access_token": session.session.access_token,
         "refresh_token": session.session.refresh_token,
@@ -203,6 +253,7 @@ async def join_classroom(body: StudentJoin):
             "role": "student",
         },
     }
+
 
 @router.post("/upload-avatar")
 async def upload_avatar(file: UploadFile = File(...)):
@@ -300,6 +351,46 @@ async def create_classroom(
 
     return result.data[0]
 
+# ============================================================
+# ADD THIS ROUTE TO backend/routers/classrooms.py
+# Place it BEFORE any /{classroom_id} wildcard routes
+# ============================================================
+
+@router.get("/{classroom_id}/streak-leaders")
+async def get_streak_leaders(
+    classroom_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns top 3 streak leaders for a classroom."""
+    # Get all students in the classroom with their streak data
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id, profiles!classroom_members_student_id_fkey(display_name, avatar_url, current_streak)")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    )
+
+    if not members.data:
+        return []
+
+    # Build list and sort by streak descending
+    leaders = []
+    for m in members.data:
+        profile = m.get("profiles")
+        if not profile:
+            continue
+        leaders.append({
+            "display_name": profile.get("display_name", "Student"),
+            "avatar_url": profile.get("avatar_url"),
+            "current_streak": profile.get("current_streak", 0),
+            "is_me": m.get("student_id") == user.profile_id,
+        })
+
+    # Sort by streak descending, only return top 3 with streak > 0
+    leaders.sort(key=lambda x: x["current_streak"], reverse=True)
+    leaders = [l for l in leaders if l["current_streak"] > 0][:3]
+
+    return leaders
 
 @router.get("/{classroom_id}")
 async def get_classroom(
@@ -318,6 +409,45 @@ async def get_classroom(
     if not response.data:
         raise HTTPException(status_code=404, detail="Classroom not found.")
     return response.data
+
+
+@router.patch("/{classroom_id}/settings")
+async def update_classroom_settings(
+    classroom_id: str,
+    body: ClassroomSettings,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Updates classroom-level settings including late penalty policy."""
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    updates = {}
+    if body.late_submissions_allowed is not None:
+        updates["late_submissions_allowed"] = body.late_submissions_allowed
+    if body.late_penalty_per_day is not None:
+        updates["late_penalty_per_day"] = body.late_penalty_per_day
+    if body.late_penalty_max is not None:
+        updates["late_penalty_max"] = body.late_penalty_max
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No settings to update.")
+
+    result = (
+        supabase_admin.table("classrooms")
+        .update(updates)
+        .eq("id", classroom_id)
+        .execute()
+    )
+
+    return result.data[0] if result.data else {}
 
 
 @router.patch("/{classroom_id}")
@@ -431,6 +561,60 @@ async def add_student(
     }).execute()
 
     return {"profile_id": profile_id, "display_name": body.display_name}
+
+
+@router.post("/{classroom_id}/students/{student_id}/reset-password")
+async def reset_student_password(
+    classroom_id: str,
+    student_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Teacher sends a password reset email to a student."""
+    # Verify teacher owns this classroom
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found or access denied.")
+
+    # Verify student is in this classroom
+    member = (
+        supabase_admin.table("classroom_members")
+        .select("id")
+        .eq("classroom_id", classroom_id)
+        .eq("student_id", student_id)
+        .execute()
+    )
+    if not member.data:
+        raise HTTPException(status_code=404, detail="Student not in this classroom.")
+
+    # Get student email
+    profile = (
+        supabase_admin.table("profiles")
+        .select("email")
+        .eq("id", student_id)
+        .single()
+        .execute()
+    )
+    if not profile.data:
+        raise HTTPException(status_code=404, detail="Student profile not found.")
+
+    import os
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    try:
+        supabase_anon.auth.reset_password_for_email(
+            profile.data["email"],
+            options={"redirect_to": f"{frontend_url}/reset-password"},
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not send reset email: {str(e)}")
+
+    return {"message": "Password reset email sent.", "email": profile.data["email"]}
 
 
 @router.get("/{classroom_id}/suspicious-commits")

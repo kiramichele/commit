@@ -8,6 +8,8 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from auth_deps import CurrentUser, get_current_user, require_teacher
+from email_service import send_help_request_notification
+import os
 from db import supabase_admin
 
 router = APIRouter()
@@ -61,6 +63,26 @@ async def create_help_request(
 
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create help request.")
+
+    # Notify teacher
+    try:
+        classroom_data = supabase_admin.table("classrooms").select("name, teacher_id, profiles!classrooms_teacher_id_fkey(display_name, email)").eq("id", body.classroom_id).single().execute()
+        student = supabase_admin.table("profiles").select("display_name").eq("id", user.profile_id).single().execute()
+        submission = supabase_admin.table("submissions").select("assignment_id, assignments(title)").eq("id", body.submission_id).single().execute()
+        if classroom_data.data and classroom_data.data.get("profiles"):
+            teacher = classroom_data.data["profiles"]
+            assignment_title = submission.data["assignments"]["title"] if submission.data else "an assignment"
+            send_help_request_notification(
+                teacher_email=teacher["email"],
+                teacher_name=teacher["display_name"],
+                student_name=student.data["display_name"] if student.data else "A student",
+                assignment_title=assignment_title,
+                classroom_name=classroom_data.data["name"],
+                note=body.note,
+                help_queue_url=f"{os.getenv('APP_URL', 'http://localhost:3000')}/classroom/{body.classroom_id}",
+            )
+    except Exception as e:
+        print(f"Help request email failed: {e}")
 
     return result.data[0]
 

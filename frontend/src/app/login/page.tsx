@@ -2,10 +2,11 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { api, saveSession } from '@/lib/api'
+import { useAuth } from '@/lib/auth-context'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login: authLogin } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -16,16 +17,10 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      const data = await api.post<{
-        access_token: string
-        refresh_token: string
-        profile: { role: string }
-      }>('/auth/login', { email, password })
+      const profile = await authLogin(email, password)
 
-      saveSession(data.access_token, data.refresh_token)
-
-      if (data.profile.role === 'admin') router.push('/admin')
-      else if (data.profile.role === 'teacher') router.push('/dashboard')
+      if (profile.role === 'admin') router.push('/admin')
+      else if (profile.role === 'teacher') router.push('/dashboard')
       else router.push('/learn')
     } catch (err: any) {
       setError(err.message || 'Invalid email or password.')

@@ -1,291 +1,442 @@
 #!/usr/bin/env python3
 # ============================================================
-# COMMIT PLATFORM — Curriculum Import Script
+# COMMIT PLATFORM — Curriculum Importer
+# commit/import_curriculum.py
 # ============================================================
-# Usage:
-#   python import_curriculum.py
-#   python import_curriculum.py --unit 1
-#   python import_curriculum.py --dry-run
+# Supports three folder types inside each unit:
 #
-# Folder structure expected:
-#   curriculum/
-#   └── unit-01-digital-information/
-#       ├── unit.json
-#       └── lesson-01-what-is-data/
-#           ├── lesson.html
-#           ├── activity.html   (optional)
-#           └── meta.json
+#   lesson-XX-name/
+#     lesson.html     ← main lesson content
+#     meta.json       ← { order, title, scaffold_level, estimated_minutes,
+#                         exercises: [...] }
 #
-# unit.json format:
-#   {
-#     "order": 1,
-#     "title": "Digital Information",
-#     "description": "How computers represent data"
-#   }
+#   activity-XX-name/
+#     activity.html   ← full-page interactive activity (renders in activity viewer)
+#     meta.json       ← { order, title, estimated_minutes }
 #
-# meta.json format:
-#   {
-#     "order": 1,
-#     "title": "What is Data?",
-#     "scaffold_level": "typed_python",
-#     "estimated_minutes": 20,
-#     "has_coding_exercise": false,
-#     "coding_instructions": "",
-#     "coding_starter_code": ""
-#   }
+#   exercise-XX-name/
+#     exercise.html   ← standalone exercise page (renders in lesson viewer practice tab)
+#     meta.json       ← { order, title, estimated_minutes, exercises: [...] }
+#
+# Run:
+#   python import_curriculum.py              → import all units
+#   python import_curriculum.py --dry-run    → preview without changes
+#   python import_curriculum.py --unit 1     → import unit 1 only
+#   python import_curriculum.py --force      → re-upload all files even if unchanged
 # ============================================================
 
 import os
+import sys
 import json
 import argparse
 from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client
 
-load_dotenv(Path(__file__).parent / "backend" / ".env")
+load_dotenv(dotenv_path=Path(__file__).parent / "backend" / ".env")
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+BUCKET = "lesson-content"
 CURRICULUM_DIR = Path(__file__).parent / "curriculum"
-STORAGE_BUCKET = "lesson-content"
-
-if not SUPABASE_URL or not SUPABASE_SERVICE_ROLE_KEY:
-    print("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env")
-    exit(1)
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
 
-def ensure_bucket():
-    """Create storage bucket if it doesn't exist."""
+# ── HELPERS ───────────────────────────────────────────────────
+
+def log(msg, indent=0):
+    print("  " * indent + msg)
+
+
+def upload_file(local_path: Path, storage_path: str, dry_run: bool) -> bool:
+    """Uploads a file to Supabase Storage. Returns True on success."""
+    if dry_run:
+        log(f"[dry-run] would upload: {storage_path}", 2)
+        return True
     try:
-        buckets = supabase.storage.list_buckets()
-        bucket_names = [b.name for b in buckets]
-        if STORAGE_BUCKET not in bucket_names:
-            supabase.storage.create_bucket(STORAGE_BUCKET, options={"public": False})
-            print(f"✓ Created storage bucket: {STORAGE_BUCKET}")
-        else:
-            print(f"✓ Storage bucket exists: {STORAGE_BUCKET}")
+        with open(local_path, "rb") as f:
+            content = f.read()
+        supabase.storage.from_(BUCKET).upload(
+            path=storage_path,
+            file=content,
+            file_options={"content-type": "text/html", "upsert": "true"},
+        )
+        log(f"✓ Uploaded: {storage_path}", 2)
+        return True
     except Exception as e:
-        print(f"❌ Could not create bucket: {e}")
-        exit(1)
+        log(f"✗ Upload failed: {storage_path} — {e}", 2)
+        return False
 
 
-def upload_file(local_path: Path, storage_path: str, dry_run: bool = False) -> str:
-    """Upload a file to Supabase Storage. Returns the storage path."""
-    if dry_run:
-        print(f"  [DRY RUN] Would upload: {local_path} → {storage_path}")
-        return storage_path
-
-    with open(local_path, "rb") as f:
-        content = f.read()
-
-    try:
-        # Try to update first, then insert if it doesn't exist
-        try:
-            supabase.storage.from_(STORAGE_BUCKET).update(
-                storage_path, content,
-                file_options={"content-type": "text/html", "upsert": "true"}
-            )
-        except Exception:
-            supabase.storage.from_(STORAGE_BUCKET).upload(
-                storage_path, content,
-                file_options={"content-type": "text/html"}
-            )
-        print(f"  ✓ Uploaded: {storage_path}")
-        return storage_path
-    except Exception as e:
-        print(f"  ❌ Failed to upload {storage_path}: {e}")
-        return None
-
-
-def get_or_create_unit(unit_data: dict, dry_run: bool = False) -> str:
-    """Get existing unit or create new one. Returns unit ID."""
-    existing = (
-        supabase.table("units")
-        .select("id")
-        .eq("order_index", unit_data["order"])
-        .execute()
-    )
-    if existing.data:
-        unit_id = existing.data[0]["id"]
-        print(f"  → Unit exists (id: {unit_id[:8]}...)")
-        return unit_id
-
-    if dry_run:
-        print(f"  [DRY RUN] Would create unit: {unit_data['title']}")
-        return "dry-run-unit-id"
-
-    result = supabase.table("units").insert({
-        "order_index": unit_data["order"],
-        "title": unit_data["title"],
-        "description": unit_data.get("description", ""),
-        "is_published": True,
-    }).execute()
-
-    unit_id = result.data[0]["id"]
-    print(f"  ✓ Created unit: {unit_data['title']} (id: {unit_id[:8]}...)")
-    return unit_id
-
-
-def get_or_create_lesson(unit_id: str, lesson_data: dict, dry_run: bool = False) -> str:
-    """Get existing lesson or create new one. Returns lesson ID."""
-    existing = (
-        supabase.table("lessons")
-        .select("id")
-        .eq("unit_id", unit_id)
-        .eq("order_index", lesson_data["order"])
-        .execute()
-    )
-    if existing.data:
-        lesson_id = existing.data[0]["id"]
-        print(f"    → Lesson exists (id: {lesson_id[:8]}...)")
-        return lesson_id
-
-    if dry_run:
-        print(f"    [DRY RUN] Would create lesson: {lesson_data['title']}")
-        return "dry-run-lesson-id"
-
-    result = supabase.table("lessons").insert({
-        "unit_id": unit_id,
-        "order_index": lesson_data["order"],
-        "title": lesson_data["title"],
-        "scaffold_level": lesson_data.get("scaffold_level", "typed_python"),
-        "is_published": True,
-        "content_json": {"blocks": []},
-    }).execute()
-
-    lesson_id = result.data[0]["id"]
-    print(f"    ✓ Created lesson: {lesson_data['title']} (id: {lesson_id[:8]}...)")
-    return lesson_id
-
-
-def upsert_lesson_content(lesson_id: str, unit_id: str, content_data: dict, dry_run: bool = False):
-    """Insert or update lesson_content row."""
-    if dry_run:
-        print(f"    [DRY RUN] Would upsert lesson_content for lesson {lesson_id[:8]}...")
-        return
-
-    existing = (
-        supabase.table("lesson_content")
-        .select("id")
-        .eq("lesson_id", lesson_id)
-        .execute()
-    )
-
-    if existing.data:
-        supabase.table("lesson_content").update(content_data).eq("lesson_id", lesson_id).execute()
-        print(f"    ✓ Updated lesson_content")
-    else:
-        supabase.table("lesson_content").insert({
-            "lesson_id": lesson_id,
-            "unit_id": unit_id,
-            **content_data
-        }).execute()
-        print(f"    ✓ Created lesson_content")
-
-
-def import_unit(unit_dir: Path, dry_run: bool = False):
-    """Import a single unit directory."""
+def get_or_create_unit(unit_dir: Path, dry_run: bool) -> str | None:
+    """Gets or creates a unit record. Returns unit id."""
     unit_json_path = unit_dir / "unit.json"
     if not unit_json_path.exists():
-        print(f"  ⚠️  Skipping {unit_dir.name} — no unit.json found")
-        return
+        log(f"⚠ No unit.json found in {unit_dir.name} — skipping", 1)
+        return None
 
     with open(unit_json_path) as f:
         unit_data = json.load(f)
 
-    print(f"\n📦 Unit {unit_data['order']}: {unit_data['title']}")
-    unit_id = get_or_create_unit(unit_data, dry_run)
+    order = unit_data.get("order", 99)
+    title = unit_data.get("title", unit_dir.name)
+    description = unit_data.get("description", "")
 
-    # Find all lesson directories
-    lesson_dirs = sorted([
-        d for d in unit_dir.iterdir()
-        if d.is_dir() and (d / "meta.json").exists()
-    ])
+    log(f"Unit {order}: {title}")
 
-    if not lesson_dirs:
-        print(f"  ⚠️  No lesson directories found in {unit_dir.name}")
+    if dry_run:
+        return "dry-run-unit-id"
+
+    # Upsert unit by order_index
+    existing = supabase.table("units").select("id").eq("order_index", order).execute()
+    if existing.data:
+        unit_id = existing.data[0]["id"]
+        supabase.table("units").update({
+            "title": title,
+            "description": description,
+            "is_published": True,
+        }).eq("id", unit_id).execute()
+    else:
+        result = supabase.table("units").insert({
+            "order_index": order,
+            "title": title,
+            "description": description,
+            "is_published": True,
+        }).execute()
+        unit_id = result.data[0]["id"]
+
+    return unit_id
+
+
+def import_lesson(lesson_dir: Path, unit_id: str, dry_run: bool):
+    """Imports a lesson-XX folder."""
+    meta_path = lesson_dir / "meta.json"
+    html_path = lesson_dir / "lesson.html"
+    activity_path = lesson_dir / "activity.html"
+
+    if not meta_path.exists():
+        log(f"⚠ No meta.json in {lesson_dir.name} — skipping", 2)
         return
 
-    for lesson_dir in lesson_dirs:
-        print(f"\n  📄 Lesson: {lesson_dir.name}")
+    with open(meta_path) as f:
+        meta = json.load(f)
 
-        with open(lesson_dir / "meta.json") as f:
-            meta = json.load(f)
+    order = meta.get("order", 99)
+    title = meta.get("title", lesson_dir.name)
+    scaffold_level = meta.get("scaffold_level", "typed_python")
+    estimated_minutes = meta.get("estimated_minutes", 20)
+    exercises = meta.get("exercises", [])
 
-        lesson_id = get_or_create_lesson(unit_id, meta, dry_run)
+    # Infer has_coding_exercise from exercises array or legacy field
+    has_coding = (
+        meta.get("has_coding_exercise", False)
+        or any(e.get("type") == "coding" for e in exercises)
+    )
+    coding_instructions = meta.get("coding_instructions", "")
+    coding_starter_code = meta.get("coding_starter_code", "")
+    example_code = meta.get("example_code", "")
+    example_explanation = meta.get("example_explanation", "")
 
-        # Build storage paths
-        storage_base = f"units/unit-{unit_data['order']:02d}/{lesson_dir.name}"
-        html_path = None
-        activity_path = None
+    log(f"  Lesson {order}: {title}", 1)
 
-        # Upload lesson.html
-        lesson_html = lesson_dir / "lesson.html"
-        if lesson_html.exists():
-            html_path = upload_file(lesson_html, f"{storage_base}/lesson.html", dry_run)
+    if dry_run:
+        if html_path.exists(): log(f"[dry-run] would upload lesson.html", 2)
+        if activity_path.exists(): log(f"[dry-run] would upload activity.html", 2)
+        return
+
+    # Upsert lesson
+    existing = supabase.table("lessons").select("id").eq("unit_id", unit_id).eq("order_index", order).execute()
+    if existing.data:
+        lesson_id = existing.data[0]["id"]
+        supabase.table("lessons").update({
+            "title": title,
+            "scaffold_level": scaffold_level,
+            "is_published": True,
+        }).eq("id", lesson_id).execute()
+    else:
+        result = supabase.table("lessons").insert({
+            "unit_id": unit_id,
+            "order_index": order,
+            "title": title,
+            "scaffold_level": scaffold_level,
+            "is_published": True,
+        }).execute()
+        lesson_id = result.data[0]["id"]
+
+    # Upload HTML files
+    html_storage_path = None
+    activity_storage_path = None
+
+    if html_path.exists():
+        storage_path = f"units/{unit_id}/lessons/{lesson_id}/lesson.html"
+        if upload_file(html_path, storage_path, dry_run):
+            html_storage_path = storage_path
+
+    if activity_path.exists():
+        storage_path = f"units/{unit_id}/lessons/{lesson_id}/activity.html"
+        if upload_file(activity_path, storage_path, dry_run):
+            activity_storage_path = storage_path
+
+    # Upsert lesson_content
+    existing_content = supabase.table("lesson_content").select("id").eq("lesson_id", lesson_id).execute()
+    content_data = {
+        "lesson_id": lesson_id,
+        "html_file_path": html_storage_path,
+        "activity_file_path": activity_storage_path,
+        "estimated_minutes": estimated_minutes,
+        "has_coding_exercise": has_coding,
+        "coding_instructions": coding_instructions,
+        "coding_starter_code": coding_starter_code,
+        "example_code": example_code,
+        "example_explanation": example_explanation,
+        "exercises": exercises if exercises else None,
+    }
+
+    if existing_content.data:
+        supabase.table("lesson_content").update(content_data).eq("lesson_id", lesson_id).execute()
+    else:
+        supabase.table("lesson_content").insert(content_data).execute()
+
+    log(f"✓ Lesson imported: {title}", 2)
+
+
+def import_activity(activity_dir: Path, unit_id: str, dry_run: bool):
+    """
+    Imports an activity-XX folder as a standalone lesson
+    with assignment_type='activity'. The activity.html renders
+    full-screen in the activity viewer.
+    """
+    meta_path = activity_dir / "meta.json"
+    html_path = activity_dir / "activity.html"
+
+    # Also accept lesson.html if activity.html doesn't exist
+    if not html_path.exists():
+        html_path = activity_dir / "lesson.html"
+
+    if not meta_path.exists():
+        log(f"⚠ No meta.json in {activity_dir.name} — skipping", 2)
+        return
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    order = meta.get("order", 99)
+    title = meta.get("title", activity_dir.name)
+    estimated_minutes = meta.get("estimated_minutes", 20)
+
+    log(f"  Activity {order}: {title}", 1)
+
+    if not html_path.exists():
+        log(f"⚠ No activity.html or lesson.html in {activity_dir.name} — skipping", 2)
+        return
+
+    if dry_run:
+        log(f"[dry-run] would upload activity.html for: {title}", 2)
+        return
+
+    # Activities are stored as lessons with scaffold_level='typed_python'
+    # The activity_file_path is what makes them render in the activity viewer
+    existing = supabase.table("lessons").select("id").eq("unit_id", unit_id).eq("order_index", order).execute()
+    if existing.data:
+        lesson_id = existing.data[0]["id"]
+        supabase.table("lessons").update({
+            "title": title,
+            "scaffold_level": "typed_python",
+            "is_published": True,
+        }).eq("id", lesson_id).execute()
+    else:
+        result = supabase.table("lessons").insert({
+            "unit_id": unit_id,
+            "order_index": order,
+            "title": title,
+            "scaffold_level": "typed_python",
+            "is_published": True,
+        }).execute()
+        lesson_id = result.data[0]["id"]
+
+    # Upload the HTML as activity_file_path (not html_file_path)
+    storage_path = f"units/{unit_id}/lessons/{lesson_id}/activity.html"
+    upload_file(html_path, storage_path, dry_run)
+
+    # Upsert lesson_content — activity_file_path set, html_file_path null
+    existing_content = supabase.table("lesson_content").select("id").eq("lesson_id", lesson_id).execute()
+    content_data = {
+        "lesson_id": lesson_id,
+        "html_file_path": None,
+        "activity_file_path": storage_path,
+        "estimated_minutes": estimated_minutes,
+        "has_coding_exercise": False,
+    }
+
+    if existing_content.data:
+        supabase.table("lesson_content").update(content_data).eq("lesson_id", lesson_id).execute()
+    else:
+        supabase.table("lesson_content").insert(content_data).execute()
+
+    log(f"✓ Activity imported: {title}", 2)
+
+
+def import_exercise(exercise_dir: Path, unit_id: str, dry_run: bool):
+    """
+    Imports an exercise-XX folder as a lesson
+    with exercises defined in meta.json.
+    The exercise.html (or lesson.html) renders in the practice tab.
+    """
+    meta_path = exercise_dir / "meta.json"
+    html_path = exercise_dir / "exercise.html"
+
+    # Accept lesson.html as fallback
+    if not html_path.exists():
+        html_path = exercise_dir / "lesson.html"
+
+    if not meta_path.exists():
+        log(f"⚠ No meta.json in {exercise_dir.name} — skipping", 2)
+        return
+
+    with open(meta_path) as f:
+        meta = json.load(f)
+
+    order = meta.get("order", 99)
+    title = meta.get("title", exercise_dir.name)
+    estimated_minutes = meta.get("estimated_minutes", 20)
+    exercises = meta.get("exercises", [])
+    scaffold_level = meta.get("scaffold_level", "typed_python")
+
+    has_coding = any(e.get("type") == "coding" for e in exercises)
+
+    log(f"  Exercise {order}: {title} ({len(exercises)} exercise(s))", 1)
+
+    if dry_run:
+        log(f"[dry-run] would import exercise: {title}", 2)
+        return
+
+    existing = supabase.table("lessons").select("id").eq("unit_id", unit_id).eq("order_index", order).execute()
+    if existing.data:
+        lesson_id = existing.data[0]["id"]
+        supabase.table("lessons").update({
+            "title": title,
+            "scaffold_level": scaffold_level,
+            "is_published": True,
+        }).eq("id", lesson_id).execute()
+    else:
+        result = supabase.table("lessons").insert({
+            "unit_id": unit_id,
+            "order_index": order,
+            "title": title,
+            "scaffold_level": scaffold_level,
+            "is_published": True,
+        }).execute()
+        lesson_id = result.data[0]["id"]
+
+    # Upload HTML if it exists (optional for exercise folders)
+    html_storage_path = None
+    if html_path.exists():
+        storage_path = f"units/{unit_id}/lessons/{lesson_id}/lesson.html"
+        if upload_file(html_path, storage_path, dry_run):
+            html_storage_path = storage_path
+
+    # Upsert lesson_content with exercises array
+    existing_content = supabase.table("lesson_content").select("id").eq("lesson_id", lesson_id).execute()
+    content_data = {
+        "lesson_id": lesson_id,
+        "html_file_path": html_storage_path,
+        "activity_file_path": None,
+        "estimated_minutes": estimated_minutes,
+        "has_coding_exercise": has_coding,
+        "exercises": exercises if exercises else None,
+    }
+
+    if existing_content.data:
+        supabase.table("lesson_content").update(content_data).eq("lesson_id", lesson_id).execute()
+    else:
+        supabase.table("lesson_content").insert(content_data).execute()
+
+    log(f"✓ Exercise imported: {title}", 2)
+
+
+def import_unit(unit_dir: Path, dry_run: bool):
+    """Imports a full unit directory."""
+    unit_id = get_or_create_unit(unit_dir, dry_run)
+    if not unit_id:
+        return
+
+    # Collect all lesson/activity/exercise folders, sort by order in meta.json
+    subfolders = []
+    for item in unit_dir.iterdir():
+        if not item.is_dir():
+            continue
+        name = item.name.lower()
+        if name.startswith("lesson-"):
+            folder_type = "lesson"
+        elif name.startswith("activity-") or name.startswith("algorithm-"):
+            folder_type = "activity"
+        elif name.startswith("exercise-"):
+            folder_type = "exercise"
         else:
-            print(f"    ⚠️  No lesson.html found")
+            continue
 
-        # Upload activity.html if present
-        activity_html = lesson_dir / "activity.html"
-        if activity_html.exists():
-            activity_path = upload_file(activity_html, f"{storage_base}/activity.html", dry_run)
+        meta_path = item / "meta.json"
+        order = 99
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    order = json.load(f).get("order", 99)
+            except Exception:
+                pass
 
-        # Upsert lesson_content
-        content_data = {
-            "html_file_path": html_path,
-            "activity_file_path": activity_path,
-            "estimated_minutes": meta.get("estimated_minutes", 20),
-            "has_coding_exercise": meta.get("has_coding_exercise", False),
-            "coding_instructions": meta.get("coding_instructions", ""),
-            "coding_starter_code": meta.get("coding_starter_code", ""),
-        }
-        upsert_lesson_content(lesson_id, unit_id, content_data, dry_run)
+        subfolders.append((order, folder_type, item))
 
-    print(f"\n  ✅ Unit {unit_data['order']} complete")
+    # Sort by order number
+    subfolders.sort(key=lambda x: x[0])
+
+    for order, folder_type, folder in subfolders:
+        if folder_type == "lesson":
+            import_lesson(folder, unit_id, dry_run)
+        elif folder_type == "activity":
+            import_activity(folder, unit_id, dry_run)
+        elif folder_type == "exercise":
+            import_exercise(folder, unit_id, dry_run)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Import AP CSP curriculum into Commit")
+    parser = argparse.ArgumentParser(description="Commit curriculum importer")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without making changes")
     parser.add_argument("--unit", type=int, help="Import only this unit number")
-    parser.add_argument("--dry-run", action="store_true", help="Show what would happen without making changes")
+    parser.add_argument("--force", action="store_true", help="Re-upload all files even if unchanged")
     args = parser.parse_args()
 
-    print("🚀 Commit Curriculum Importer")
-    print(f"   Curriculum dir: {CURRICULUM_DIR}")
-    print(f"   Dry run: {args.dry_run}")
-    print()
+    if args.dry_run:
+        print("🔍 DRY RUN — no changes will be made\n")
 
     if not CURRICULUM_DIR.exists():
-        print(f"❌ Curriculum directory not found: {CURRICULUM_DIR}")
-        print("   Create a 'curriculum' folder next to this script")
-        exit(1)
-
-    if not args.dry_run:
-        ensure_bucket()
+        print(f"✗ curriculum/ directory not found at {CURRICULUM_DIR}")
+        sys.exit(1)
 
     # Find unit directories
     unit_dirs = sorted([
         d for d in CURRICULUM_DIR.iterdir()
-        if d.is_dir() and (d / "unit.json").exists()
-    ])
+        if d.is_dir() and d.name.startswith("unit-")
+    ], key=lambda d: d.name)
 
     if not unit_dirs:
-        print("❌ No unit directories found (each needs a unit.json)")
-        exit(1)
+        print("✗ No unit directories found. Expected folders named unit-01-name/")
+        sys.exit(1)
 
     for unit_dir in unit_dirs:
-        with open(unit_dir / "unit.json") as f:
-            unit_data = json.load(f)
+        # Filter by --unit flag if provided
+        if args.unit:
+            try:
+                unit_num = int(unit_dir.name.split("-")[1])
+                if unit_num != args.unit:
+                    continue
+            except (IndexError, ValueError):
+                continue
 
-        if args.unit and unit_data.get("order") != args.unit:
-            continue
+        import_unit(unit_dir, args.dry_run)
+        print()
 
-        import_unit(unit_dir, dry_run=args.dry_run)
-
-    print("\n✅ Import complete!")
+    print("✅ Import complete!")
 
 
 if __name__ == "__main__":

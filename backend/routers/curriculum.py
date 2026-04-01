@@ -65,7 +65,14 @@ async def get_lesson(
     )
     if not lesson.data:
         raise HTTPException(status_code=404, detail="Lesson not found.")
-    return lesson.data
+
+    # Normalize lesson_content from array to single object
+    data = lesson.data
+    lc = data.get("lesson_content")
+    if isinstance(lc, list):
+        data["lesson_content"] = lc[0] if lc else None
+
+    return data
 
 
 @router.get("/lessons/{lesson_id}/url")
@@ -97,6 +104,32 @@ async def get_lesson_html_url(
     try:
         signed = supabase_admin.storage.from_(STORAGE_BUCKET).create_signed_url(path, 3600)
         return {"url": signed["signedURL"], "expires_in": 3600}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not generate URL: {str(e)}")
+
+
+@router.get("/lessons/{lesson_id}/activity-url")
+async def get_activity_url(
+    lesson_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a signed URL for a lesson's activity HTML file."""
+    lesson_content = (
+        supabase_admin.table("lesson_content")
+        .select("activity_file_path")
+        .eq("lesson_id", lesson_id)
+        .single()
+        .execute()
+    )
+
+    if not lesson_content.data or not lesson_content.data.get("activity_file_path"):
+        return {"url": None}
+
+    path = lesson_content.data["activity_file_path"]
+
+    try:
+        signed = supabase_admin.storage.from_(STORAGE_BUCKET).create_signed_url(path, 3600)
+        return {"url": signed.get("signedURL") or signed.get("signedUrl")}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not generate URL: {str(e)}")
 

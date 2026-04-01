@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exercise 0.4 — Pseudocode Translator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --rule: #d4cfc7;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .ex-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .ex-header-inner { max-width: 760px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .ex-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--ink); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ex-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); line-height: 1; }
+  .ex-badge-num { font-family: var(--display); font-size: 22px; font-weight: 900; color: #e8c9a0; line-height: 1.1; }
+  .ex-header-text { flex: 1; }
+  .ex-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .ex-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--accent); }
+  .ex-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .ex-title em { font-style: italic; color: var(--accent); }
+  .ex-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .ex-meta-item { display: flex; align-items: center; gap: 5px; }
+  .ex-meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-gold { background: var(--gold); }
+  .dot-teal { background: var(--teal); }
+
+  /* ── BODY ── */
+  .ex-body { max-width: 760px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 24px 28px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #e8c9a0; margin-bottom: 10px; position: relative; z-index: 1; }
+  .objective-text { font-size: 16px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── DIRECTION BADGE ── */
+  .direction-badge { display: inline-flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; padding: 5px 14px; border-radius: 20px; margin-bottom: 20px; font-weight: 500; }
+  .dir-to-python { background: #1e1e2e; color: #89b4fa; border: 1px solid #3e3e5e; }
+  .dir-to-pseudo { background: var(--gold-light); color: var(--gold); border: 1px solid #d4c090; }
+
+  /* ── TRANSLATION PANELS ── */
+  .translation-card { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin-bottom: 24px; }
+  .translation-card-header { background: var(--paper-dark); padding: 12px 18px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; justify-content: space-between; }
+  .translation-num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+  .translation-topic { font-size: 14px; font-weight: 600; color: var(--ink); }
+  .translation-body { display: grid; grid-template-columns: 1fr 1fr; }
+  .translation-col { padding: 18px; }
+  .translation-col.pseudo-col { background: var(--paper-warm); border-right: 1px solid var(--rule); }
+  .translation-col.python-col { background: #1e1e2e; }
+  .translation-col.answer-col { background: var(--paper); border-right: 1px solid var(--rule); }
+  .translation-col-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; }
+  .pseudo-col .translation-col-label { color: var(--gold); }
+  .python-col .translation-col-label { color: #89b4fa; }
+  .answer-col .translation-col-label { color: var(--ink-faint); }
+
+  /* pseudocode display */
+  .pseudo-display { font-family: var(--mono); font-size: 13px; line-height: 1.85; color: var(--ink); white-space: pre; }
+  .ap-kw { color: var(--accent); font-weight: 500; }
+  .ap-cm { color: var(--ink-faint); font-style: italic; }
+  .ap-str { color: var(--teal); }
+  .ap-num { color: var(--gold); }
+  .ap-arr { color: var(--purple); font-weight: 500; }
+
+  /* python code display */
+  .py-display { font-family: var(--mono); font-size: 13px; line-height: 1.85; white-space: pre; }
+  .pk { color: #cba6f7; }
+  .pf { color: #89b4fa; }
+  .ps { color: #a6e3a1; }
+  .pc { color: #6c7086; font-style: italic; }
+  .pn { color: #fab387; }
+  .pv { color: #cdd6f4; }
+
+  /* answer textarea */
+  .answer-textarea { width: 100%; border: 1px solid var(--rule); border-radius: 5px; padding: 10px 12px; font-family: var(--mono); font-size: 13px; line-height: 1.85; color: var(--ink); background: var(--paper); resize: vertical; min-height: 160px; transition: border-color 0.15s; }
+  .answer-textarea:focus { outline: none; border-color: var(--accent); }
+  .answer-textarea::placeholder { color: var(--ink-faint); font-style: italic; font-family: var(--serif); font-size: 13px; }
+
+  /* reveal answer */
+  .reveal-answer-btn { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: none; border: 1px solid var(--rule); color: var(--ink-faint); padding: 6px 14px; border-radius: 4px; cursor: pointer; margin-top: 10px; transition: all 0.15s; }
+  .reveal-answer-btn:hover { border-color: var(--ink-muted); color: var(--ink); }
+  .answer-reveal { display: none; margin-top: 12px; padding: 14px 16px; background: var(--green-light); border: 1px solid #a8d0b0; border-radius: 6px; }
+  .answer-reveal.open { display: block; }
+  .answer-reveal-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--green); margin-bottom: 8px; }
+  .answer-reveal-code { font-family: var(--mono); font-size: 13px; line-height: 1.85; color: var(--ink); white-space: pre; }
+
+  /* ── CALLOUTS ── */
+  .callout { margin: 20px 0; padding: 16px 20px; border-radius: 6px; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-accent { background: var(--accent-light); border: 1px solid #e0b0a0; }
+  .callout-purple { background: var(--purple-light); border: 1px solid #AFA9EC; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-accent .callout-label { color: var(--accent); }
+  .callout-purple .callout-label { color: var(--purple); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── SUBMIT ── */
+  .submit-strip { margin-top: 40px; padding: 20px 24px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; }
+  .submit-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+  .submit-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .submit-checklist { display: flex; flex-direction: column; gap: 6px; }
+  .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-muted); font-family: var(--mono); cursor: pointer; }
+  .check-box { width: 16px; height: 16px; border: 1.5px solid var(--rule); border-radius: 3px; background: var(--paper); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .check-box.checked { background: var(--green); border-color: var(--green); }
+  .check-box.checked::after { content: ''; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translate(1px, -1px); display: block; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .ex-header-inner { animation: fadeUp 0.4s ease both; }
+  .objective-box { animation: fadeUp 0.4s ease 0.1s both; }
+
+  @media (max-width: 640px) {
+    .ex-header { padding: 20px; }
+    .ex-body { padding: 28px 20px 48px; }
+    .translation-body { grid-template-columns: 1fr; }
+    .translation-col.pseudo-col { border-right: none; border-bottom: 1px solid var(--rule); }
+    .translation-col.answer-col { border-right: none; border-bottom: 1px solid var(--rule); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="ex-header">
+  <div class="ex-header-inner">
+    <div class="ex-badge">
+      <span class="ex-badge-label">Ex</span>
+      <span class="ex-badge-num">0.4</span>
+    </div>
+    <div class="ex-header-text">
+      <div class="ex-eyebrow">Unit 0 · Exercise 0.4 · AP Computer Science Principles</div>
+      <h1 class="ex-title">Pseudocode <em>translator</em></h1>
+      <div class="ex-meta">
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-green"></span>Python 3 + AP Pseudocode</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-gold"></span>~25 min</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-teal"></span>Standalone — follows Lesson 0.5</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="ex-body">
+
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">The AP exam uses its own pseudocode notation — not Python, not JavaScript. Students who see it for the first time in April panic. You're seeing it in week two so it feels familiar by exam day. You'll translate in both directions: AP pseudocode → Python, and Python → AP pseudocode. The harder direction is Python → pseudocode, because it forces you to think about what your code is doing, not just how it's written.</p>
+  </div>
+
+  <div class="callout callout-purple">
+    <div class="callout-label">The one thing to remember going in</div>
+    <p>AP pseudocode lists are <strong>1-indexed</strong> — the first item is at position 1. Python lists are <strong>0-indexed</strong> — the first item is at position 0. When you see <code>list[1]</code> in pseudocode it means the first element. In Python, <code>list[1]</code> means the second element. Watch for this in Part 2.</p>
+  </div>
+
+  <!-- ══════════ PART 1: Pseudocode → Python ══════════ -->
+  <div class="section-rule"><span class="section-rule-label">Part 1 — AP pseudocode → Python</span></div>
+  <h2>Read the pseudocode. Write the Python.</h2>
+
+  <p>Each problem below shows AP pseudocode on the left. Write the equivalent Python in the editor (or on paper). When you're done, click "Show answer" to check your work — but try first.</p>
+
+  <div class="direction-badge dir-to-python">AP Pseudocode → Python</div>
+
+  <!-- Problem 1 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 1.1</span>
+      <span class="translation-topic">Variables and display</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col pseudo-col">
+        <div class="translation-col-label">AP Pseudocode</div>
+        <div class="pseudo-display"><span class="ap-arr">score</span> <span class="ap-kw">←</span> <span class="ap-num">95</span>
+<span class="ap-arr">grade</span> <span class="ap-kw">←</span> <span class="ap-str">"A"</span>
+<span class="ap-kw">DISPLAY</span> <span class="ap-arr">score</span>
+<span class="ap-kw">DISPLAY</span> <span class="ap-str">"Grade: "</span> <span class="ap-kw">+</span> <span class="ap-arr">grade</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your Python</div>
+        <p style="font-family:var(--mono);font-size:12px;color:#4a4a6a;font-style:italic;">Write this in the editor — then check your answer below.</p>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r1')">Show answer</button>
+        <div class="answer-reveal" id="r1">
+          <div class="answer-reveal-label">Answer</div>
+          <div class="answer-reveal-code"><span class="pv">score</span> = <span class="pn">95</span>
+<span class="pv">grade</span> = <span class="ps">"A"</span>
+<span class="pf">print</span>(score)
+<span class="pf">print</span>(<span class="ps">"Grade: "</span> + grade)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 2 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 1.2</span>
+      <span class="translation-topic">Conditional (IF/ELSE)</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col pseudo-col">
+        <div class="translation-col-label">AP Pseudocode</div>
+        <div class="pseudo-display"><span class="ap-arr">temp</span> <span class="ap-kw">←</span> <span class="ap-kw">INPUT</span>()
+<span class="ap-kw">IF</span> temp <span class="ap-kw">></span> <span class="ap-num">100</span>
+<span class="ap-kw">THEN</span>
+    <span class="ap-kw">DISPLAY</span> <span class="ap-str">"Too hot"</span>
+<span class="ap-kw">ELSE</span>
+    <span class="ap-kw">DISPLAY</span> <span class="ap-str">"OK"</span>
+<span class="ap-kw">ENDIF</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your Python</div>
+        <p style="font-family:var(--mono);font-size:12px;color:#4a4a6a;font-style:italic;">Hint: INPUT() with no prompt just means input(). You'll need float() or int() to compare to a number.</p>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r2')">Show answer</button>
+        <div class="answer-reveal" id="r2">
+          <div class="answer-reveal-label">Answer</div>
+          <div class="answer-reveal-code"><span class="pv">temp</span> = <span class="pk">float</span>(<span class="pf">input</span>())
+<span class="pk">if</span> temp > <span class="pn">100</span>:
+    <span class="pf">print</span>(<span class="ps">"Too hot"</span>)
+<span class="pk">else</span>:
+    <span class="pf">print</span>(<span class="ps">"OK"</span>)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 3 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 1.3</span>
+      <span class="translation-topic">REPEAT n TIMES loop</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col pseudo-col">
+        <div class="translation-col-label">AP Pseudocode</div>
+        <div class="pseudo-display"><span class="ap-arr">total</span> <span class="ap-kw">←</span> <span class="ap-num">0</span>
+<span class="ap-kw">REPEAT</span> <span class="ap-num">5</span> <span class="ap-kw">TIMES</span>
+<span class="ap-kw">{</span>
+    <span class="ap-arr">num</span> <span class="ap-kw">←</span> <span class="ap-kw">INPUT</span>()
+    <span class="ap-arr">total</span> <span class="ap-kw">←</span> <span class="ap-arr">total</span> <span class="ap-kw">+</span> <span class="ap-arr">num</span>
+<span class="ap-kw">}</span>
+<span class="ap-kw">DISPLAY</span> <span class="ap-arr">total</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your Python</div>
+        <p style="font-family:var(--mono);font-size:12px;color:#4a4a6a;font-style:italic;">REPEAT n TIMES maps to a for loop with range(). The curly braces {} mark the loop body — use indentation in Python.</p>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r3')">Show answer</button>
+        <div class="answer-reveal" id="r3">
+          <div class="answer-reveal-label">Answer</div>
+          <div class="answer-reveal-code"><span class="pv">total</span> = <span class="pn">0</span>
+<span class="pk">for</span> i <span class="pk">in</span> <span class="pf">range</span>(<span class="pn">5</span>):
+    <span class="pv">num</span> = <span class="pk">float</span>(<span class="pf">input</span>())
+    <span class="pv">total</span> = total + num
+<span class="pf">print</span>(total)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 4 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 1.4</span>
+      <span class="translation-topic">Lists and FOR EACH</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col pseudo-col">
+        <div class="translation-col-label">AP Pseudocode</div>
+        <div class="pseudo-display"><span class="ap-arr">scores</span> <span class="ap-kw">←</span> [<span class="ap-num">85</span>, <span class="ap-num">92</span>, <span class="ap-num">78</span>, <span class="ap-num">96</span>]
+<span class="ap-kw">FOR EACH</span> <span class="ap-arr">s</span> <span class="ap-kw">IN</span> <span class="ap-arr">scores</span>
+<span class="ap-kw">{</span>
+    <span class="ap-kw">IF</span> <span class="ap-arr">s</span> <span class="ap-kw">≥</span> <span class="ap-num">90</span>
+    <span class="ap-kw">THEN</span>
+        <span class="ap-kw">DISPLAY</span> <span class="ap-arr">s</span>
+    <span class="ap-kw">ENDIF</span>
+<span class="ap-kw">}</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your Python</div>
+        <p style="font-family:var(--mono);font-size:12px;color:#4a4a6a;font-style:italic;">FOR EACH maps directly to Python's for loop. ≥ becomes >=.</p>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r4')">Show answer</button>
+        <div class="answer-reveal" id="r4">
+          <div class="answer-reveal-label">Answer</div>
+          <div class="answer-reveal-code"><span class="pv">scores</span> = [<span class="pn">85</span>, <span class="pn">92</span>, <span class="pn">78</span>, <span class="pn">96</span>]
+<span class="pk">for</span> s <span class="pk">in</span> scores:
+    <span class="pk">if</span> s >= <span class="pn">90</span>:
+        <span class="pf">print</span>(s)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 5 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 1.5</span>
+      <span class="translation-topic">PROCEDURE (function)</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col pseudo-col">
+        <div class="translation-col-label">AP Pseudocode</div>
+        <div class="pseudo-display"><span class="ap-kw">PROCEDURE</span> <span class="ap-arr">double</span>(n)
+<span class="ap-kw">{</span>
+    <span class="ap-kw">RETURN</span> n <span class="ap-kw">*</span> <span class="ap-num">2</span>
+<span class="ap-kw">}</span>
+
+<span class="ap-arr">result</span> <span class="ap-kw">←</span> <span class="ap-arr">double</span>(<span class="ap-num">7</span>)
+<span class="ap-kw">DISPLAY</span> <span class="ap-arr">result</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your Python</div>
+        <p style="font-family:var(--mono);font-size:12px;color:#4a4a6a;font-style:italic;">PROCEDURE becomes def. Everything else maps directly.</p>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r5')">Show answer</button>
+        <div class="answer-reveal" id="r5">
+          <div class="answer-reveal-label">Answer</div>
+          <div class="answer-reveal-code"><span class="pk">def</span> <span class="pf">double</span>(n):
+    <span class="pk">return</span> n * <span class="pn">2</span>
+
+<span class="pv">result</span> = <span class="pf">double</span>(<span class="pn">7</span>)
+<span class="pf">print</span>(result)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ PART 2: Python → Pseudocode ══════════ -->
+  <div class="section-rule"><span class="section-rule-label">Part 2 — Python → AP pseudocode</span></div>
+  <h2>Read the Python. Write the pseudocode.</h2>
+
+  <p>This direction is harder — and more valuable. When you can translate Python into AP pseudocode, you understand what your program is actually doing beneath the syntax. Write your answers in the text boxes below.</p>
+
+  <div class="direction-badge dir-to-pseudo">Python → AP Pseudocode</div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">AP pseudocode reminders</div>
+    <p>Assignment uses <strong>←</strong> (not =). Output uses <strong>DISPLAY</strong>. Input uses <strong>INPUT()</strong>. Loops use <strong>REPEAT n TIMES { }</strong> or <strong>FOR EACH item IN list { }</strong>. Functions use <strong>PROCEDURE name(param) { RETURN value }</strong>. Lists are <strong>1-indexed</strong>.</p>
+  </div>
+
+  <!-- Problem 6 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 2.1</span>
+      <span class="translation-topic">Input and arithmetic</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col answer-col">
+        <div class="translation-col-label">Python (given)</div>
+        <div class="py-display"><span class="pv">hours</span> = <span class="pk">float</span>(<span class="pf">input</span>(<span class="ps">"Hours worked: "</span>))
+<span class="pv">rate</span>  = <span class="pk">float</span>(<span class="pf">input</span>(<span class="ps">"Hourly rate: "</span>))
+<span class="pv">pay</span>   = hours * rate
+<span class="pf">print</span>(<span class="ps">"Total pay: "</span> + <span class="pk">str</span>(pay))</div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your AP pseudocode</div>
+        <textarea class="answer-textarea" placeholder="Write the AP pseudocode equivalent here...&#10;&#10;Hint: use ← for assignment, DISPLAY for output, INPUT() for input"></textarea>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r6')" style="margin-top:10px;">Show answer</button>
+        <div class="answer-reveal" id="r6" style="background:#1a2a1a;border-color:#2a4a2a;">
+          <div class="answer-reveal-label" style="color:#6a9a6a;">Answer</div>
+          <div class="answer-reveal-code" style="color:#cdd6f4;"><span style="color:#e8c9a0;">hours</span> ← <span style="color:#e8c9a0;">INPUT</span>()
+<span style="color:#e8c9a0;">rate</span>  ← <span style="color:#e8c9a0;">INPUT</span>()
+<span style="color:#e8c9a0;">pay</span>   ← hours * rate
+<span style="color:#e8c9a0;">DISPLAY</span> <span style="color:#a6e3a1;">"Total pay: "</span> + pay</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 7 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 2.2</span>
+      <span class="translation-topic">While loop → REPEAT UNTIL</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col answer-col">
+        <div class="translation-col-label">Python (given)</div>
+        <div class="py-display"><span class="pv">count</span> = <span class="pn">1</span>
+<span class="pk">while</span> count <= <span class="pn">5</span>:
+    <span class="pf">print</span>(count)
+    <span class="pv">count</span> = count + <span class="pn">1</span></div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your AP pseudocode</div>
+        <textarea class="answer-textarea" placeholder="Write the AP pseudocode equivalent here...&#10;&#10;Hint: Python's while condition maps to REPEAT UNTIL (opposite condition). while count <= 5 becomes REPEAT UNTIL count > 5"></textarea>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r7')" style="margin-top:10px;">Show answer</button>
+        <div class="answer-reveal" id="r7" style="background:#1a2a1a;border-color:#2a4a2a;">
+          <div class="answer-reveal-label" style="color:#6a9a6a;">Answer</div>
+          <div class="answer-reveal-code" style="color:#cdd6f4;"><span style="color:#e8c9a0;">count</span> ← <span style="color:#fab387;">1</span>
+<span style="color:#e8c9a0;">REPEAT UNTIL</span> count > <span style="color:#fab387;">5</span>
+<span style="color:#89dceb;">{</span>
+    <span style="color:#e8c9a0;">DISPLAY</span> count
+    <span style="color:#e8c9a0;">count</span> ← count + <span style="color:#fab387;">1</span>
+<span style="color:#89dceb;">}</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Problem 8 -->
+  <div class="translation-card">
+    <div class="translation-card-header">
+      <span class="translation-num">Problem 2.3</span>
+      <span class="translation-topic">Function with return value</span>
+    </div>
+    <div class="translation-body">
+      <div class="translation-col answer-col">
+        <div class="translation-col-label">Python (given)</div>
+        <div class="py-display"><span class="pk">def</span> <span class="pf">is_passing</span>(score):
+    <span class="pk">if</span> score >= <span class="pn">60</span>:
+        <span class="pk">return</span> <span class="pk">True</span>
+    <span class="pk">else</span>:
+        <span class="pk">return</span> <span class="pk">False</span>
+
+<span class="pv">result</span> = <span class="pf">is_passing</span>(<span class="pn">72</span>)
+<span class="pf">print</span>(result)</div>
+      </div>
+      <div class="translation-col python-col">
+        <div class="translation-col-label">Your AP pseudocode</div>
+        <textarea class="answer-textarea" placeholder="Write the AP pseudocode equivalent here...&#10;&#10;Hint: def becomes PROCEDURE. True/False become true/false in AP pseudocode (lowercase)."></textarea>
+        <button class="reveal-answer-btn" onclick="toggleReveal('r8')" style="margin-top:10px;">Show answer</button>
+        <div class="answer-reveal" id="r8" style="background:#1a2a1a;border-color:#2a4a2a;">
+          <div class="answer-reveal-label" style="color:#6a9a6a;">Answer</div>
+          <div class="answer-reveal-code" style="color:#cdd6f4;"><span style="color:#e8c9a0;">PROCEDURE</span> is_passing(score)
+<span style="color:#89dceb;">{</span>
+    <span style="color:#e8c9a0;">IF</span> score ≥ <span style="color:#fab387;">60</span>
+    <span style="color:#e8c9a0;">THEN</span>
+        <span style="color:#e8c9a0;">RETURN</span> <span style="color:#fab387;">true</span>
+    <span style="color:#e8c9a0;">ELSE</span>
+        <span style="color:#e8c9a0;">RETURN</span> <span style="color:#fab387;">false</span>
+    <span style="color:#e8c9a0;">ENDIF</span>
+<span style="color:#89dceb;">}</span>
+
+<span style="color:#e8c9a0;">result</span> ← is_passing(<span style="color:#fab387;">72</span>)
+<span style="color:#e8c9a0;">DISPLAY</span> result</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-accent">
+    <div class="callout-label">The hardest part of this exercise</div>
+    <p>Problem 2.2 trips most students: <code>while count &lt;= 5</code> becomes <code>REPEAT UNTIL count &gt; 5</code>. The condition <em>flips</em> because <code>while</code> runs as long as something is true, but <code>REPEAT UNTIL</code> runs until something becomes true. Same loop, opposite condition.</p>
+  </div>
+
+  <div class="callout callout-teal">
+    <div class="callout-label">Why this exercise matters in April</div>
+    <p>AP exam MCQ questions regularly give you AP pseudocode and ask what it outputs, or give you a program description and ask which pseudocode correctly implements it. Students who have never practiced reading pseudocode spend valuable exam time decoding notation instead of thinking about the logic. You've now practiced both directions — that's an advantage.</p>
+  </div>
+
+  <!-- ── Submit ── -->
+  <div class="submit-strip">
+    <div class="submit-label">Before you submit</div>
+    <div class="submit-title">Checklist</div>
+    <div class="submit-checklist">
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        All 5 pseudocode → Python translations are in the editor
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I ran each one and confirmed the output is correct
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I wrote AP pseudocode for all 3 Python → pseudocode problems
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I checked the REPEAT UNTIL condition direction (it flips from while)
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        My commit message describes what I translated and what I learned
+      </label>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function toggleReveal(id) {
+    const el = document.getElementById(id);
+    el.classList.toggle('open');
+  }
+  function toggleCheck(label) {
+    label.querySelector('.check-box').classList.toggle('checked');
+  }
+</script>
+
+</body>
+</html>

@@ -13,7 +13,7 @@ interface Profile {
 interface AuthContextType {
   profile: Profile | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string) => Promise<Profile>
   logout: () => void
 }
 
@@ -32,12 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string): Promise<Profile> => {
     const data = await api.post<{ access_token: string; refresh_token: string; profile: Profile }>(
       '/auth/login', { email, password }
     )
     saveSession(data.access_token, data.refresh_token)
     setProfile(data.profile)
+    return data.profile
   }
 
   const logout = () => {

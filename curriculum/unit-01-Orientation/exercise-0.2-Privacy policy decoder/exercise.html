@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exercise 0.2 — Privacy Policy Decoder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --rule: #d4cfc7;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── EXERCISE HEADER ── */
+  .ex-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .ex-header-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .ex-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--ink); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; }
+  .ex-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); line-height: 1; }
+  .ex-badge-num { font-family: var(--display); font-size: 22px; font-weight: 900; color: #e8c9a0; line-height: 1.1; }
+  .ex-header-text { flex: 1; }
+  .ex-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .ex-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--accent); }
+  .ex-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .ex-title em { font-style: italic; color: var(--accent); }
+  .ex-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .ex-meta-item { display: flex; align-items: center; gap: 5px; }
+  .ex-meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-gold { background: var(--gold); }
+  .dot-teal { background: var(--teal); }
+
+  /* ── BODY ── */
+  .ex-body { max-width: 720px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 24px 28px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #e8c9a0; margin-bottom: 10px; position: relative; z-index: 1; }
+  .objective-text { font-size: 16px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── POLICY CHOOSER ── */
+  .policy-chooser { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0 28px; }
+  .policy-option { border: 2px solid var(--rule); border-radius: 8px; padding: 16px 18px; cursor: pointer; transition: border-color 0.15s, background 0.15s; user-select: none; }
+  .policy-option:hover { border-color: var(--accent); background: var(--accent-light); }
+  .policy-option.selected { border-color: var(--accent); background: var(--accent-light); }
+  .policy-option-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 5px; }
+  .policy-option.selected .policy-option-label { color: var(--accent); }
+  .policy-option-name { font-family: var(--display); font-size: 18px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+  .policy-option-desc { font-size: 13px; color: var(--ink-muted); line-height: 1.5; }
+
+  /* ── POLICY TEXT BLOCK ── */
+  .policy-block { display: none; margin: 20px 0 28px; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .policy-block.active { display: block; }
+  .policy-block-header { background: var(--paper-dark); padding: 10px 16px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; justify-content: space-between; }
+  .policy-block-title { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); letter-spacing: 0.06em; }
+  .policy-block-note { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); font-style: italic; }
+  .policy-text { padding: 18px 20px; font-family: var(--mono); font-size: 12px; line-height: 1.9; color: var(--ink-muted); background: var(--paper); white-space: pre-wrap; max-height: 320px; overflow-y: auto; }
+
+  /* highlight red flags inline */
+  .flag-word { background: #fce8e8; color: #a32d2d; border-radius: 2px; padding: 0 2px; }
+
+  /* ── TASK STEPS ── */
+  .task-list { display: flex; flex-direction: column; gap: 2px; margin: 20px 0 28px; counter-reset: tasks; }
+  .task { display: flex; gap: 0; border: 1px solid var(--rule); border-radius: 0; overflow: hidden; background: var(--paper); }
+  .task:first-child { border-radius: 8px 8px 0 0; }
+  .task:last-child { border-radius: 0 0 8px 8px; }
+  .task + .task { border-top: none; }
+  .task-num { width: 52px; background: var(--paper-dark); border-right: 1px solid var(--rule); display: flex; align-items: center; justify-content: center; font-family: var(--display); font-size: 22px; font-weight: 900; color: var(--ink-faint); flex-shrink: 0; padding: 16px 0; }
+  .task-body { padding: 16px 20px; flex: 1; }
+  .task-title { font-size: 15px; font-weight: 600; font-family: var(--serif); margin-bottom: 5px; color: var(--ink); }
+  .task-desc { font-size: 14px; color: var(--ink-muted); line-height: 1.6; margin: 0; }
+
+  /* ── STARTER CODE ── */
+  .code-block { margin: 20px 0; border-radius: 8px; overflow: hidden; border: 1px solid #2e2e3e; }
+  .code-topbar { background: #252535; padding: 9px 14px; display: flex; align-items: center; gap: 8px; }
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .code-filename { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 6px; letter-spacing: 0.05em; }
+  .code-body { background: #1e1e2e; padding: 18px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.85; overflow-x: auto; }
+  .code-line { display: flex; gap: 16px; }
+  .ln { color: #4a4a6a; min-width: 20px; text-align: right; user-select: none; font-size: 12px; padding-top: 1px; }
+  .cm { color: #6c7086; font-style: italic; }
+  .kw { color: #cba6f7; }
+  .fn { color: #89b4fa; }
+  .str { color: #a6e3a1; }
+  .bl { color: transparent; user-select: none; }
+  .blank-fill { color: #f9e2af; font-style: italic; }
+  .op { color: #89dceb; }
+  .num { color: #fab387; }
+  .var { color: #cdd6f4; }
+
+  /* ── EXPECTED OUTPUT ── */
+  .output-block { margin: 20px 0; border-radius: 8px; overflow: hidden; border: 1px solid #1a2e1a; }
+  .output-topbar { background: #1a2e1a; padding: 9px 14px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #4a8a4a; }
+  .output-body { background: #0f1a0f; padding: 16px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.75; color: #a6e3a1; }
+  .output-muted { color: #4a6a4a; }
+  .output-warn { color: #f9e2af; }
+  .output-flag { color: #f38ba8; }
+
+  /* ── CALLOUTS ── */
+  .callout { margin: 24px 0; padding: 18px 22px; border-radius: 6px; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-accent { background: var(--accent-light); border: 1px solid #e0b0a0; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-accent .callout-label { color: var(--accent); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── EXTENSION ── */
+  .extension-box { margin: 28px 0 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .extension-header { background: var(--paper-dark); padding: 12px 18px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .extension-header:hover { background: #e5e0d8; }
+  .extension-badge { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; background: var(--gold-light); color: var(--gold); border: 1px solid #d4c090; padding: 2px 9px; border-radius: 20px; }
+  .extension-title { font-size: 14px; font-weight: 600; flex: 1; }
+  .extension-chev { font-size: 10px; color: var(--ink-faint); transition: transform 0.15s; }
+  .extension-body { display: none; padding: 18px 20px; border-top: 1px solid var(--rule); background: var(--paper); }
+  .extension-body.open { display: block; }
+  .extension-body p { font-size: 14px; color: var(--ink-muted); line-height: 1.65; margin-bottom: 14px; }
+  .extension-body p:last-child { margin-bottom: 0; }
+
+  /* ── SUBMIT STRIP ── */
+  .submit-strip { margin-top: 40px; padding: 20px 24px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; }
+  .submit-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+  .submit-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .submit-checklist { display: flex; flex-direction: column; gap: 5px; }
+  .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-muted); font-family: var(--mono); cursor: pointer; }
+  .check-box { width: 16px; height: 16px; border: 1.5px solid var(--rule); border-radius: 3px; background: var(--paper); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: background 0.1s, border-color 0.1s; }
+  .check-box.checked { background: var(--green); border-color: var(--green); }
+  .check-box.checked::after { content: ''; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translate(1px, -1px); display: block; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .ex-header-inner { animation: fadeUp 0.4s ease both; }
+  .objective-box { animation: fadeUp 0.4s ease 0.1s both; }
+
+  @media (max-width: 600px) {
+    .ex-header { padding: 20px; }
+    .ex-body { padding: 28px 20px 48px; }
+    .policy-chooser { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="ex-header">
+  <div class="ex-header-inner">
+    <div class="ex-badge">
+      <span class="ex-badge-label">Ex</span>
+      <span class="ex-badge-num">0.2</span>
+    </div>
+    <div class="ex-header-text">
+      <div class="ex-eyebrow">Unit 0 · Exercise 0.2 · AP Computer Science Principles</div>
+      <h1 class="ex-title">Privacy policy <em>decoder</em></h1>
+      <div class="ex-meta">
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-green"></span>Python 3</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-gold"></span>~25 min</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-teal"></span>Standalone — follows Lesson 0.4</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="ex-body">
+
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">You've seen what data apps collect. Now you're going to read — and parse — the legal document where they admit it. You'll write Python code that reads a privacy policy excerpt, counts how many times suspicious words appear, flags every sentence that mentions selling data, and prints a plain-English summary. String manipulation with a real-world purpose.</p>
+  </div>
+
+  <!-- ── Choose your policy ── -->
+  <div class="section-rule"><span class="section-rule-label">Step 1 — choose your policy</span></div>
+  <h2>Pick one app to audit</h2>
+
+  <p>Both excerpts are real — pulled from publicly available privacy policies and lightly shortened for length. Pick the app you use more. The code you write will work on either one.</p>
+
+  <div class="policy-chooser">
+    <div class="policy-option" id="opt-tiktok" onclick="choosePolicy('tiktok')">
+      <div class="policy-option-label">Option A</div>
+      <div class="policy-option-name">TikTok</div>
+      <div class="policy-option-desc">One of the most expansive data collection policies of any major app. Includes device identifiers, clipboard content, and biometric data.</div>
+    </div>
+    <div class="policy-option" id="opt-instagram" onclick="choosePolicy('instagram')">
+      <div class="policy-option-label">Option B</div>
+      <div class="policy-option-name">Instagram</div>
+      <div class="policy-option-desc">Meta's policy covers data shared across Facebook, Instagram, WhatsApp, and third-party sites — even if you don't have a Facebook account.</div>
+    </div>
+  </div>
+
+  <!-- TikTok policy block -->
+  <div class="policy-block" id="policy-tiktok">
+    <div class="policy-block-header">
+      <span class="policy-block-title">TikTok Privacy Policy — excerpted and shortened for length</span>
+      <span class="policy-block-note">Real text · ~20 sentences</span>
+    </div>
+    <div class="policy-text" id="text-tiktok">We collect information you provide when you create an account, including your username, password, date of birth, email address, and phone number.
+We collect information about the videos, comments, and other content you create or share on the platform.
+We collect information about how you interact with content, including the videos you watch, the time you spend watching them, and the accounts you follow.
+We share your information with business partners who provide services to us, including analytics providers, advertisers, and measurement partners.
+We may share your information with third parties for advertising purposes, including to show you targeted ads based on your interests and behavior.
+We collect information about your device, including your IP address, device identifiers, browser type, operating system, and mobile carrier.
+We use the information we collect to serve you personalized content and advertisements based on your activity on and off the platform.
+We may share aggregated or de-identified information, which cannot reasonably be used to identify you, with third parties for research and analysis.
+We collect information about the other accounts and content you interact with, including the hashtags you use and the sounds you engage with.
+We retain your information for as long as your account is active or as needed to provide you services and comply with our legal obligations.
+When you use our platform, we may collect information about your approximate location based on your IP address or more precise location if you grant permission.
+We may share your personal information with law enforcement or other government authorities when we believe disclosure is necessary to comply with applicable laws.
+We collect technical information about your device, such as device model, operating system version, unique device identifiers, and crash data.
+We use your information to improve and develop the platform, conduct research, and analyze usage patterns across our user base.
+We partner with third-party advertisers and ad networks who may collect information about your online activities across different websites and services.
+We may transfer your personal information to servers located outside your country of residence, where data protection laws may differ.
+We collect information about your clipboard content if you copy and paste content to or from the TikTok app.
+We use cookies and similar tracking technologies to collect information about your browsing behavior and to deliver targeted advertising.</div>
+  </div>
+
+  <!-- Instagram policy block -->
+  <div class="policy-block" id="policy-instagram">
+    <div class="policy-block-header">
+      <span class="policy-block-title">Instagram / Meta Privacy Policy — excerpted and shortened for length</span>
+      <span class="policy-block-note">Real text · ~20 sentences</span>
+    </div>
+    <div class="policy-text" id="text-instagram">We collect information you share with us when you create an account, including your name, email address, phone number, and date of birth.
+We collect content you create, share, or interact with, such as photos, videos, captions, comments, and direct messages.
+We receive information about you from third-party partners, including advertisers who share information about you to show you more relevant ads.
+We use the information we have to show you ads, offers, and other sponsored content that we believe will be meaningful to you.
+We share information with third-party partners who use it to provide measurement services, targeted advertising, and other business services.
+We collect information about the people, accounts, hashtags, and groups you are connected to and how you interact with them across our products.
+We use information about your connections, interests, location, and activity to show you content and ads that may be relevant to you.
+We share your information across the Meta family of products, including Facebook and WhatsApp, to provide a personalized experience across services.
+We collect information about your transactions, including purchases you make and payment information, when you use our commerce features.
+We collect information from your device, including GPS location, camera, microphone, and contacts, based on the permissions you grant.
+We may share information with law enforcement or in response to legal requests when we believe it is necessary to comply with the law.
+We use your information to conduct research and development to improve our products and services and to develop new features.
+We collect information about how you use our products, such as the types of content you engage with and the frequency and duration of your activities.
+We share information with vendors and service providers who support our business, such as infrastructure providers, analytics services, and marketing partners.
+We may sell or transfer information as part of a merger, acquisition, bankruptcy, or similar transaction involving some or all of our business.
+We collect information about other websites and apps you visit when they use our business tools, even if you do not have a Meta account.
+We use the data we have to inform advertisers about the general performance of their ads and to help them reach people likely to be interested in their products.
+We retain information for as long as necessary to provide our products and comply with legal obligations, even after you delete your account.</div>
+  </div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">Read it first</div>
+    <p>Scroll through the policy you chose before you start coding. Pick out two or three sentences that surprise you. Your code is going to find patterns — but your brain catches meaning. Both matter.</p>
+  </div>
+
+  <!-- ── Tasks ── -->
+  <div class="section-rule"><span class="section-rule-label">Step 2 — your tasks</span></div>
+  <h2>Three things your program needs to do</h2>
+
+  <p>Work through these in order. Each part builds on the last. The starter code below is already split into sections — fill in one blank at a time.</p>
+
+  <div class="task-list">
+    <div class="task">
+      <div class="task-num">1</div>
+      <div class="task-body">
+        <div class="task-title">Count how many times red-flag words appear</div>
+        <p class="task-desc">Your red-flag words are: <code>"share"</code>, <code>"sell"</code>, <code>"third party"</code>, <code>"partner"</code>, <code>"advertis"</code>, <code>"transfer"</code>, <code>"collect"</code>. For each word, count how many times it appears in the full policy text (case-insensitive). Print the count for each word.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">2</div>
+      <div class="task-body">
+        <div class="task-title">Flag every sentence that mentions selling or sharing data</div>
+        <p class="task-desc">Split the policy into individual sentences. Loop through them. If a sentence contains <code>"sell"</code>, <code>"sold"</code>, or <code>"share"</code>, print it with a <code>[FLAG]</code> label in front. This is the most important output — these are the sentences lawyers spend careers writing carefully.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">3</div>
+      <div class="task-body">
+        <div class="task-title">Print a plain-English summary</div>
+        <p class="task-desc">Using the counts from Part 1, print a two-line summary: how many times the policy mentions sharing data, and how many times it mentions selling data. Format it so a non-technical person could read it and understand what they're signing up for.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Starter code ── -->
+  <div class="section-rule"><span class="section-rule-label">Step 3 — starter code</span></div>
+  <h2>Fill in the blanks</h2>
+
+  <p>Each blank is marked in <span style="font-family:var(--mono);font-size:14px;color:#f9e2af;">yellow</span>. Replace it with the correct Python expression. The comments explain exactly what each line should do.</p>
+
+  <div class="code-block">
+    <div class="code-topbar">
+      <div class="code-dot" style="background:#f38ba8"></div>
+      <div class="code-dot" style="background:#f9e2af"></div>
+      <div class="code-dot" style="background:#a6e3a1"></div>
+      <span class="code-filename">main.py</span>
+    </div>
+    <div class="code-body">
+      <div class="code-line"><span class="ln">1</span><span class="cm"># Exercise 0.2 — Privacy Policy Decoder</span></div>
+      <div class="code-line"><span class="ln">2</span><span class="cm"># Paste your chosen policy text between the triple quotes below</span></div>
+      <div class="code-line"><span class="ln">3</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">4</span><span class="var">policy = </span><span class="str">"""</span></div>
+      <div class="code-line"><span class="ln">5</span><span class="blank-fill">  paste your policy text here — copy from the box above</span></div>
+      <div class="code-line"><span class="ln">6</span><span class="str">"""</span></div>
+      <div class="code-line"><span class="ln">7</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">8</span><span class="cm">## ── PART 1: Count red-flag words ──────────────────────────────</span></div>
+      <div class="code-line"><span class="ln">9</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">10</span><span class="var">red_flags = </span><span class="op">[</span><span class="str">"share"</span><span class="op">, </span><span class="str">"sell"</span><span class="op">, </span><span class="str">"third party"</span><span class="op">, </span><span class="str">"partner"</span><span class="op">, </span><span class="str">"advertis"</span><span class="op">, </span><span class="str">"transfer"</span><span class="op">, </span><span class="str">"collect"</span><span class="op">]</span></div>
+      <div class="code-line"><span class="ln">11</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">12</span><span class="cm"># Convert the policy to lowercase so "Share" and "share" both count</span></div>
+      <div class="code-line"><span class="ln">13</span><span class="var">policy_lower = </span><span class="blank-fill">_______________</span><span class="cm">  # call .lower() on policy</span></div>
+      <div class="code-line"><span class="ln">14</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">15</span><span class="fn">print</span><span class="op">(</span><span class="str">"=== Red-flag word counts ==="</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">16</span><span class="kw">for</span> <span class="var">word</span> <span class="kw">in</span> <span class="var">red_flags</span><span class="op">:</span></div>
+      <div class="code-line"><span class="ln">17</span><span class="cm">    # Count how many times this word appears in policy_lower</span></div>
+      <div class="code-line"><span class="ln">18</span><span class="var">    count = </span><span class="blank-fill">_______________</span><span class="cm">  # use .count(word) on policy_lower</span></div>
+      <div class="code-line"><span class="ln">19</span><span class="fn">    print</span><span class="op">(</span><span class="str">f"  '</span><span class="op">{</span><span class="var">word</span><span class="op">}</span><span class="str">' appears </span><span class="op">{</span><span class="var">count</span><span class="op">}</span><span class="str"> time(s)"</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">20</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">21</span><span class="cm">## ── PART 2: Flag suspicious sentences ─────────────────────────</span></div>
+      <div class="code-line"><span class="ln">22</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">23</span><span class="cm"># Split the policy into a list of sentences</span></div>
+      <div class="code-line"><span class="ln">24</span><span class="cm"># Each sentence ends with a period — split on "\n" since our policy</span></div>
+      <div class="code-line"><span class="ln">25</span><span class="cm"># has one sentence per line</span></div>
+      <div class="code-line"><span class="ln">26</span><span class="var">sentences = </span><span class="blank-fill">_______________</span><span class="cm">  # call .split("\n") on policy.strip()</span></div>
+      <div class="code-line"><span class="ln">27</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">28</span><span class="fn">print</span><span class="op">(</span><span class="str">"\n=== Flagged sentences ==="</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">29</span><span class="var">flag_count = </span><span class="num">0</span></div>
+      <div class="code-line"><span class="ln">30</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">31</span><span class="kw">for</span> <span class="var">sentence</span> <span class="kw">in</span> <span class="var">sentences</span><span class="op">:</span></div>
+      <div class="code-line"><span class="ln">32</span><span class="cm">    # Convert to lowercase for checking</span></div>
+      <div class="code-line"><span class="ln">33</span><span class="var">    sentence_lower = </span><span class="blank-fill">_______________</span><span class="cm">  # call .lower() on sentence</span></div>
+      <div class="code-line"><span class="ln">34</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">35</span><span class="cm">    # Check if the sentence contains "sell", "sold", OR "share"</span></div>
+      <div class="code-line"><span class="ln">36</span><span class="kw">    if </span><span class="blank-fill">_______</span><span class="kw"> in </span><span class="var">sentence_lower </span><span class="kw">or </span><span class="blank-fill">_______</span><span class="kw"> in </span><span class="var">sentence_lower </span><span class="kw">or </span><span class="blank-fill">_______</span><span class="kw"> in </span><span class="var">sentence_lower</span><span class="op">:</span></div>
+      <div class="code-line"><span class="ln">37</span><span class="cm">        # Print the flagged sentence with a [FLAG] label</span></div>
+      <div class="code-line"><span class="ln">38</span><span class="fn">        print</span><span class="op">(</span><span class="str">f"[FLAG] </span><span class="op">{</span><span class="blank-fill">_______________</span><span class="op">}</span><span class="str">"</span><span class="op">)</span><span class="cm">  # print sentence here</span></div>
+      <div class="code-line"><span class="ln">39</span><span class="cm">        # Add 1 to the flag counter</span></div>
+      <div class="code-line"><span class="ln">40</span><span class="blank-fill">        _______________</span><span class="cm">  # increment flag_count by 1</span></div>
+      <div class="code-line"><span class="ln">41</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">42</span><span class="cm">## ── PART 3: Plain-English summary ─────────────────────────────</span></div>
+      <div class="code-line"><span class="ln">43</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">44</span><span class="cm"># Use the counts you calculated in Part 1</span></div>
+      <div class="code-line"><span class="ln">45</span><span class="cm"># You'll need to recalculate share_count and sell_count from policy_lower</span></div>
+      <div class="code-line"><span class="ln">46</span><span class="var">share_count = </span><span class="blank-fill">_______________</span><span class="cm">  # count "share" in policy_lower</span></div>
+      <div class="code-line"><span class="ln">47</span><span class="var">sell_count  = </span><span class="blank-fill">_______________</span><span class="cm">  # count "sell" in policy_lower</span></div>
+      <div class="code-line"><span class="ln">48</span><span class="bl">.</span></div>
+      <div class="code-line"><span class="ln">49</span><span class="fn">print</span><span class="op">(</span><span class="str">"\n=== Plain-English summary ==="</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">50</span><span class="fn">print</span><span class="op">(</span><span class="str">f"This policy mentions sharing your data </span><span class="op">{</span><span class="blank-fill">_______________</span><span class="op">}</span><span class="str"> time(s)."</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">51</span><span class="fn">print</span><span class="op">(</span><span class="str">f"This policy mentions selling your data </span><span class="op">{</span><span class="blank-fill">_______________</span><span class="op">}</span><span class="str"> time(s)."</span><span class="op">)</span></div>
+      <div class="code-line"><span class="ln">52</span><span class="fn">print</span><span class="op">(</span><span class="str">f"</span><span class="op">{</span><span class="var">flag_count</span><span class="op">}</span><span class="str"> sentence(s) were flagged as potentially concerning."</span><span class="op">)</span></div>
+    </div>
+  </div>
+
+  <div class="callout callout-teal">
+    <div class="callout-label">The key method: .count()</div>
+    <p>Python strings have a built-in <code>.count(substring)</code> method that returns how many times a substring appears. <code>"hello world".count("l")</code> returns <code>3</code>. You're using this on a very long string — the entire privacy policy — to find patterns a human reader would miss.</p>
+  </div>
+
+  <!-- ── Expected output ── -->
+  <div class="section-rule"><span class="section-rule-label">Expected output</span></div>
+  <h2>What your output should look like</h2>
+
+  <p>The exact numbers will depend on which policy you chose. Here's the structure your output should follow — TikTok shown as an example:</p>
+
+  <div class="output-block">
+    <div class="output-topbar">Expected output structure (TikTok example)</div>
+    <div class="output-body">
+      <div><span class="output-muted">=== Red-flag word counts ===</span></div>
+      <div>  'share' appears <span class="output-warn">4</span> time(s)</div>
+      <div>  'sell' appears <span class="output-warn">1</span> time(s)</div>
+      <div>  'third party' appears <span class="output-warn">3</span> time(s)</div>
+      <div>  'partner' appears <span class="output-warn">3</span> time(s)</div>
+      <div>  'advertis' appears <span class="output-warn">5</span> time(s)</div>
+      <div>  'transfer' appears <span class="output-warn">1</span> time(s)</div>
+      <div>  'collect' appears <span class="output-warn">6</span> time(s)</div>
+      <div>&nbsp;</div>
+      <div><span class="output-muted">=== Flagged sentences ===</span></div>
+      <div><span class="output-flag">[FLAG]</span> We share your information with business partners who provide services to us...</div>
+      <div><span class="output-flag">[FLAG]</span> We may share your information with third parties for advertising purposes...</div>
+      <div><span class="output-flag">[FLAG]</span> We may share aggregated or de-identified information...</div>
+      <div><span class="output-flag">[FLAG]</span> We partner with third-party advertisers and ad networks who may collect...</div>
+      <div>&nbsp;</div>
+      <div><span class="output-muted">=== Plain-English summary ===</span></div>
+      <div>This policy mentions sharing your data <span class="output-warn">4</span> time(s).</div>
+      <div>This policy mentions selling your data <span class="output-warn">1</span> time(s).</div>
+      <div><span class="output-warn">4</span> sentence(s) were flagged as potentially concerning.</div>
+    </div>
+  </div>
+
+  <div class="callout callout-accent">
+    <div class="callout-label">Common mistake</div>
+    <p>If your flag count is 0, check two things: (1) did you call <code>.lower()</code> on the sentence before checking? <code>"Share" in sentence</code> won't match <code>"share"</code>. (2) Is your <code>or</code> condition using <code>in</code> correctly? The pattern is <code>"word" in sentence_lower</code>, not <code>"word" in "sentence_lower"</code> (with quotes around the variable name).</p>
+  </div>
+
+  <!-- ── Extension ── -->
+  <div class="extension-box">
+    <div class="extension-header" onclick="toggleExt()">
+      <span class="extension-badge">Extension</span>
+      <span class="extension-title">Find the most suspicious sentence</span>
+      <span class="extension-chev" id="ext-chev">▼</span>
+    </div>
+    <div class="extension-body" id="ext-body">
+      <p>Write a function called <code>suspicion_score(sentence)</code> that takes a single sentence and returns how many red-flag words it contains. Then loop through all sentences, find the one with the highest score, and print it with a label: <code>[MOST CONCERNING]</code>.</p>
+      <p>This is exactly how automated content moderation and legal review tools work — not by reading every document, but by scoring them and surfacing the highest-risk passages for human review.</p>
+      <p>Hint: your function should loop through the <code>red_flags</code> list and use <code>.count()</code> on the sentence. Return the total.</p>
+    </div>
+  </div>
+
+  <!-- ── Checklist ── -->
+  <div class="submit-strip">
+    <div class="submit-label">Before you submit</div>
+    <div class="submit-title">Checklist</div>
+    <div class="submit-checklist">
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Part 1 prints a count for all 7 red-flag words
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Part 2 flags at least 2 sentences with [FLAG]
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Part 3 prints a readable plain-English summary
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I used .lower() so matching is case-insensitive
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        My commit message describes what the program does
+      </label>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  const policies = {
+    tiktok: document.getElementById('policy-tiktok'),
+    instagram: document.getElementById('policy-instagram'),
+  };
+
+  function choosePolicy(name) {
+    document.getElementById('opt-tiktok').classList.toggle('selected', name === 'tiktok');
+    document.getElementById('opt-instagram').classList.toggle('selected', name === 'instagram');
+    Object.values(policies).forEach(p => p.classList.remove('active'));
+    policies[name].classList.add('active');
+  }
+
+  function toggleExt() {
+    const body = document.getElementById('ext-body');
+    const chev = document.getElementById('ext-chev');
+    const open = body.classList.toggle('open');
+    chev.style.transform = open ? 'rotate(180deg)' : '';
+  }
+
+  function toggleCheck(label) {
+    label.querySelector('.check-box').classList.toggle('checked');
+  }
+</script>
+
+</body>
+</html>

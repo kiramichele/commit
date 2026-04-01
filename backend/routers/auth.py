@@ -149,3 +149,74 @@ async def get_me(user: CurrentUser = Depends(get_current_user)):
         "email": user.email,
         "approval_status": user.approval_status,
     }
+
+# ============================================================
+# STREAK
+# ============================================================
+
+@router.get("/streak")
+async def get_streak(user: CurrentUser = Depends(get_current_user)):
+    """Returns the current student's streak data."""
+    profile = (
+        supabase_admin.table("profiles")
+        .select("current_streak, longest_streak, last_activity_date")
+        .eq("id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not profile.data:
+        raise HTTPException(status_code=404, detail="Profile not found.")
+    return profile.data
+
+
+# ============================================================
+# CHANGE PASSWORD
+# ============================================================
+
+class ChangePassword(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePassword,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Changes password for the currently logged in user."""
+
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+
+    if body.current_password == body.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password.")
+
+    # Verify current password by attempting sign in
+    profile = (
+        supabase_admin.table("profiles")
+        .select("email")
+        .eq("id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not profile.data:
+        raise HTTPException(status_code=404, detail="Profile not found.")
+
+    try:
+        supabase_anon.auth.sign_in_with_password({
+            "email": profile.data["email"],
+            "password": body.current_password,
+        })
+    except Exception:
+        raise HTTPException(status_code=400, detail="Current password is incorrect.")
+
+    # Update password
+    try:
+        supabase_admin.auth.admin.update_user_by_id(
+            user.auth_user_id,
+            {"password": body.new_password}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not update password: {str(e)}")
+
+    return {"message": "Password updated successfully."}

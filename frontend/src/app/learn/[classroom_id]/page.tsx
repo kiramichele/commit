@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import StreakLeaderboard from '@/components/StreakLeaderboard'
 
 type Tab = 'assignments' | 'lessons'
 
@@ -159,9 +160,14 @@ export default function StudentClassroomPage() {
         </Link>
         <span style={{ color: '#D3D1C7' }}>/</span>
         <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{classroom?.name}</span>
+        <Link href="/settings" style={{ fontSize: '12px', color: '#888780', textDecoration: 'none', marginLeft: 'auto' }}>
+          settings
+        </Link>
       </nav>
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>
+
+        <StreakLeaderboard classroomId={classroomId} />
 
         {/* TABS */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid rgba(14,45,110,0.08)', width: 'fit-content' }}>

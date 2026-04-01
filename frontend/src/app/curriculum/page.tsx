@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import AssignLessonModal from '@/components/AssignLessonModal'
 
 interface Lesson {
   id: string
@@ -51,6 +52,7 @@ export default function CurriculumPage() {
   const [unlockedLessons, setUnlockedLessons] = useState<Set<string>>(new Set())
   const [dataLoading, setDataLoading] = useState(true)
   const [expandedUnit, setExpandedUnit] = useState<string | null>(null)
+  const [assigningLesson, setAssigningLesson] = useState<Lesson | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
 
   useEffect(() => {
@@ -330,6 +332,13 @@ export default function CurriculumPage() {
                                   preview
                                 </Link>
 
+                                <button
+                                  onClick={() => setAssigningLesson(lesson)}
+                                  style={{ padding: '6px 14px', background: '#EBF1FD', color: '#0C447C', border: 'none', borderRadius: '7px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                                >
+                                  + assign
+                                </button>
+
                                 {selectedClassroom && (
                                   isUnlocked ? (
                                     <button
@@ -361,6 +370,16 @@ export default function CurriculumPage() {
           </div>
         )}
       </div>
+
+      {assigningLesson && (
+        <AssignLessonModal
+          lesson={assigningLesson}
+          classrooms={classrooms}
+          selectedClassroomId={selectedClassroom}
+          onClose={() => setAssigningLesson(null)}
+          onAssigned={() => setAssigningLesson(null)}
+        />
+      )}
     </div>
   )
 }

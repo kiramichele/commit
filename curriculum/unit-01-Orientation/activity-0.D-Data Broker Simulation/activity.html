@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity 0.D — Data Broker Simulation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --rule: #d4cfc7;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .act-header { background: var(--ink); border-bottom: 1px solid #2e2e2e; padding: 28px 40px 24px; }
+  .act-header-inner { max-width: 780px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .act-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--accent); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .act-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); line-height: 1; }
+  .act-badge-num { font-family: var(--display); font-size: 18px; font-weight: 900; color: white; line-height: 1.15; }
+  .act-header-text { flex: 1; }
+  .act-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .act-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--accent); }
+  .act-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--paper); margin-bottom: 8px; }
+  .act-title em { font-style: italic; color: #e8c9a0; }
+  .act-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: rgba(255,255,255,0.35); }
+  .act-meta-item { display: flex; align-items: center; gap: 5px; }
+  .meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── PHASE STRIP ── */
+  .phase-strip { background: #131210; border-bottom: 1px solid #2a2a28; padding: 12px 40px; position: sticky; top: 0; z-index: 100; }
+  .phase-strip-inner { max-width: 780px; margin: 0 auto; display: flex; align-items: center; gap: 0; }
+  .phase-item { flex: 1; display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .phase-dot { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid #3a3a38; background: #1e1e1c; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.3s; }
+  .phase-dot.active { border-color: var(--accent); background: var(--accent); }
+  .phase-dot.done { border-color: var(--teal); background: var(--teal); }
+  .phase-dot.done::after { content: ''; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translate(1px,-1px); display: block; }
+  .phase-dot.active::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: white; display: block; }
+  .phase-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; color: #4a4a48; transition: color 0.3s; white-space: nowrap; }
+  .phase-label.active { color: rgba(255,255,255,0.75); }
+  .phase-label.done { color: var(--teal); }
+  .phase-divider { width: 20px; height: 1px; background: #2a2a28; flex-shrink: 0; }
+
+  /* ── BODY ── */
+  .act-body { max-width: 780px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── PHASE PANELS ── */
+  .phase-panel { display: none; }
+  .phase-panel.active { display: block; animation: fadeUp 0.35s ease both; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 22px 26px; margin-bottom: 32px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #e8c9a0; margin-bottom: 8px; position: relative; z-index: 1; }
+  .objective-text { font-size: 15px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 32px 0 18px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── DATA POINT CARDS ── */
+  .datapoint-grid { display: flex; flex-direction: column; gap: 10px; margin: 20px 0 28px; }
+  .datapoint { display: flex; gap: 14px; align-items: flex-start; padding: 14px 18px; border: 1px solid var(--rule); border-radius: 8px; background: var(--paper); transition: background 0.1s; }
+  .dp-icon { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 16px; }
+  .dp-num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 3px; }
+  .dp-label { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 2px; }
+  .dp-value { font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  .dp-source { font-size: 12px; color: var(--ink-faint); margin-top: 3px; font-style: italic; }
+
+  /* ── INFERENCE INPUT ── */
+  .inference-box { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; margin: 20px 0; }
+  .inference-header { background: var(--paper-dark); padding: 12px 18px; border-bottom: 1px solid var(--rule); font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+  .inference-q { padding: 16px 18px; border-bottom: 1px solid var(--paper-dark); background: var(--paper); }
+  .inference-q-label { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+  .inference-textarea { width: 100%; border: 1px solid var(--rule); border-radius: 5px; padding: 10px 12px; font-family: var(--serif); font-size: 14px; color: var(--ink); background: var(--paper); resize: vertical; min-height: 72px; line-height: 1.55; transition: border-color 0.15s; }
+  .inference-textarea:focus { outline: none; border-color: var(--accent); }
+  .inference-textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+  .inference-q:last-child { border-bottom: none; }
+
+  /* ── PROFILE CARD (broker view) ── */
+  .broker-card { background: var(--ink); border-radius: 10px; overflow: hidden; margin: 24px 0; }
+  .broker-card-header { background: #c8401a; padding: 14px 20px; display: flex; align-items: center; gap: 12px; }
+  .broker-card-icon { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: rgba(0,0,0,0.25); color: rgba(255,255,255,0.8); padding: 3px 10px; border-radius: 20px; }
+  .broker-card-title { font-family: var(--display); font-size: 16px; font-weight: 700; color: white; }
+  .broker-card-body { padding: 20px; }
+  .broker-field { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 9px 0; border-bottom: 1px solid #2e2e2e; }
+  .broker-field:last-child { border-bottom: none; }
+  .broker-field-key { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.4); letter-spacing: 0.06em; min-width: 160px; flex-shrink: 0; }
+  .broker-field-val { font-size: 13px; color: rgba(255,255,255,0.85); text-align: right; line-height: 1.4; }
+  .broker-field-val.inferred { color: #e8c9a0; font-style: italic; }
+  .broker-confidence { font-family: var(--mono); font-size: 10px; color: var(--teal); background: rgba(45,122,58,0.2); border: 1px solid rgba(45,122,58,0.3); padding: 1px 7px; border-radius: 10px; display: inline-block; margin-top: 3px; }
+
+  /* ── REVEAL BUTTON ── */
+  .reveal-strip { margin: 24px 0; padding: 18px 22px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .reveal-strip-text { font-size: 15px; color: var(--ink-muted); }
+  .reveal-strip-text strong { display: block; font-size: 15px; color: var(--ink); margin-bottom: 2px; }
+  .reveal-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--accent); color: white; border: none; padding: 11px 22px; border-radius: 5px; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+  .reveal-btn:hover { background: #a33215; }
+
+  /* ── 500 DATA POINTS VISUALIZATION ── */
+  .datapoint-viz { margin: 24px 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .datapoint-viz-header { background: var(--paper-dark); padding: 12px 18px; border-bottom: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; }
+  .datapoint-viz-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--ink-muted); }
+  .datapoint-viz-count { font-family: var(--display); font-size: 20px; font-weight: 900; color: var(--accent); }
+  .dot-grid { padding: 16px 18px; background: var(--paper); display: flex; flex-wrap: wrap; gap: 3px; }
+  .dot-grid-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--rule); transition: background 0.05s; }
+  .dot-grid-dot.lit { background: var(--accent); }
+  .dot-grid-dot.lit-known { background: var(--teal); }
+  .dot-grid-legend { padding: 10px 18px; border-top: 1px solid var(--rule); background: var(--paper-warm); display: flex; gap: 20px; font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+  .dot-legend-item { display: flex; align-items: center; gap: 6px; }
+  .dot-legend-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── REFLECTION ── */
+  .reflect-list { display: flex; flex-direction: column; gap: 16px; margin: 20px 0; }
+  .reflect-item { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .reflect-q { padding: 14px 18px; background: var(--paper-warm); border-bottom: 1px solid var(--rule); }
+  .reflect-q-num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+  .reflect-q-text { font-size: 15px; line-height: 1.5; color: var(--ink); }
+  .reflect-textarea { width: 100%; border: none; padding: 14px 18px; font-family: var(--serif); font-size: 15px; color: var(--ink); background: var(--paper); resize: vertical; min-height: 90px; line-height: 1.65; display: block; }
+  .reflect-textarea:focus { outline: none; background: #fffef8; }
+  .reflect-textarea::placeholder { color: var(--ink-faint); font-style: italic; }
+
+  /* ── CALLOUTS ── */
+  .callout { margin: 20px 0; padding: 16px 20px; border-radius: 6px; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-accent { background: var(--accent-light); border: 1px solid #e0b0a0; }
+  .callout-dark { background: var(--ink); }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-accent .callout-label { color: var(--accent); }
+  .callout-dark .callout-label { color: #e8c9a0; }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout-dark p { color: rgba(250,248,244,0.82); }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+  .callout-dark p strong { color: var(--paper); }
+
+  /* ── NAV ── */
+  .nav-strip { display: flex; justify-content: space-between; align-items: center; margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--rule); }
+  .nav-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; padding: 11px 22px; border-radius: 4px; cursor: pointer; border: none; transition: all 0.15s; }
+  .nav-btn-prev { background: var(--paper-dark); color: var(--ink-muted); border: 1px solid var(--rule); }
+  .nav-btn-prev:hover { color: var(--ink); }
+  .nav-btn-prev:disabled { opacity: 0.3; cursor: default; }
+  .nav-btn-next { background: var(--accent); color: white; }
+  .nav-btn-next:hover { background: #a33215; }
+  .nav-step { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.06em; }
+
+  /* ── COMPLETION ── */
+  .completion { display: none; margin-top: 32px; background: var(--ink); border-radius: 10px; padding: 28px 32px; text-align: center; }
+  .completion.show { display: block; animation: fadeUp 0.5s ease; }
+  .completion-title { font-family: var(--display); font-size: 26px; font-weight: 900; color: #e8c9a0; margin-bottom: 10px; }
+  .completion-sub { font-size: 15px; color: rgba(250,248,244,0.65); line-height: 1.65; margin-bottom: 0; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .act-header-inner { animation: fadeUp 0.4s ease both; }
+
+  @media (max-width: 600px) {
+    .act-header { padding: 20px; }
+    .phase-strip { padding: 10px 20px; }
+    .act-body { padding: 28px 20px 48px; }
+    .phase-label { display: none; }
+    .reveal-strip { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="act-header">
+  <div class="act-header-inner">
+    <div class="act-badge">
+      <span class="act-badge-label">Act</span>
+      <span class="act-badge-num">0.D</span>
+    </div>
+    <div class="act-header-text">
+      <div class="act-eyebrow">Unit 0 · Activity 0.D · AP Computer Science Principles</div>
+      <h1 class="act-title">Data broker <em>simulation</em></h1>
+      <div class="act-meta">
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--accent)"></span>Simulation</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--gold)"></span>~20 min</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--teal)"></span>Follows Lesson 0.4</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ PHASE STRIP ══════════════ -->
+<div class="phase-strip">
+  <div class="phase-strip-inner">
+    <div class="phase-item">
+      <div class="phase-dot active" id="pd0"></div>
+      <span class="phase-label active" id="pl0">Profile A</span>
+    </div>
+    <div class="phase-divider"></div>
+    <div class="phase-item">
+      <div class="phase-dot" id="pd1"></div>
+      <span class="phase-label" id="pl1">Profile B</span>
+    </div>
+    <div class="phase-divider"></div>
+    <div class="phase-item">
+      <div class="phase-dot" id="pd2"></div>
+      <span class="phase-label" id="pl2">500 points</span>
+    </div>
+    <div class="phase-divider"></div>
+    <div class="phase-item">
+      <div class="phase-dot" id="pd3"></div>
+      <span class="phase-label" id="pl3">Reflect</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="act-body">
+
+  <!-- ══ PHASE 0: Profile A ══ -->
+  <div class="phase-panel active" id="panel-0">
+
+    <div class="objective-box">
+      <div class="objective-label">You are a data broker</div>
+      <p class="objective-text">Your job is to build profiles on people and sell them to advertisers, insurers, and employers. You have no name, no photo, no direct contact with your subject — just data points collected from apps, loyalty programs, public records, and purchase histories. Let's see how much you can figure out.</p>
+    </div>
+
+    <div class="section-rule"><span class="section-rule-label">Profile A — 5 data points</span></div>
+    <h2>What do you know about this person?</h2>
+
+    <p>These five data points were collected from different sources — none of them asked this person for permission to share. Read them carefully, then answer the questions below.</p>
+
+    <div class="datapoint-grid">
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#EEEDFE;">🛒</div>
+        <div>
+          <div class="dp-num">Data point 1 · Loyalty program purchase history</div>
+          <div class="dp-label">Recent purchases</div>
+          <div class="dp-value">Prenatal vitamins, maternity compression socks, white noise machine, nursing pillow, blackout curtains</div>
+          <div class="dp-source">Source: pharmacy loyalty card + baby retailer rewards program</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#E1F5EE;">📍</div>
+        <div>
+          <div class="dp-num">Data point 2 · Location data</div>
+          <div class="dp-label">Frequent locations (last 90 days)</div>
+          <div class="dp-value">OB-GYN office (14 visits) · Same hospital complex (2 visits) · Home ZIP: 30318 · Work ZIP: 30305</div>
+          <div class="dp-source">Source: smartphone GPS, passive collection via map app</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#FAEEDA;">🔍</div>
+        <div>
+          <div class="dp-num">Data point 3 · Search history (30 days)</div>
+          <div class="dp-label">Top search terms</div>
+          <div class="dp-value">"best pediatricians Atlanta" · "maternity leave policy Georgia" · "baby name meaning" · "epidural vs natural birth" · "FMLA rights"</div>
+          <div class="dp-source">Source: search engine browsing history, synced across devices</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#FAECE7;">📱</div>
+        <div>
+          <div class="dp-num">Data point 4 · App usage patterns</div>
+          <div class="dp-label">Most used apps (last 60 days)</div>
+          <div class="dp-value">The Bump (pregnancy tracker) · Spotify (true crime podcasts, cooking shows) · Instagram (mom influencer accounts) · Instacart</div>
+          <div class="dp-source">Source: mobile advertising ID, app analytics</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#eaf4ec;">💳</div>
+        <div>
+          <div class="dp-num">Data point 5 · Financial signals</div>
+          <div class="dp-label">Recent financial activity</div>
+          <div class="dp-value">Opened new savings account (label: "baby fund") · Canceled gym membership · Increased grocery spend 40% · First IKEA purchase in 3 years</div>
+          <div class="dp-source">Source: credit bureau data, anonymized transaction aggregator</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inference-box">
+      <div class="inference-header">Your inferences — write them down before moving on</div>
+      <div class="inference-q">
+        <div class="inference-q-label">What do you know about this person? Be specific — age range, life situation, income level, location, upcoming needs.</div>
+        <textarea class="inference-textarea" placeholder="Based on the data points above, I believe this person is..."></textarea>
+      </div>
+      <div class="inference-q">
+        <div class="inference-q-label">What would you sell this profile to — and for what purpose? Who would pay for it?</div>
+        <textarea class="inference-textarea" placeholder="This profile would be valuable to... because..."></textarea>
+      </div>
+      <div class="inference-q">
+        <div class="inference-q-label">Could you identify this specific person using only this data? What would you need to find them on social media?</div>
+        <textarea class="inference-textarea" placeholder="I could narrow it down by..."></textarea>
+      </div>
+    </div>
+
+    <div class="callout callout-gold">
+      <div class="callout-label">Before you move on</div>
+      <p>This person never consented to being profiled. The loyalty card data, GPS pings, search history, and app usage were all collected as side effects of normal daily life. <strong>Every data point above is legally collected in the United States.</strong></p>
+    </div>
+
+    <div class="nav-strip">
+      <button class="nav-btn nav-btn-prev" disabled>← Back</button>
+      <span class="nav-step">Phase 1 of 4</span>
+      <button class="nav-btn nav-btn-next" onclick="goTo(1)">Profile B →</button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 1: Profile B ══ -->
+  <div class="phase-panel" id="panel-1">
+
+    <div class="section-rule"><span class="section-rule-label">Profile B — harder</span></div>
+    <h2>This one is less obvious</h2>
+
+    <p>Profile B has the same number of data points — but the picture is less clear. Or is it? Read carefully.</p>
+
+    <div class="datapoint-grid">
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#EEEDFE;">🛒</div>
+        <div>
+          <div class="dp-num">Data point 1 · Purchase history</div>
+          <div class="dp-label">Recent purchases (3 months)</div>
+          <div class="dp-value">Energy drinks (bulk) · Blue-light glasses · Two monitors (same model) · Noise-canceling headphones · Standing desk converter · Multiple fast food transactions (late night)</div>
+          <div class="dp-source">Source: credit card transaction data, retail loyalty programs</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#E1F5EE;">📍</div>
+        <div>
+          <div class="dp-num">Data point 2 · Location data</div>
+          <div class="dp-label">Location patterns</div>
+          <div class="dp-value">Home: ZIP 98101 (Seattle) · Rarely leaves home between 9am–6pm on weekdays · Coffee shop (1-2x/week, 2–4 hour stays) · No gym, no commute pattern</div>
+          <div class="dp-source">Source: smartphone GPS</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#FAEEDA;">🔍</div>
+        <div>
+          <div class="dp-num">Data point 3 · Search history</div>
+          <div class="dp-label">Recent searches</div>
+          <div class="dp-value">"how to negotiate salary remote job" · "RSI wrist brace programmer" · "W2 vs 1099 contractor" · "GitHub portfolio tips" · "leetcode hard problems" · "tech layoffs 2024"</div>
+          <div class="dp-source">Source: search engine history</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#FAECE7;">📱</div>
+        <div>
+          <div class="dp-num">Data point 4 · App usage</div>
+          <div class="dp-label">Active apps and usage times</div>
+          <div class="dp-value">GitHub (daily, 6+ hours) · Stack Overflow · Discord (3 servers: "remote devs", "job hunting", "burnout support") · LinkedIn (profile views spike) · DoorDash (daily, 11pm–1am)</div>
+          <div class="dp-source">Source: mobile advertising ID</div>
+        </div>
+      </div>
+      <div class="datapoint">
+        <div class="dp-icon" style="background:#eaf4ec;">💳</div>
+        <div>
+          <div class="dp-num">Data point 5 · Financial signals</div>
+          <div class="dp-label">Financial activity</div>
+          <div class="dp-value">No regular paycheck deposit (past 4 months) · Pulling from savings monthly · Venmo payments labeled "rent" · Udemy course purchases (Python, cloud certs)</div>
+          <div class="dp-source">Source: bank transaction aggregator, credit bureau</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inference-box">
+      <div class="inference-header">Your inferences — Profile B</div>
+      <div class="inference-q">
+        <div class="inference-q-label">What do you know about this person? Life situation, employment status, what they're going through right now?</div>
+        <textarea class="inference-textarea" placeholder="This person appears to be..."></textarea>
+      </div>
+      <div class="inference-q">
+        <div class="inference-q-label">Profile B is harder than Profile A. Why? What makes some people easier to profile than others?</div>
+        <textarea class="inference-textarea" placeholder="Profile B is harder because..."></textarea>
+      </div>
+      <div class="inference-q">
+        <div class="inference-q-label">What assumptions did you make that might be wrong? What alternative explanations exist for this data?</div>
+        <textarea class="inference-textarea" placeholder="I might be wrong about... because..."></textarea>
+      </div>
+    </div>
+
+    <div class="callout callout-accent">
+      <div class="callout-label">The ambiguity is the lesson</div>
+      <p>Profile B is intentionally less clear — but a real data broker wouldn't stop at 5 data points. With 500, most of the ambiguity disappears. The next phase shows you what that looks like.</p>
+    </div>
+
+    <div class="nav-strip">
+      <button class="nav-btn nav-btn-prev" onclick="goTo(0)">← Back</button>
+      <span class="nav-step">Phase 2 of 4</span>
+      <button class="nav-btn nav-btn-next" onclick="goTo(2)">500 data points →</button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 2: 500 data points reveal ══ -->
+  <div class="phase-panel" id="panel-2">
+
+    <div class="section-rule"><span class="section-rule-label">The real scale</span></div>
+    <h2>You had 5 data points. Real brokers have 500.</h2>
+
+    <p>You made inferences from 5 signals — and you were probably right about most of it. Now imagine what's possible with 500. The visualization below shows the scale of what a mid-tier data broker actually holds on a typical adult in the US.</p>
+
+    <div class="datapoint-viz">
+      <div class="datapoint-viz-header">
+        <span class="datapoint-viz-title">Data points held by a typical data broker on one person</span>
+        <span class="datapoint-viz-count" id="dot-count">0</span>
+      </div>
+      <div class="dot-grid" id="dot-grid"></div>
+      <div class="dot-grid-legend">
+        <div class="dot-legend-item"><div class="dot-legend-swatch" style="background:var(--teal)"></div>You saw these (5)</div>
+        <div class="dot-legend-item"><div class="dot-legend-swatch" style="background:var(--accent)"></div>What brokers also have</div>
+        <div class="dot-legend-item"><div class="dot-legend-swatch" style="background:var(--rule)"></div>Not yet revealed</div>
+      </div>
+    </div>
+
+    <div class="reveal-strip" id="reveal-strip">
+      <div class="reveal-strip-text">
+        <strong>What does the rest look like?</strong>
+        See the categories of data real brokers collect — beyond what you saw in Profiles A and B.
+      </div>
+      <button class="reveal-btn" onclick="revealDots()">Reveal all 500 →</button>
+    </div>
+
+    <div id="broker-profile-reveal" style="display:none;">
+      <div class="broker-card">
+        <div class="broker-card-header">
+          <span class="broker-card-icon">DataCo Profile</span>
+          <span class="broker-card-title">Subject #4,827,193 — Composite profile</span>
+        </div>
+        <div class="broker-card-body">
+          <div class="broker-field"><span class="broker-field-key">Age range</span><span class="broker-field-val">28–35 <span class="broker-confidence">94% confidence</span></span></div>
+          <div class="broker-field"><span class="broker-field-key">Gender</span><span class="broker-field-val inferred">Female (inferred from purchase + app patterns)</span></div>
+          <div class="broker-field"><span class="broker-field-key">Income estimate</span><span class="broker-field-val">$65,000–$85,000/yr <span class="broker-confidence">81% confidence</span></span></div>
+          <div class="broker-field"><span class="broker-field-key">Life event flags</span><span class="broker-field-val inferred">Expecting first child (high confidence) · Career transition (Profile B)</span></div>
+          <div class="broker-field"><span class="broker-field-key">Health indicators</span><span class="broker-field-val inferred">Prenatal care (A) · Possible RSI/repetitive strain (B) · Irregular sleep pattern (B)</span></div>
+          <div class="broker-field"><span class="broker-field-key">Political lean</span><span class="broker-field-val inferred">Center-left (inferred from zip code, podcast choices, search terms)</span></div>
+          <div class="broker-field"><span class="broker-field-key">Consumer segments</span><span class="broker-field-val">"New parent" · "Health-conscious" · "Tech professional" · "Value seeker"</span></div>
+          <div class="broker-field"><span class="broker-field-key">Stress indicators</span><span class="broker-field-val inferred">Elevated (late-night food orders, burnout Discord server, savings drawdown)</span></div>
+          <div class="broker-field"><span class="broker-field-key">Sold to (examples)</span><span class="broker-field-val">Baby product advertisers · Insurance underwriters · Staffing agencies · Political campaigns · Credit lenders</span></div>
+          <div class="broker-field"><span class="broker-field-key">Data sources</span><span class="broker-field-val">47 distinct sources across both profiles</span></div>
+        </div>
+      </div>
+
+      <div class="callout callout-dark">
+        <div class="callout-label">What just happened</div>
+        <p>Two separate people — no names, no photos, no direct contact — became one merged profile. Data brokers routinely combine records from multiple sources to build a more complete picture. <strong>You never consented to being in this database. You never knew it existed.</strong> It was assembled from the side effects of your daily life.</p>
+      </div>
+    </div>
+
+    <div class="nav-strip">
+      <button class="nav-btn nav-btn-prev" onclick="goTo(1)">← Back</button>
+      <span class="nav-step">Phase 3 of 4</span>
+      <button class="nav-btn nav-btn-next" onclick="goTo(3)">Reflect →</button>
+    </div>
+  </div>
+
+  <!-- ══ PHASE 3: Reflect ══ -->
+  <div class="phase-panel" id="panel-3">
+
+    <div class="section-rule"><span class="section-rule-label">What you just did</span></div>
+    <h2>You were the algorithm</h2>
+
+    <p>You just did manually what a data broker's software does automatically — and much faster, with far more data. The inferences you made from 5 data points are the same inferences a model makes from 500, except the model never second-guesses itself and never feels uncomfortable about it.</p>
+
+    <div class="reflect-list">
+      <div class="reflect-item">
+        <div class="reflect-q">
+          <div class="reflect-q-num">Question 1</div>
+          <div class="reflect-q-text">When you were building the inferences, did it feel like an invasion of privacy — or just like solving a puzzle? Why do you think it felt that way?</div>
+        </div>
+        <textarea class="reflect-textarea" placeholder="It felt like... because..."></textarea>
+      </div>
+      <div class="reflect-item">
+        <div class="reflect-q">
+          <div class="reflect-q-num">Question 2</div>
+          <div class="reflect-q-text">None of the data in Profile A or B was stolen. All of it was legally collected. Does "legal" mean the same thing as "okay"? Where would you draw the line?</div>
+        </div>
+        <textarea class="reflect-textarea" placeholder="I think legal and okay are different because..."></textarea>
+      </div>
+      <div class="reflect-item">
+        <div class="reflect-q">
+          <div class="reflect-q-num">Question 3</div>
+          <div class="reflect-q-text">The broker profile flags "stress indicators" and sells that to credit lenders. Should a lender be allowed to use your app usage and late-night food orders to make a lending decision? Why or why not?</div>
+        </div>
+        <textarea class="reflect-textarea" placeholder="I think lenders should/shouldn't be allowed to..."></textarea>
+      </div>
+      <div class="reflect-item">
+        <div class="reflect-q">
+          <div class="reflect-q-num">Question 4</div>
+          <div class="reflect-q-text">What would you change about how data is collected and sold — if you could change anything? Be specific: what rule, law, or technical requirement would you propose?</div>
+        </div>
+        <textarea class="reflect-textarea" placeholder="If I could change one thing, I would require..."></textarea>
+      </div>
+    </div>
+
+    <div class="callout callout-teal">
+      <div class="callout-label">AP connection</div>
+      <p>Everything in this activity maps to AP standard <strong>IOC-2.A</strong> (data privacy and the impact of data collection) and <strong>IOC-2.B</strong> (the implications of access to information). The written response questions above are the kind of thing the AP exam asks in its open-ended sections — practice articulating a position and defending it.</p>
+    </div>
+
+    <div class="completion show" id="completion">
+      <div class="completion-title">Activity complete.</div>
+      <p class="completion-sub">You built two profiles from anonymous data, saw what 500 data points look like at scale, and thought through the ethics of a system most people don't know exists.<br><br>That's the foundation for everything Unit 5 covers on AI, bias, and the impact of computing.</p>
+    </div>
+
+    <div class="nav-strip">
+      <button class="nav-btn nav-btn-prev" onclick="goTo(2)">← Back</button>
+      <span class="nav-step">Phase 4 of 4</span>
+      <button class="nav-btn nav-btn-next" style="background:var(--teal);" onclick="window.scrollTo(0,0)">Start over ↺</button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let currentPhase = 0;
+const totalPhases = 4;
+let dotsRevealed = false;
+
+function goTo(phase) {
+  document.getElementById('panel-' + currentPhase).classList.remove('active');
+
+  for (let i = 0; i < totalPhases; i++) {
+    const dot = document.getElementById('pd' + i);
+    const label = document.getElementById('pl' + i);
+    dot.className = 'phase-dot';
+    label.className = 'phase-label';
+    if (i < phase) { dot.classList.add('done'); label.classList.add('done'); }
+    else if (i === phase) { dot.classList.add('active'); label.classList.add('active'); }
+  }
+
+  currentPhase = phase;
+  document.getElementById('panel-' + phase).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  if (phase === 2 && !dotsRevealed) buildDotGrid();
+}
+
+function buildDotGrid() {
+  const grid = document.getElementById('dot-grid');
+  grid.innerHTML = '';
+  for (let i = 0; i < 500; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot-grid-dot';
+    if (i < 5) dot.classList.add('lit-known');
+    grid.appendChild(dot);
+  }
+  // animate count up to 5
+  animateCount(0, 5, 500);
+}
+
+function revealDots() {
+  dotsRevealed = true;
+  const dots = document.querySelectorAll('.dot-grid-dot');
+  let i = 5;
+  document.getElementById('reveal-strip').style.display = 'none';
+
+  const interval = setInterval(() => {
+    const batch = Math.min(8, dots.length - i);
+    for (let j = 0; j < batch; j++) {
+      if (i + j < dots.length) dots[i + j].classList.add('lit');
+    }
+    i += batch;
+    document.getElementById('dot-count').textContent = i;
+    if (i >= dots.length) {
+      clearInterval(interval);
+      setTimeout(() => {
+        document.getElementById('broker-profile-reveal').style.display = 'block';
+        document.getElementById('broker-profile-reveal').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 400);
+    }
+  }, 16);
+}
+
+function animateCount(from, to, duration) {
+  const start = performance.now();
+  const el = document.getElementById('dot-count');
+  function step(now) {
+    const progress = Math.min((now - start) / duration, 1);
+    el.textContent = Math.round(from + (to - from) * progress);
+    if (progress < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+    "order": 4,
+    "title": "Your first commit - Hello, World",
+    "scaffold_level": "typed_python",
+    "estimated_minutes": 5,
+    "exercises": [
+        {
+            "type": "coding",
+            "instructions": "Modify the starter code so your program prints three things about you — one per line.\n\n1. Print a greeting with your name\n2. Print where you're from (city, state, or whatever feels right)\n3. Print one thing you want to learn this year — be honest\n4. Run your code with Ctrl+Enter and read the output before doing anything else\n5. Click Commit and write a message that describes what your program does — not just 'done'\n\nA good commit message: 'added my name, city, and learning goal'\nA bad commit message: 'done'\n\nCommon mistakes to avoid:\n- Forgetting quotes around your text → NameError\n- Mismatched quotes (opening with \" and closing with ') → SyntaxError\n- Not reading the output before committing — check what actually printed",
+            "starter_code": "# Exercise 0.1 — Your first commit\n# Replace the placeholder text with your own information\n\nprint(\"Hello! My name is YOUR NAME HERE.\")\nprint(\"I'm from YOUR CITY, STATE.\")\nprint(\"This year I want to learn: YOUR GOAL HERE.\")"
+            
+        }
+    ]
+}

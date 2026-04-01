@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity 0.B — Platform Scavenger Hunt</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --rule: #d4cfc7;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .act-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .act-header-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .act-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--purple); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .act-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5); line-height: 1; }
+  .act-badge-num { font-family: var(--display); font-size: 18px; font-weight: 900; color: #d4d0f8; line-height: 1.15; }
+  .act-header-text { flex: 1; }
+  .act-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--purple); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .act-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--purple); }
+  .act-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .act-title em { font-style: italic; color: var(--purple); }
+  .act-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .act-meta-item { display: flex; align-items: center; gap: 5px; }
+  .meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── PROGRESS STRIP ── */
+  .progress-strip { background: var(--paper-dark); border-bottom: 1px solid var(--rule); padding: 14px 40px; }
+  .progress-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 14px; }
+  .progress-bar-bg { flex: 1; height: 6px; background: var(--rule); border-radius: 3px; overflow: hidden; }
+  .progress-bar-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.4s ease; width: 0%; }
+  .progress-label { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); letter-spacing: 0.06em; white-space: nowrap; }
+  .progress-count { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--green); white-space: nowrap; }
+
+  /* ── BODY ── */
+  .act-body { max-width: 720px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 24px 28px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #d4d0f8; margin-bottom: 10px; position: relative; z-index: 1; }
+  .objective-text { font-size: 16px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--purple); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── TASK CARDS ── */
+  .task-list { display: flex; flex-direction: column; gap: 8px; margin: 20px 0; }
+
+  .task-card { border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; transition: border-color 0.2s; }
+  .task-card.unlocked { border-color: var(--rule); }
+  .task-card.completed { border-color: var(--green); }
+  .task-card.locked { border-color: var(--rule); opacity: 0.45; pointer-events: none; }
+
+  .task-card-header { display: flex; align-items: flex-start; gap: 14px; padding: 16px 18px; cursor: pointer; background: var(--paper); transition: background 0.1s; }
+  .task-card.completed .task-card-header { background: var(--green-light); }
+  .task-card.unlocked .task-card-header:hover { background: var(--paper-warm); }
+
+  .task-check { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--rule); background: var(--paper); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.2s; margin-top: 1px; }
+  .task-card.completed .task-check { background: var(--green); border-color: var(--green); }
+  .task-card.completed .task-check::after { content: ''; width: 10px; height: 6px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translate(1px, -1px); display: block; }
+  .task-card.locked .task-check { border-style: dashed; }
+
+  .task-card-body { flex: 1; }
+  .task-num { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 3px; }
+  .task-card.completed .task-num { color: var(--green); }
+  .task-title { font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .task-card.locked .task-title { color: var(--ink-faint); }
+  .task-subtitle { font-size: 13px; color: var(--ink-faint); margin-top: 2px; font-style: italic; }
+
+  .task-locked-label { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-top: 1px; letter-spacing: 0.06em; }
+
+  /* expanded detail panel */
+  .task-detail { display: none; padding: 0 18px 18px 58px; background: var(--paper); }
+  .task-detail.open { display: block; }
+  .task-card.completed .task-detail { background: var(--green-light); }
+
+  .task-detail-desc { font-size: 14px; color: var(--ink-muted); line-height: 1.65; margin-bottom: 14px; }
+
+  .task-why { font-size: 13px; background: var(--paper-dark); border-left: 3px solid var(--purple); padding: 10px 14px; border-radius: 0 4px 4px 0; color: var(--ink-muted); line-height: 1.5; margin-bottom: 14px; }
+  .task-why strong { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--purple); display: block; margin-bottom: 4px; }
+
+  .task-done-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--purple); color: white; border: none; padding: 9px 20px; border-radius: 5px; cursor: pointer; transition: background 0.15s; }
+  .task-done-btn:hover { background: #433898; }
+  .task-done-btn.completed-state { background: var(--green); cursor: default; }
+
+  /* ── CONFETTI / COMPLETION ── */
+  .completion-box { display: none; margin-top: 32px; background: var(--ink); border-radius: 10px; padding: 28px 32px; text-align: center; position: relative; overflow: hidden; }
+  .completion-box.show { display: block; animation: fadeUp 0.5s ease both; }
+  .completion-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.02) 12px, rgba(255,255,255,0.02) 13px); }
+  .completion-title { font-family: var(--display); font-size: 28px; font-weight: 900; color: #e8c9a0; position: relative; z-index: 1; margin-bottom: 8px; }
+  .completion-sub { font-size: 15px; color: rgba(250,248,244,0.7); position: relative; z-index: 1; margin-bottom: 20px; line-height: 1.6; }
+  .completion-next { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--accent); color: white; border: none; padding: 12px 24px; border-radius: 5px; cursor: pointer; transition: background 0.15s; position: relative; z-index: 1; }
+  .completion-next:hover { background: #a33215; }
+
+  /* ── CALLOUT ── */
+  .callout { margin: 24px 0; padding: 18px 22px; border-radius: 6px; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .act-header-inner { animation: fadeUp 0.4s ease both; }
+
+  @keyframes completePop { 0% { transform: scale(1); } 40% { transform: scale(1.04); } 100% { transform: scale(1); } }
+  .task-card.completing { animation: completePop 0.3s ease; }
+
+  @media (max-width: 600px) {
+    .act-header { padding: 20px; }
+    .progress-strip { padding: 12px 20px; }
+    .act-body { padding: 28px 20px 48px; }
+    .task-detail { padding-left: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="act-header">
+  <div class="act-header-inner">
+    <div class="act-badge">
+      <span class="act-badge-label">Act</span>
+      <span class="act-badge-num">0.B</span>
+    </div>
+    <div class="act-header-text">
+      <div class="act-eyebrow">Unit 0 · Activity 0.B · AP Computer Science Principles</div>
+      <h1 class="act-title">Platform <em>scavenger hunt</em></h1>
+      <div class="act-meta">
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--purple)"></span>Guided exploration</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--gold)"></span>~10 min</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--teal)"></span>Follows Lesson 0.2</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ PROGRESS ══════════════ -->
+<div class="progress-strip">
+  <div class="progress-inner">
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progress-fill"></div>
+    </div>
+    <span class="progress-label">Tasks complete:</span>
+    <span class="progress-count" id="progress-count">0 / 8</span>
+  </div>
+</div>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="act-body">
+
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">Instead of watching a tour of Commit, you're doing it yourself. Work through the tasks below in order — each one shows you where something lives and why it matters. Each task unlocks the next. By the time you finish, you'll know exactly where everything is before you need it under pressure.</p>
+  </div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">How this works</div>
+    <p>Tasks unlock one at a time. Complete each one in Commit — then come back here and click <strong>Done</strong> to unlock the next. You're on the honor system. The goal isn't to click through fast — it's to actually find the thing.</p>
+  </div>
+
+  <div class="section-rule"><span class="section-rule-label">8 tasks — work through them in order</span></div>
+  <h2>Find it, do it, mark it done</h2>
+
+  <div class="task-list" id="task-list"></div>
+
+  <div class="completion-box" id="completion-box">
+    <div class="completion-title">You found everything.</div>
+    <p class="completion-sub">You now know where every part of Commit lives before you need it in a hurry. That's the whole point.<br>Your next stop: Lesson 0.3 — the AP exam decoded.</p>
+    <button class="completion-next" onclick="window.scrollTo(0,0)">Continue to Lesson 0.3 →</button>
+  </div>
+
+</main>
+
+<script>
+const tasks = [
+  {
+    num: 'Task 1 of 8',
+    title: 'Find the lesson panel and scroll to the bottom',
+    subtitle: 'The lesson panel is where you read content',
+    desc: 'Open any lesson from the sidebar — Lesson 0.1 works fine. Scroll all the way to the bottom of the lesson content. You should see a "Next up" footer with a Continue button.',
+    why: 'Lessons have a natural end point. Scrolling to the bottom before moving on is a habit — it means you saw everything, not just the first screen.',
+  },
+  {
+    num: 'Task 2 of 8',
+    title: 'Run the starter code without changing anything',
+    subtitle: 'Open any exercise and hit Run',
+    desc: 'Navigate to Exercise 0.1 in the sidebar. Don\'t change a single character. Hit the Run button (or Ctrl + Enter). Watch the output panel below the editor. Something should print — even if it\'s the placeholder text.',
+    why: 'Running code before modifying it tells you what the baseline behavior is. Real developers do this every time they open an unfamiliar codebase.',
+  },
+  {
+    num: 'Task 3 of 8',
+    title: 'Make one change to the code and run it again',
+    subtitle: 'Edit something small — see the output change',
+    desc: 'In Exercise 0.1, change one of the placeholder strings to anything at all — your name, a random word, whatever. Hit Run again. Confirm the output changed to match what you typed.',
+    why: 'This is the core loop of programming: change something → run it → see what happened. You\'ll do this thousands of times this year. The faster this loop feels, the better.',
+  },
+  {
+    num: 'Task 4 of 8',
+    title: 'Write a commit message and click Commit',
+    subtitle: 'Save a checkpoint of your work',
+    desc: 'With your edited code in the editor, click the Commit button. A text field will appear — write a message that describes what you changed. Something like "changed placeholder text to my name." Then confirm the commit.',
+    why: 'Your commit history is a record of how your thinking evolved. A commit message written now is a note to future-you. Make it mean something.',
+  },
+  {
+    num: 'Task 5 of 8',
+    title: 'Find where your commit history is stored',
+    subtitle: 'Locate the timeline of your saves',
+    desc: 'After committing, look in the sidebar for your commit history. You should see at least one entry — the commit you just made — with your message and a timestamp. Click on it and see what it shows.',
+    why: 'The commit history is what separates Commit from a regular code editor. Every save is a named snapshot. You can always go back. This is version control — a skill professional developers use every single day.',
+  },
+  {
+    num: 'Task 6 of 8',
+    title: 'Find the assignment submission button',
+    subtitle: 'Locate how you officially hand in work',
+    desc: 'Navigate to Exercise 0.1. Find the Submit button — it\'s different from the Commit button. You don\'t need to submit yet if you\'re not ready. Just find where it is and note what information it shows you before submitting (like your commit count).',
+    why: 'Committing and submitting are two different things. Commits are drafts. Submission is official. Knowing where the Submit button is before an assignment is due means you\'re never hunting for it at the last minute.',
+  },
+  {
+    num: 'Task 7 of 8',
+    title: 'Find where teacher feedback appears',
+    subtitle: 'Locate the feedback panel on a submission',
+    desc: 'On any submitted exercise — or on Exercise 0.1 if you submitted it — look for the feedback area. It may be empty right now, but find where it will appear when your teacher leaves a comment. It\'s typically inline with your code or at the top of the exercise page.',
+    why: 'Feedback that you don\'t read is the same as no feedback. Knowing exactly where to look means you\'ll actually see it when it\'s there.',
+  },
+  {
+    num: 'Task 8 of 8',
+    title: 'Locate the unit overview page',
+    subtitle: 'Find the map of everything in Unit 0',
+    desc: 'Find the Unit 0 overview — a page that lists every lesson, exercise, and activity in this unit with their completion status. It might be at the top of the sidebar or accessible from a unit header. Confirm you can see all 14 items in Unit 0 from one place.',
+    why: 'The unit overview is your map. When you\'re lost, confused about what\'s next, or want to check what you\'ve missed — this is where you go. Find it once now so you know where it is forever.',
+  },
+];
+
+let completed = new Array(tasks.length).fill(false);
+let expanded = new Array(tasks.length).fill(false);
+
+function render() {
+  const list = document.getElementById('task-list');
+  list.innerHTML = '';
+
+  tasks.forEach((task, i) => {
+    const isDone = completed[i];
+    const isLocked = i > 0 && !completed[i - 1];
+    const isOpen = expanded[i];
+    const status = isDone ? 'completed' : isLocked ? 'locked' : 'unlocked';
+
+    const card = document.createElement('div');
+    card.className = `task-card ${status}`;
+    card.id = `task-${i}`;
+
+    card.innerHTML = `
+      <div class="task-card-header" onclick="toggleTask(${i})">
+        <div class="task-check"></div>
+        <div class="task-card-body">
+          <div class="task-num">${task.num}${isLocked ? ' — locked' : isDone ? ' — complete' : ''}</div>
+          <div class="task-title">${task.title}</div>
+          <div class="task-subtitle">${task.subtitle}</div>
+        </div>
+      </div>
+      <div class="task-detail ${isOpen && !isLocked ? 'open' : ''}">
+        <p class="task-detail-desc">${task.desc}</p>
+        <div class="task-why"><strong>Why this matters</strong>${task.why}</div>
+        ${isDone
+          ? `<button class="task-done-btn completed-state" disabled>Completed ✓</button>`
+          : `<button class="task-done-btn" onclick="completeTask(event, ${i})">Done — unlock next →</button>`
+        }
+      </div>`;
+
+    list.appendChild(card);
+  });
+
+  // update progress
+  const count = completed.filter(Boolean).length;
+  const pct = Math.round((count / tasks.length) * 100);
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-count').textContent = `${count} / ${tasks.length}`;
+
+  // show completion
+  if (count === tasks.length) {
+    document.getElementById('completion-box').classList.add('show');
+  }
+}
+
+function toggleTask(i) {
+  const isDone = completed[i];
+  const isLocked = i > 0 && !completed[i - 1];
+  if (isLocked) return;
+  expanded[i] = !expanded[i];
+  render();
+}
+
+function completeTask(e, i) {
+  e.stopPropagation();
+  completed[i] = true;
+  expanded[i] = false;
+  // auto-expand next
+  if (i + 1 < tasks.length) {
+    expanded[i + 1] = true;
+  }
+  // pop animation
+  const card = document.getElementById(`task-${i}`);
+  if (card) card.classList.add('completing');
+  setTimeout(() => render(), 50);
+  // scroll next task into view
+  setTimeout(() => {
+    const next = document.getElementById(`task-${i + 1}`);
+    if (next) next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 200);
+}
+
+// auto-expand first task on load
+expanded[0] = true;
+render();
+</script>
+
+</body>
+</html>

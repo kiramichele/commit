@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exercise 0.3 — IPO in Python</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --rule: #d4cfc7;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .ex-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .ex-header-inner { max-width: 720px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .ex-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--ink); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .ex-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); line-height: 1; }
+  .ex-badge-num { font-family: var(--display); font-size: 22px; font-weight: 900; color: #e8c9a0; line-height: 1.1; }
+  .ex-header-text { flex: 1; }
+  .ex-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .ex-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--accent); }
+  .ex-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .ex-title em { font-style: italic; color: var(--accent); }
+  .ex-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .ex-meta-item { display: flex; align-items: center; gap: 5px; }
+  .ex-meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-gold { background: var(--gold); }
+  .dot-teal { background: var(--teal); }
+
+  /* ── BODY ── */
+  .ex-body { max-width: 720px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 24px 28px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #e8c9a0; margin-bottom: 10px; position: relative; z-index: 1; }
+  .objective-text { font-size: 16px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+
+  /* ── IPO LABEL STRIP ── */
+  .ipo-strip { display: flex; gap: 4px; margin: 0 0 16px; }
+  .ipo-chip { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; padding: 3px 12px; border-radius: 20px; }
+  .ipo-i { background: var(--purple-light); color: var(--purple); border: 1px solid #AFA9EC; }
+  .ipo-p { background: var(--accent-light); color: var(--accent); border: 1px solid #e0b0a0; }
+  .ipo-o { background: var(--green-light); color: var(--green); border: 1px solid #a8d0b0; }
+
+  /* ── PROGRAM CARDS ── */
+  .program-card { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin: 0 0 32px; }
+  .program-card-header { background: var(--paper-dark); padding: 14px 18px; border-bottom: 1px solid var(--rule); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .program-card-num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+  .program-card-title { font-family: var(--display); font-size: 18px; font-weight: 700; color: var(--ink); }
+  .program-card-pts { font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); background: var(--paper); border: 1px solid var(--rule); padding: 3px 10px; border-radius: 20px; white-space: nowrap; margin-top: 4px; }
+  .program-card-body { padding: 18px 20px; background: var(--paper); }
+  .program-desc { font-size: 15px; color: var(--ink-muted); line-height: 1.6; margin-bottom: 16px; }
+
+  /* ── CODE BLOCKS ── */
+  .code-block { margin: 16px 0; border-radius: 8px; overflow: hidden; border: 1px solid #2e2e3e; }
+  .code-topbar { background: #252535; padding: 9px 14px; display: flex; align-items: center; gap: 8px; }
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .code-filename { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 6px; letter-spacing: 0.05em; }
+  .code-body { background: #1e1e2e; padding: 18px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.85; overflow-x: auto; white-space: pre; }
+  .cm { color: #6c7086; font-style: italic; }
+  .kw { color: #cba6f7; }
+  .fn { color: #89b4fa; }
+  .str { color: #a6e3a1; }
+  .num { color: #fab387; }
+  .var { color: #cdd6f4; }
+  .blank { color: #f9e2af; font-style: italic; }
+  .op { color: #89dceb; }
+
+  /* ── OUTPUT BLOCKS ── */
+  .output-block { margin: 16px 0; border-radius: 8px; overflow: hidden; border: 1px solid #1a2e1a; }
+  .output-topbar { background: #1a2e1a; padding: 9px 14px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #4a8a4a; }
+  .output-body { background: #0f1a0f; padding: 16px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.75; white-space: pre; }
+  .out-prompt { color: #4a6a4a; }
+  .out-input { color: #f9e2af; }
+  .out-result { color: #a6e3a1; }
+  .out-muted { color: #4a6a4a; }
+
+  /* ── CALLOUTS ── */
+  .callout { margin: 20px 0; padding: 16px 20px; border-radius: 6px; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-accent { background: var(--accent-light); border: 1px solid #e0b0a0; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-accent .callout-label { color: var(--accent); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── EXTENSION ── */
+  .extension-box { margin: 24px 0 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+  .extension-header { background: var(--paper-dark); padding: 12px 18px; display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+  .extension-header:hover { background: #e5e0d8; }
+  .extension-badge { font-family: var(--mono); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; background: var(--gold-light); color: var(--gold); border: 1px solid #d4c090; padding: 2px 9px; border-radius: 20px; }
+  .extension-title { font-size: 14px; font-weight: 600; flex: 1; }
+  .extension-chev { font-size: 10px; color: var(--ink-faint); transition: transform 0.15s; }
+  .extension-body { display: none; padding: 16px 20px; border-top: 1px solid var(--rule); background: var(--paper); }
+  .extension-body.open { display: block; }
+  .extension-body p { font-size: 14px; color: var(--ink-muted); line-height: 1.65; margin-bottom: 12px; }
+  .extension-body p:last-child { margin-bottom: 0; }
+
+  /* ── SUBMIT STRIP ── */
+  .submit-strip { margin-top: 40px; padding: 20px 24px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; }
+  .submit-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px; }
+  .submit-title { font-family: var(--display); font-size: 17px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+  .submit-checklist { display: flex; flex-direction: column; gap: 6px; }
+  .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-muted); font-family: var(--mono); cursor: pointer; }
+  .check-box { width: 16px; height: 16px; border: 1.5px solid var(--rule); border-radius: 3px; background: var(--paper); flex-shrink: 0; display: flex; align-items: center; justify-content: center; transition: all 0.1s; }
+  .check-box.checked { background: var(--green); border-color: var(--green); }
+  .check-box.checked::after { content: ''; width: 8px; height: 5px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translate(1px, -1px); display: block; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  .ex-header-inner { animation: fadeUp 0.4s ease both; }
+  .objective-box { animation: fadeUp 0.4s ease 0.1s both; }
+
+  @media (max-width: 600px) {
+    .ex-header { padding: 20px; }
+    .ex-body { padding: 28px 20px 48px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="ex-header">
+  <div class="ex-header-inner">
+    <div class="ex-badge">
+      <span class="ex-badge-label">Ex</span>
+      <span class="ex-badge-num">0.3</span>
+    </div>
+    <div class="ex-header-text">
+      <div class="ex-eyebrow">Unit 0 · Exercise 0.3 · AP Computer Science Principles</div>
+      <h1 class="ex-title">IPO in <em>Python</em></h1>
+      <div class="ex-meta">
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-green"></span>Python 3</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-gold"></span>~20 min</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-teal"></span>Standalone — follows Lesson 0.5</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="ex-body">
+
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">Every program does the same thing: take input, process it, produce output. You're going to write three programs that make that pattern concrete — one at a time. The focus isn't on memorizing syntax. It's on recognizing that the same IPO structure appears in programs of every size and complexity.</p>
+  </div>
+
+  <!-- ══ PROGRAM 1 ══ -->
+  <div class="section-rule"><span class="section-rule-label">Program 1 of 3</span></div>
+
+  <div class="program-card">
+    <div class="program-card-header">
+      <div>
+        <div class="program-card-num">Program 1</div>
+        <div class="program-card-title">Name and age</div>
+      </div>
+      <span class="program-card-pts">Starter program</span>
+    </div>
+    <div class="program-card-body">
+      <div class="ipo-strip">
+        <span class="ipo-chip ipo-i">Input: name + age</span>
+        <span class="ipo-chip ipo-p">Process: add 10</span>
+        <span class="ipo-chip ipo-o">Output: sentence</span>
+      </div>
+      <p class="program-desc">Ask the user for their name and current age. Calculate what their age will be in 10 years. Print a sentence using both values.</p>
+
+      <div class="code-block">
+        <div class="code-topbar">
+          <div class="code-dot" style="background:#f38ba8"></div>
+          <div class="code-dot" style="background:#f9e2af"></div>
+          <div class="code-dot" style="background:#a6e3a1"></div>
+          <span class="code-filename">program1.py</span>
+        </div>
+        <div class="code-body"><span class="cm"># Program 1 — Name and age</span>
+<span class="cm"># INPUT: ask the user for two pieces of information</span>
+<span class="var">name</span> = <span class="fn">input</span>(<span class="str">"What is your name? "</span>)
+<span class="var">age</span>  = <span class="fn">int</span>(<span class="fn">input</span>(<span class="str">"How old are you? "</span>))
+
+<span class="cm"># PROCESS: calculate age in 10 years</span>
+<span class="var">future_age</span> = <span class="blank">_______________</span>  <span class="cm"># add 10 to age</span>
+
+<span class="cm"># OUTPUT: print a sentence using both values</span>
+<span class="fn">print</span>(<span class="blank">_______________</span>)  <span class="cm"># e.g. "In 10 years, Kira will be 35."</span></div>
+      </div>
+
+      <div class="output-block">
+        <div class="output-topbar">Expected output (example values)</div>
+        <div class="output-body"><span class="out-prompt">What is your name? </span><span class="out-input">Kira</span>
+<span class="out-prompt">How old are you? </span><span class="out-input">25</span>
+<span class="out-result">In 10 years, Kira will be 35.</span></div>
+      </div>
+
+      <div class="callout callout-teal">
+        <div class="callout-label">Why int()?</div>
+        <p><code>input()</code> always gives you a string — even if the user typed a number. <code>"25"</code> and <code>25</code> are different things in Python: you can't add 10 to <code>"25"</code> (try it and see what error you get). Wrapping <code>input()</code> in <code>int()</code> converts the string to an integer so you can do math with it.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PROGRAM 2 ══ -->
+  <div class="program-card">
+    <div class="program-card-header">
+      <div>
+        <div class="program-card-num">Program 2</div>
+        <div class="program-card-title">Temperature converter</div>
+      </div>
+      <span class="program-card-pts">A little harder</span>
+    </div>
+    <div class="program-card-body">
+      <div class="ipo-strip">
+        <span class="ipo-chip ipo-i">Input: °F</span>
+        <span class="ipo-chip ipo-p">Process: convert formula</span>
+        <span class="ipo-chip ipo-o">Output: °C</span>
+      </div>
+      <p class="program-desc">Ask the user for a temperature in Fahrenheit. Convert it to Celsius using the formula <strong>(°F − 32) × 5/9</strong>. Print the result rounded to one decimal place.</p>
+
+      <div class="code-block">
+        <div class="code-topbar">
+          <div class="code-dot" style="background:#f38ba8"></div>
+          <div class="code-dot" style="background:#f9e2af"></div>
+          <div class="code-dot" style="background:#a6e3a1"></div>
+          <span class="code-filename">program2.py</span>
+        </div>
+        <div class="code-body"><span class="cm"># Program 2 — Temperature converter</span>
+
+<span class="cm"># INPUT: get temperature from the user</span>
+<span class="var">fahrenheit</span> = <span class="fn">float</span>(<span class="fn">input</span>(<span class="str">"Enter temperature in Fahrenheit: "</span>))
+
+<span class="cm"># PROCESS: apply the conversion formula (°F - 32) × 5/9</span>
+<span class="var">celsius</span> = <span class="blank">_______________</span>  <span class="cm"># write the formula here</span>
+
+<span class="cm"># PROCESS: round to 1 decimal place</span>
+<span class="var">celsius_rounded</span> = <span class="fn">round</span>(<span class="blank">_______</span>, <span class="num">1</span>)  <span class="cm"># what goes in the first blank?</span>
+
+<span class="cm"># OUTPUT: print the result</span>
+<span class="fn">print</span>(<span class="fn">f</span><span class="str">"</span><span class="blank">{fahrenheit}</span><span class="str">°F is </span><span class="blank">{_______________}</span><span class="str">°C"</span>)</div>
+      </div>
+
+      <div class="output-block">
+        <div class="output-topbar">Expected output (three test values)</div>
+        <div class="output-body"><span class="out-prompt">Enter temperature in Fahrenheit: </span><span class="out-input">32</span>
+<span class="out-result">32°F is 0.0°C</span>
+<span class="out-muted">
+Enter temperature in Fahrenheit: </span><span class="out-input">212</span>
+<span class="out-result">212°F is 100.0°C</span>
+<span class="out-muted">
+Enter temperature in Fahrenheit: </span><span class="out-input">98.6</span>
+<span class="out-result">98.6°F is 37.0°C</span></div>
+      </div>
+
+      <div class="callout callout-gold">
+        <div class="callout-label">Test with known values</div>
+        <p>Good programmers test their code with values they already know the answer to. 32°F should give 0°C (water freezes). 212°F should give 100°C (water boils). 98.6°F should give 37°C (body temperature). If your formula is wrong, these tests will catch it immediately.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PROGRAM 3 ══ -->
+  <div class="program-card">
+    <div class="program-card-header">
+      <div>
+        <div class="program-card-num">Program 3</div>
+        <div class="program-card-title">Arithmetic all at once</div>
+      </div>
+      <span class="program-card-pts">Most output</span>
+    </div>
+    <div class="program-card-body">
+      <div class="ipo-strip">
+        <span class="ipo-chip ipo-i">Input: two numbers</span>
+        <span class="ipo-chip ipo-p">Process: four operations</span>
+        <span class="ipo-chip ipo-o">Output: four results</span>
+      </div>
+      <p class="program-desc">Ask the user for two numbers. Calculate and print their sum, difference, product, and quotient — each on its own labeled line. Handle division carefully: what happens if someone enters 0 as the second number?</p>
+
+      <div class="code-block">
+        <div class="code-topbar">
+          <div class="code-dot" style="background:#f38ba8"></div>
+          <div class="code-dot" style="background:#f9e2af"></div>
+          <div class="code-dot" style="background:#a6e3a1"></div>
+          <span class="code-filename">program3.py</span>
+        </div>
+        <div class="code-body"><span class="cm"># Program 3 — Arithmetic calculator</span>
+
+<span class="cm"># INPUT: two numbers from the user</span>
+<span class="var">a</span> = <span class="fn">float</span>(<span class="fn">input</span>(<span class="str">"Enter first number: "</span>))
+<span class="var">b</span> = <span class="fn">float</span>(<span class="fn">input</span>(<span class="str">"Enter second number: "</span>))
+
+<span class="cm"># PROCESS + OUTPUT: calculate and print each operation</span>
+<span class="fn">print</span>(<span class="fn">f</span><span class="str">"Sum:        </span><span class="blank">{_______________}</span><span class="str">"</span>)  <span class="cm"># a + b</span>
+<span class="fn">print</span>(<span class="fn">f</span><span class="str">"Difference: </span><span class="blank">{_______________}</span><span class="str">"</span>)  <span class="cm"># a - b</span>
+<span class="fn">print</span>(<span class="fn">f</span><span class="str">"Product:    </span><span class="blank">{_______________}</span><span class="str">"</span>)  <span class="cm"># a * b</span>
+
+<span class="cm"># Division needs a safety check — what if b is 0?</span>
+<span class="kw">if</span> <span class="blank">_______________</span><span class="op">:</span>  <span class="cm"># check: is b equal to zero?</span>
+    <span class="fn">print</span>(<span class="str">"Quotient:   cannot divide by zero"</span>)
+<span class="kw">else</span><span class="op">:</span>
+    <span class="fn">print</span>(<span class="fn">f</span><span class="str">"Quotient:   </span><span class="blank">{_______________}</span><span class="str">"</span>)  <span class="cm"># a / b</span></div>
+      </div>
+
+      <div class="output-block">
+        <div class="output-topbar">Expected output (two examples)</div>
+        <div class="output-body"><span class="out-prompt">Enter first number: </span><span class="out-input">12</span>
+<span class="out-prompt">Enter second number: </span><span class="out-input">4</span>
+<span class="out-result">Sum:        16.0
+Difference: 8.0
+Product:    48.0
+Quotient:   3.0</span>
+<span class="out-muted">
+Enter first number: </span><span class="out-input">7</span>
+<span class="out-prompt">Enter second number: </span><span class="out-input">0</span>
+<span class="out-result">Sum:        7.0
+Difference: 7.0
+Product:    0.0
+Quotient:   cannot divide by zero</span></div>
+      </div>
+
+      <div class="callout callout-accent">
+        <div class="callout-label">What happens without the check?</div>
+        <p>Try removing the <code>if</code> block and dividing by zero anyway. Python raises a <code>ZeroDivisionError</code> and the program crashes. This is your first example of <strong>defensive programming</strong> — anticipating what users might do wrong and handling it gracefully instead of crashing.</p>
+      </div>
+
+      <!-- Extension for Program 3 -->
+      <div class="extension-box">
+        <div class="extension-header" onclick="toggleExt('ext3', 'chev3')">
+          <span class="extension-badge">Extension</span>
+          <span class="extension-title">Round the results — no trailing decimals</span>
+          <span class="extension-chev" id="chev3">▼</span>
+        </div>
+        <div class="extension-body" id="ext3">
+          <p>Right now the output shows <code>16.0</code>, <code>8.0</code>, etc. — because <code>float</code> always includes a decimal point. Modify the output so it prints whole numbers without decimals when the result is a whole number (e.g. <code>16</code> not <code>16.0</code>), but keeps decimals when they're needed (e.g. <code>3.5</code>).</p>
+          <p>Hint: look up Python's <code>:.6g</code> format specifier inside an f-string — it automatically drops unnecessary trailing zeros. <code>f"{value:.6g}"</code> will print <code>16</code> for <code>16.0</code> and <code>3.5</code> for <code>3.5</code>.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ BIG PICTURE ══ -->
+  <div class="section-rule"><span class="section-rule-label">The pattern</span></div>
+  <h2>What you just built — three times</h2>
+
+  <p>All three programs follow the same structure. The complexity changed — Program 3 has a conditional that 1 and 2 don't — but the shape is identical every time:</p>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:20px 0 28px;">
+    <div style="background:var(--purple-light);border:1px solid #AFA9EC;border-radius:8px;padding:14px 16px;text-align:center;">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--purple);margin-bottom:6px;">Input</div>
+      <div style="font-size:13px;color:var(--ink-muted);line-height:1.5;"><code>input()</code><br>Get data from the user</div>
+    </div>
+    <div style="background:var(--accent-light);border:1px solid #e0b0a0;border-radius:8px;padding:14px 16px;text-align:center;">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">Process</div>
+      <div style="font-size:13px;color:var(--ink-muted);line-height:1.5;">Math, logic, decisions<br>Transform the data</div>
+    </div>
+    <div style="background:var(--green-light);border:1px solid #a8d0b0;border-radius:8px;padding:14px 16px;text-align:center;">
+      <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--green);margin-bottom:6px;">Output</div>
+      <div style="font-size:13px;color:var(--ink-muted);line-height:1.5;"><code>print()</code><br>Show the result</div>
+    </div>
+  </div>
+
+  <p>The tip calculator you'll eventually build for Exercise 3.1 in Unit 3 is a more polished version of Program 1. The password strength checker is a more complex version of Program 3's conditional. The pattern scales — every program you write this year will be IPO at its core.</p>
+
+  <!-- ── Submit ── -->
+  <div class="submit-strip">
+    <div class="submit-label">Before you submit</div>
+    <div class="submit-title">Checklist</div>
+    <div class="submit-checklist">
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Program 1 prints a sentence with the correct future age
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Program 2 correctly converts 32°F → 0.0°C and 212°F → 100.0°C
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        Program 3 prints all four operations and handles divide-by-zero gracefully
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        I tested each program with at least two different inputs
+      </label>
+      <label class="check-item" onclick="toggleCheck(this)">
+        <div class="check-box"></div>
+        My commit message describes what the programs do
+      </label>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function toggleExt(id, chevId) {
+    const body = document.getElementById(id);
+    const chev = document.getElementById(chevId);
+    const open = body.classList.toggle('open');
+    chev.style.transform = open ? 'rotate(180deg)' : '';
+  }
+
+  function toggleCheck(label) {
+    label.querySelector('.check-box').classList.toggle('checked');
+  }
+</script>
+
+</body>
+</html>

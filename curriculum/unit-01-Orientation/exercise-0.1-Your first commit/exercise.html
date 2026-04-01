@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exercise 0.1 — Your First Commit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --rule: #d4cfc7;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── EXERCISE HEADER — lighter than lessons ── */
+  .ex-header {
+    background: var(--paper-warm);
+    border-bottom: 1px solid var(--rule);
+    padding: 28px 40px 24px;
+  }
+
+  .ex-header-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+  }
+
+  /* big exercise number badge */
+  .ex-badge {
+    flex-shrink: 0;
+    width: 56px;
+    height: 56px;
+    background: var(--ink);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  .ex-badge-label {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+    line-height: 1;
+  }
+
+  .ex-badge-num {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 900;
+    color: #e8c9a0;
+    line-height: 1.1;
+  }
+
+  .ex-header-text { flex: 1; }
+
+  .ex-eyebrow {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .ex-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 18px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  .ex-title {
+    font-family: var(--display);
+    font-size: clamp(22px, 3.5vw, 32px);
+    font-weight: 900;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  .ex-title em { font-style: italic; color: var(--accent); }
+
+  .ex-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--ink-faint);
+  }
+
+  .ex-meta-item { display: flex; align-items: center; gap: 5px; }
+  .ex-meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--green); }
+  .dot-gold { background: var(--gold); }
+  .dot-teal { background: var(--teal); }
+
+  /* ── BODY ── */
+  .ex-body {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 40px 40px 60px;
+  }
+
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box {
+    background: var(--ink);
+    border-radius: 8px;
+    padding: 24px 28px;
+    margin-bottom: 36px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .objective-box::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: repeating-linear-gradient(
+      45deg, transparent, transparent 12px,
+      rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px
+    );
+  }
+
+  .objective-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #e8c9a0;
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .objective-text {
+    font-size: 16px;
+    color: rgba(250,248,244,0.88);
+    line-height: 1.65;
+    position: relative;
+    z-index: 1;
+    margin: 0;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-rule {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: 36px 0 20px;
+  }
+
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; flex-shrink: 0; }
+
+  h2 {
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 14px;
+  }
+
+  /* ── TASK STEPS ── */
+  .task-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 20px 0 28px;
+    counter-reset: tasks;
+  }
+
+  .task {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--rule);
+    border-radius: 0;
+    overflow: hidden;
+    background: var(--paper);
+    transition: background 0.1s;
+  }
+
+  .task:first-child { border-radius: 8px 8px 0 0; }
+  .task:last-child { border-radius: 0 0 8px 8px; }
+  .task + .task { border-top: none; }
+
+  .task-num {
+    width: 52px;
+    background: var(--paper-dark);
+    border-right: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--display);
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--ink-faint);
+    flex-shrink: 0;
+    padding: 16px 0;
+  }
+
+  .task-body { padding: 16px 20px; flex: 1; }
+
+  .task-title {
+    font-size: 15px;
+    font-weight: 600;
+    font-family: var(--serif);
+    margin-bottom: 5px;
+    color: var(--ink);
+  }
+
+  .task-desc {
+    font-size: 14px;
+    color: var(--ink-muted);
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* ── STARTER CODE BLOCK ── */
+  .code-block {
+    margin: 20px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #2e2e3e;
+  }
+
+  .code-topbar {
+    background: #252535;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .code-filename {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+    margin-left: 6px;
+    letter-spacing: 0.05em;
+  }
+
+  .code-body {
+    background: #1e1e2e;
+    padding: 18px 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.75;
+    overflow-x: auto;
+  }
+
+  .code-line { display: flex; gap: 16px; }
+  .ln { color: #4a4a6a; min-width: 20px; text-align: right; user-select: none; font-size: 12px; padding-top: 1px; }
+  .cm { color: #6c7086; font-style: italic; }
+  .kw { color: #cba6f7; }
+  .fn { color: #89b4fa; }
+  .str { color: #a6e3a1; }
+  .blank { color: transparent; }
+  .placeholder { color: #f9e2af; font-style: italic; }
+
+  /* ── EXPECTED OUTPUT ── */
+  .output-block {
+    margin: 20px 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #1a2e1a;
+  }
+
+  .output-topbar {
+    background: #1a2e1a;
+    padding: 9px 14px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4a8a4a;
+  }
+
+  .output-body {
+    background: #0f1a0f;
+    padding: 16px 20px;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.75;
+    color: #a6e3a1;
+  }
+
+  .output-prompt { color: #4a6a4a; }
+  .output-comment { color: #4a6a4a; font-style: italic; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    margin: 24px 0;
+    padding: 18px 22px;
+    border-radius: 6px;
+  }
+
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-green { background: var(--green-light); border: 1px solid #a8d0b0; }
+  .callout-accent { background: var(--accent-light); border: 1px solid #e0b0a0; }
+
+  .callout-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-green .callout-label { color: var(--green); }
+  .callout-accent .callout-label { color: var(--accent); }
+
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  /* ── COMMIT MESSAGE EXAMPLES ── */
+  .commit-examples {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 16px 0;
+  }
+
+  .commit-example {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    background: var(--paper-warm);
+  }
+
+  .commit-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .icon-bad { background: #fce8e8; color: #a32d2d; border: 1px solid #f0b0b0; }
+  .icon-good { background: var(--green-light); color: var(--green); border: 1px solid #a8d0b0; }
+
+  .commit-msg {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink);
+    flex: 1;
+  }
+
+  .commit-why {
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-style: italic;
+    margin-top: 2px;
+  }
+
+  /* ── EXTENSION BOX ── */
+  .extension-box {
+    margin: 28px 0 0;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .extension-header {
+    background: var(--paper-dark);
+    padding: 12px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .extension-header:hover { background: #e5e0d8; }
+
+  .extension-badge {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    background: var(--gold-light);
+    color: var(--gold);
+    border: 1px solid #d4c090;
+    padding: 2px 9px;
+    border-radius: 20px;
+  }
+
+  .extension-title {
+    font-size: 14px;
+    font-weight: 600;
+    flex: 1;
+  }
+
+  .extension-chev {
+    font-size: 10px;
+    color: var(--ink-faint);
+    transition: transform 0.15s;
+  }
+
+  .extension-body {
+    display: none;
+    padding: 18px 20px;
+    border-top: 1px solid var(--rule);
+    background: var(--paper);
+  }
+
+  .extension-body.open { display: block; }
+  .extension-body p { font-size: 14px; color: var(--ink-muted); line-height: 1.65; margin-bottom: 14px; }
+  .extension-body p:last-child { margin-bottom: 0; }
+
+  /* ── SUBMIT STRIP ── */
+  .submit-strip {
+    margin-top: 40px;
+    padding: 20px 24px;
+    background: var(--paper-dark);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .submit-text { flex: 1; }
+  .submit-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin-bottom: 4px;
+  }
+  .submit-title {
+    font-family: var(--display);
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .submit-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 10px;
+  }
+
+  .check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-muted);
+    font-family: var(--mono);
+  }
+
+  .check-box {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid var(--rule);
+    border-radius: 3px;
+    background: var(--paper);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+  }
+
+  .check-box.checked {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .check-box.checked::after {
+    content: '';
+    width: 8px;
+    height: 5px;
+    border-left: 1.5px solid white;
+    border-bottom: 1.5px solid white;
+    transform: rotate(-45deg) translate(1px, -1px);
+    display: block;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.85em;
+    background: var(--paper-dark);
+    border: 1px solid var(--rule);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: var(--teal);
+  }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .ex-header-inner { animation: fadeUp 0.4s ease both; }
+  .objective-box { animation: fadeUp 0.4s ease 0.1s both; }
+
+  @media (max-width: 600px) {
+    .ex-header { padding: 20px; }
+    .ex-body { padding: 28px 20px 48px; }
+    .submit-strip { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="ex-header">
+  <div class="ex-header-inner">
+    <div class="ex-badge">
+      <span class="ex-badge-label">Ex</span>
+      <span class="ex-badge-num">0.1</span>
+    </div>
+    <div class="ex-header-text">
+      <div class="ex-eyebrow">Unit 0 · Exercise 0.1 · AP Computer Science Principles</div>
+      <h1 class="ex-title">Your first commit — <em>Hello, world</em></h1>
+      <div class="ex-meta">
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-green"></span>Python 3</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-gold"></span>~10 min</span>
+        <span class="ex-meta-item"><span class="ex-meta-dot dot-teal"></span>Embedded — follows Lesson 0.2</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="ex-body">
+
+  <!-- Objective -->
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">Write a short Python program that introduces you to the class. Run it, read the output, and make your first commit with a message that actually describes what you did. This exercise is less about the code and more about the habit — run, check, commit.</p>
+  </div>
+
+  <!-- ── Your task ── -->
+  <div class="section-rule"><span class="section-rule-label">Your task</span></div>
+  <h2>Three things to print, one commit to make</h2>
+
+  <p>Modify the starter code so your program prints three things about you — one per line. Then write a commit message that describes what you changed.</p>
+
+  <div class="task-list">
+    <div class="task">
+      <div class="task-num">1</div>
+      <div class="task-body">
+        <div class="task-title">Print a greeting with your name</div>
+        <p class="task-desc">Replace the placeholder with your actual name. Output should read naturally — like something you'd say to introduce yourself.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">2</div>
+      <div class="task-body">
+        <div class="task-title">Print where you're from</div>
+        <p class="task-desc">Your city, town, state — whatever feels right. One line is enough.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">3</div>
+      <div class="task-body">
+        <div class="task-title">Print one thing you want to learn this year</div>
+        <p class="task-desc">Be honest. "How to build an app," "how AI actually works," "how to not fail this class" — all valid answers.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">4</div>
+      <div class="task-body">
+        <div class="task-title">Run your code and check the output</div>
+        <p class="task-desc">Hit <code>Ctrl + Enter</code>. Read what prints. Make sure it says what you meant it to say — typos count.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num">5</div>
+      <div class="task-body">
+        <div class="task-title">Write a commit message and commit</div>
+        <p class="task-desc">Click the Commit button. Write a message that describes what your program does — not just "done" or "finished." See the commit message guide below.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Starter code ── -->
+  <div class="section-rule"><span class="section-rule-label">Starter code</span></div>
+  <h2>Start here</h2>
+
+  <p>Your editor already has this code loaded. Replace the parts in <span style="font-family:var(--mono);font-size:14px;color:#f9e2af;">yellow</span> with your own information.</p>
+
+  <div class="code-block">
+    <div class="code-topbar">
+      <div class="code-dot" style="background:#f38ba8"></div>
+      <div class="code-dot" style="background:#f9e2af"></div>
+      <div class="code-dot" style="background:#a6e3a1"></div>
+      <span class="code-filename">main.py</span>
+    </div>
+    <div class="code-body">
+      <div class="code-line"><span class="ln">1</span><span class="cm"># Exercise 0.1 — Your first commit</span></div>
+      <div class="code-line"><span class="ln">2</span><span class="cm"># Replace the placeholder text with your own information</span></div>
+      <div class="code-line"><span class="ln">3</span><span class="blank">.</span></div>
+      <div class="code-line"><span class="ln">4</span><span class="fn">print</span><span style="color:#cdd6f4">(</span><span class="str">"Hello! My name is <span class="placeholder">Your Name Here</span>."</span><span style="color:#cdd6f4">)</span></div>
+      <div class="code-line"><span class="ln">5</span><span class="fn">print</span><span style="color:#cdd6f4">(</span><span class="str">"I'm from <span class="placeholder">Your City, State</span>."</span><span style="color:#cdd6f4">)</span></div>
+      <div class="code-line"><span class="ln">6</span><span class="fn">print</span><span style="color:#cdd6f4">(</span><span class="str">"This year I want to learn: <span class="placeholder">your goal here</span>."</span><span style="color:#cdd6f4">)</span></div>
+    </div>
+  </div>
+
+  <!-- Expected output -->
+  <p>When you run it, your output should look something like this — with your own information instead:</p>
+
+  <div class="output-block">
+    <div class="output-topbar">Expected output</div>
+    <div class="output-body">
+      <div><span class="output-prompt">$ </span>Hello! My name is Kira Shinn.</div>
+      <div><span class="output-prompt">$ </span>I'm from Burgaw, NC.</div>
+      <div><span class="output-prompt">$ </span>This year I want to learn: how to build something people actually use.</div>
+    </div>
+  </div>
+
+  <div class="callout callout-teal">
+    <div class="callout-label">Python strings 101</div>
+    <p>Everything inside the quotation marks is printed exactly as written — spaces, punctuation, capitalization included. If you put <code>"hello"</code> you get <code>hello</code>. If you put <code>"Hello!"</code> you get <code>Hello!</code>. The quotes themselves never appear in the output.</p>
+  </div>
+
+  <!-- ── Commit message ── -->
+  <div class="section-rule"><span class="section-rule-label">Your commit message</span></div>
+  <h2>Writing a message that actually means something</h2>
+
+  <p>After you run your code and it looks right, click <strong>Commit</strong>. You'll be asked to write a short message describing what you did. Here's the difference between a useful message and a useless one:</p>
+
+  <div class="commit-examples">
+    <div class="commit-example">
+      <div class="commit-icon icon-bad">✕</div>
+      <div>
+        <div class="commit-msg">"done"</div>
+        <div class="commit-why">Done what? In six months this tells you nothing.</div>
+      </div>
+    </div>
+    <div class="commit-example">
+      <div class="commit-icon icon-bad">✕</div>
+      <div>
+        <div class="commit-msg">"asjdhfkajshdf"</div>
+        <div class="commit-why">This happens. It's fine once. Not a habit.</div>
+      </div>
+    </div>
+    <div class="commit-example">
+      <div class="commit-icon icon-good">✓</div>
+      <div>
+        <div class="commit-msg">"added my name, city, and learning goal"</div>
+        <div class="commit-why">Specific. Describes the change. Takes 5 extra seconds to write.</div>
+      </div>
+    </div>
+    <div class="commit-example">
+      <div class="commit-icon icon-good">✓</div>
+      <div>
+        <div class="commit-msg">"first working version of the intro program"</div>
+        <div class="commit-why">Also good — captures the milestone, not just the contents.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">Why this habit matters</div>
+    <p>Your commit history is the record of how your thinking evolved on a project. On the AP Create PT, you'll write about your development process. Students with descriptive commit messages can look back at their history and reconstruct exactly what they tried and why. Students who typed "done" for every commit can't.</p>
+  </div>
+
+  <!-- ── Common mistakes ── -->
+  <div class="section-rule"><span class="section-rule-label">Common mistakes</span></div>
+  <h2>Things to watch for</h2>
+
+  <div class="task-list">
+    <div class="task">
+      <div class="task-num" style="font-size:18px;color:var(--accent);">!</div>
+      <div class="task-body">
+        <div class="task-title">Forgetting the quotation marks</div>
+        <p class="task-desc">If you write <code>print(Hello)</code> instead of <code>print("Hello")</code>, Python looks for a variable named <code>Hello</code> — which doesn't exist. You'll get a <code>NameError</code>. Everything you want to print as text needs to be inside quotes.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num" style="font-size:18px;color:var(--accent);">!</div>
+      <div class="task-body">
+        <div class="task-title">Mismatched quotes</div>
+        <p class="task-desc">Opening with a double quote and closing with a single quote — or vice versa — will cause a <code>SyntaxError</code>. Python requires the quotes to match: <code>"like this"</code> or <code>'like this'</code>, not <code>"like this'</code>.</p>
+      </div>
+    </div>
+    <div class="task">
+      <div class="task-num" style="font-size:18px;color:var(--accent);">!</div>
+      <div class="task-body">
+        <div class="task-title">Running without reading the output</div>
+        <p class="task-desc">Always read what actually printed — not what you think you typed. Typos in strings are common and won't cause an error, they'll just print wrong. Check it before you commit.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Extension ── -->
+  <div class="extension-box">
+    <div class="extension-header" onclick="toggleExt()">
+      <span class="extension-badge">Extension</span>
+      <span class="extension-title">Want to go further? Add a fourth line.</span>
+      <span class="extension-chev" id="ext-chev">▼</span>
+    </div>
+    <div class="extension-body" id="ext-body">
+      <p>Add a fourth <code>print()</code> statement that uses a <strong>variable</strong> instead of putting the text directly inside the print call. Like this:</p>
+      <div class="code-block" style="margin:12px 0;">
+        <div class="code-topbar">
+          <div class="code-dot" style="background:#f38ba8"></div>
+          <div class="code-dot" style="background:#f9e2af"></div>
+          <div class="code-dot" style="background:#a6e3a1"></div>
+          <span class="code-filename">main.py — extension</span>
+        </div>
+        <div class="code-body">
+          <div class="code-line"><span class="ln">8</span><span class="blank">.</span></div>
+          <div class="code-line"><span class="ln">9</span><span class="cm"># Store a value in a variable first</span></div>
+          <div class="code-line"><span class="ln">10</span><span style="color:#cdd6f4">favorite_thing = </span><span class="str">"ceramics"</span></div>
+          <div class="code-line"><span class="ln">11</span><span class="fn">print</span><span style="color:#cdd6f4">(</span><span class="str">f"One thing I do outside school: </span><span style="color:#f9e2af">{favorite_thing}</span><span class="str">"</span><span style="color:#cdd6f4">)</span></div>
+        </div>
+      </div>
+      <p>The <code>f"..."</code> is called an <strong>f-string</strong> — the <code>f</code> stands for "formatted." Anything inside curly braces <code>{}</code> gets replaced by the value of that variable when the line runs. You'll use f-strings constantly this year.</p>
+      <p>Try changing the value of <code>favorite_thing</code> and running it again. Notice you only have to change it in one place — not in the print statement. That's the point of variables.</p>
+    </div>
+  </div>
+
+  <!-- ── Submission checklist ── -->
+  <div class="submit-strip">
+    <div class="submit-text">
+      <div class="submit-label">Before you submit</div>
+      <div class="submit-title">Checklist</div>
+      <div class="submit-checklist">
+        <label class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box"></div>
+          My program prints exactly 3 lines (or 4 with the extension)
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box"></div>
+          Each line has my actual information — not the placeholder text
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box"></div>
+          I ran the code and read the output before committing
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <div class="check-box"></div>
+          My commit message describes what the program does
+        </label>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+  function toggleExt() {
+    const body = document.getElementById('ext-body');
+    const chev = document.getElementById('ext-chev');
+    const open = body.classList.toggle('open');
+    chev.style.transform = open ? 'rotate(180deg)' : '';
+  }
+
+  function toggleCheck(label) {
+    const box = label.querySelector('.check-box');
+    box.classList.toggle('checked');
+  }
+</script>
+
+</body>
+</html>

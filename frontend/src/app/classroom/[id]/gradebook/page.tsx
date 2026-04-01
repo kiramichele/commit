@@ -19,6 +19,8 @@ interface Submission {
   submitted_at: string | null
   is_late: boolean
   grade: number | null
+  penalized_grade: number | null
+  late_penalty_applied: number | null
   teacher_feedback: string | null
   commit_count: number
 }
@@ -83,6 +85,11 @@ export default function GradebookPage() {
     }
   }
 
+  const effectiveGrade = (sub: Submission): number | null => {
+    if (sub.grade == null) return null
+    return sub.penalized_grade != null ? sub.penalized_grade : sub.grade
+  }
+
   const getCell = (studentId: string, assignmentId: string): GradeCell => {
     const sub = submissions.find(
       s => s.student_id === studentId && s.assignment_id === assignmentId
@@ -104,7 +111,7 @@ export default function GradebookPage() {
       s => s.assignment_id === assignmentId && s.grade != null
     )
     if (graded.length === 0) return null
-    return (graded.reduce((sum, s) => sum + (s.grade || 0), 0) / graded.length).toFixed(1)
+    return (graded.reduce((sum, s) => sum + (effectiveGrade(s) || 0), 0) / graded.length).toFixed(1)
   }
 
   const studentAverage = (studentId: string) => {
@@ -112,7 +119,7 @@ export default function GradebookPage() {
       s => s.student_id === studentId && s.grade != null
     )
     if (graded.length === 0) return null
-    return (graded.reduce((sum, s) => sum + (s.grade || 0), 0) / graded.length).toFixed(1)
+    return (graded.reduce((sum, s) => sum + (effectiveGrade(s) || 0), 0) / graded.length).toFixed(1)
   }
 
   const exportCSV = () => {
@@ -120,7 +127,7 @@ export default function GradebookPage() {
     const rows = students.map(student => {
       const grades = assignments.map(a => {
         const cell = getCell(student.student_id, a.id)
-        if (cell.status === 'graded') return cell.submission?.grade?.toString() || ''
+        if (cell.status === 'graded') return (cell.submission ? effectiveGrade(cell.submission) : '')?.toString() || ''
         if (cell.status === 'submitted') return 'submitted'
         if (cell.status === 'in_progress') return 'in progress'
         return 'not started'
@@ -271,7 +278,7 @@ export default function GradebookPage() {
                             >
                               <div style={{ padding: '5px 8px', borderRadius: '6px', background: style.bg, color: style.color, fontSize: '13px', fontWeight: 600, border: `1px solid ${style.border}`, cursor: 'pointer' }}>
                                 {cell.status === 'graded'
-                                  ? cell.submission.grade
+                                  ? effectiveGrade(cell.submission!)
                                   : cell.status === 'submitted'
                                   ? 'sub'
                                   : cell.status === 'in_progress'

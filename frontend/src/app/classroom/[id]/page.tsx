@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import HelpQueue from '@/components/HelpQueue'
+import LatePenaltySettings from '@/components/LatePenaltySettings'
+import InstructionsUpload from '@/components/InstructionsUpload'
 
 type Tab = 'students' | 'assignments' | 'help queue' | 'settings'
 
@@ -35,6 +37,7 @@ interface Assignment {
   id: string
   title: string
   instructions: string
+  instructions_html_path: string | null
   due_date: string | null
   min_commits: number
   scaffold_level: string
@@ -80,6 +83,8 @@ export default function ClassroomPage() {
   const [showAddAssignment, setShowAddAssignment] = useState(false)
   const [actionError, setActionError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [resetSent, setResetSent] = useState<string | null>(null)
+  const [resetLoading, setResetLoading] = useState<string | null>(null)
 
   const [newStudent, setNewStudent] = useState({ display_name: '', email: '', password: '' })
   const [newAssignment, setNewAssignment] = useState<NewAssignment>({
@@ -191,6 +196,20 @@ export default function ClassroomPage() {
     fontWeight: 500 as const, color: '#0E2D6E', marginBottom: '5px',
   }
 
+  const handleResetPassword = async (studentId: string) => {
+    setResetLoading(studentId)
+    setResetSent(null)
+    try {
+      await api.post(`/classrooms/${classroomId}/students/${studentId}/reset-password`, {})
+      setResetSent(studentId)
+      setTimeout(() => setResetSent(null), 3000)
+    } catch (e: any) {
+      setActionError(e.message || 'Could not send reset email.')
+    } finally {
+      setResetLoading(null)
+    }
+  }
+
   const helpCount = students.filter(s => s.open_help_request).length
 
   if (loading || !profile || !classroom) return (
@@ -276,13 +295,13 @@ export default function ClassroomPage() {
               </div>
             ) : (
               <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px', gap: '1rem', padding: '10px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
-                  {['student', 'submitted', 'late', 'last commit', 'status'].map(h => (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px 110px', gap: '1rem', padding: '10px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
+                  {['student', 'submitted', 'late', 'last commit', 'status', ''].map(h => (
                     <div key={h} style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780' }}>{h}</div>
                   ))}
                 </div>
                 {students.map((s, i) => (
-                  <div key={s.student_id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px', gap: '1rem', padding: '12px 1.25rem', alignItems: 'center', borderBottom: i < students.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', background: s.open_help_request ? 'rgba(254,249,195,0.4)' : 'transparent' }}>
+                  <div key={s.student_id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px 110px', gap: '1rem', padding: '12px 1.25rem', alignItems: 'center', borderBottom: i < students.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', background: s.open_help_request ? 'rgba(254,249,195,0.4)' : 'transparent' }}>
                     <div>
                       <div style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{s.student_name}</div>
                       {s.assignments_total > 0 && (
@@ -300,6 +319,15 @@ export default function ClassroomPage() {
                       ) : (
                         <span style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '99px', background: '#F1EFE8', color: '#5F5E5A' }}>on track</span>
                       )}
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => handleResetPassword(s.student_id)}
+                        disabled={resetLoading === s.student_id}
+                        style={{ fontSize: '11px', padding: '3px 10px', borderRadius: '6px', border: '1px solid rgba(14,45,110,0.12)', background: resetSent === s.student_id ? '#DCFCE7' : 'white', color: resetSent === s.student_id ? '#166534' : '#5F5E5A', cursor: resetLoading === s.student_id ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif", fontWeight: 500 }}
+                      >
+                        {resetLoading === s.student_id ? 'sending...' : resetSent === s.student_id ? 'sent!' : 'reset password'}
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -347,6 +375,11 @@ export default function ClassroomPage() {
                       <Link href={`/classroom/${classroomId}/submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         view submissions
                       </Link>
+                      <InstructionsUpload
+                        assignmentId={a.id}
+                        currentHtmlPath={a.instructions_html_path}
+                        onUploaded={fetchAll}
+                      />
                     </div>
                   )
                 })}
@@ -389,6 +422,15 @@ export default function ClassroomPage() {
               ))}
             </div>
             <p style={{ marginTop: '1rem', fontSize: '12px', color: '#888780' }}>settings changes coming in the next update — toggles are preview only for now.</p>
+
+            <LatePenaltySettings
+              classroomId={classroomId}
+              initial={{
+                late_submissions_allowed: classroom.late_submissions_allowed ?? true,
+                late_penalty_per_day: classroom.late_penalty_per_day ?? 0,
+                late_penalty_max: classroom.late_penalty_max ?? 0,
+              }}
+            />
           </div>
         )}
       </div>

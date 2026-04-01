@@ -5,6 +5,8 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import ReadAloud from '@/components/ReadAloud'
+import ErrorPanel from '@/components/ErrorPanel'
+import type { ScaffoldLevel } from '@/lib/errorInterpreter'
 
 interface Assignment {
   id: string
@@ -363,14 +365,23 @@ export default function AssignmentEditorPage() {
             )}
             <textarea ref={textareaRef} value={viewingCode !== null ? viewingCode : code} onChange={e => { if (viewingCode === null && !isSubmitted) setCode(e.target.value) }} onKeyDown={handleTab} readOnly={viewingCode !== null || isSubmitted} spellCheck={false} style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
           </div>
-          <div style={{ height: '160px', background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+          <div style={{ minHeight: '160px', background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>output</span>
               {running && <span style={{ fontSize: '11px', color: '#22C55E' }}>running...</span>}
             </div>
-            <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, overflowY: 'auto', height: 'calc(100% - 32px)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {output || <span style={{ color: 'rgba(255,255,255,0.2)' }}>run your code to see output here</span>}
-            </pre>
+            {outputError && output ? (
+              <ErrorPanel
+                stderr={output}
+                scaffoldLevel={assignment?.scaffold_level as ScaffoldLevel || 'typed_python'}
+                onFindInDocs={() => {}}
+                onFindInLesson={() => {}}
+              />
+            ) : (
+              <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: '#22C55E', lineHeight: 1.7, overflowY: 'auto', height: 'calc(160px - 32px)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                {output || <span style={{ color: 'rgba(255,255,255,0.2)' }}>run your code to see output here</span>}
+              </pre>
+            )}
           </div>
         </div>
 

@@ -25,6 +25,10 @@ interface Submission {
   teacher_feedback: string | null
   graded_at: string | null
   commit_count: number
+  fast_submit_flag: boolean
+  time_on_task_seconds: number | null
+  penalized_grade: number | null
+  late_penalty_applied: number | null
   profiles: {
     display_name: string
     email: string
@@ -228,6 +232,11 @@ export default function SubmissionsPage() {
                       ) : (
                         <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '99px', background: '#F1EFE8', color: '#5F5E5A' }}>in progress</span>
                       )}
+                      {sub.fast_submit_flag && (
+                        <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#FEF9C3', color: '#854D0E', border: '1px solid rgba(245,158,11,0.3)' }} title="Submitted very quickly — possible academic integrity concern">
+                          ⚠️ fast submit
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{ fontSize: '12px', color: '#888780', display: 'flex', gap: '10px' }}>
@@ -372,6 +381,12 @@ export default function SubmissionsPage() {
                   <button onClick={handleGrade} disabled={grading || !grade} style={{ width: '100%', padding: '9px', background: gradeSuccess ? '#22C55E' : grade ? '#1A56DB' : '#D3D1C7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: grade ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif", transition: 'background 0.2s' }}>
                     {grading ? 'saving...' : gradeSuccess ? '✓ saved!' : 'save grade'}
                   </button>
+
+                  {selected.is_late && selected.late_penalty_applied != null && selected.late_penalty_applied > 0 && (
+                    <div style={{ padding: '8px 12px', background: '#FEE2E2', borderRadius: '8px', fontSize: '12px', color: '#991B1B' }}>
+                      late penalty: -{selected.late_penalty_applied} pts → final grade: <strong>{selected.penalized_grade}</strong>
+                    </div>
+                  )}
                 </div>
 
                 {/* SUBMISSION INFO */}
@@ -396,6 +411,19 @@ export default function SubmissionsPage() {
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span style={{ color: '#888780' }}>graded</span>
                         <span style={{ color: '#0E2D6E', fontWeight: 500 }}>{formatDate(selected.graded_at)}</span>
+                      </div>
+                    )}
+                    {selected.time_on_task_seconds != null && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#888780' }}>time on task</span>
+                        <span style={{ color: selected.fast_submit_flag ? '#854D0E' : '#0E2D6E', fontWeight: 500 }}>
+                          {selected.time_on_task_seconds < 60
+                            ? `${selected.time_on_task_seconds}s ⚠️`
+                            : selected.time_on_task_seconds < 3600
+                            ? `${Math.floor(selected.time_on_task_seconds / 60)}m`
+                            : `${Math.floor(selected.time_on_task_seconds / 3600)}h ${Math.floor((selected.time_on_task_seconds % 3600) / 60)}m`
+                          }
+                        </span>
                       </div>
                     )}
                   </div>

@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import GradingQueue from '@/components/GradingQueue'
 
 interface Classroom {
   id: string
@@ -103,6 +104,7 @@ export default function DashboardPage() {
             curriculum
           </Link>
           <span style={{ fontSize: '14px', color: '#5F5E5A' }}>hey, {profile.display_name.split(' ')[0]} 👋</span>
+          <Link href="/settings" style={{ fontSize: '13px', color: '#5F5E5A', textDecoration: 'none' }}>settings</Link>
           <button onClick={handleLogout} style={{ fontSize: '13px', color: '#888780', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>sign out</button>
         </div>
       </nav>
@@ -143,6 +145,8 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+
+        <GradingQueue />
 
         {/* CLASSROOM CARDS */}
         {dataLoading ? (

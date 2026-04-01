@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity 0.C — Score a Create PT Sample</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1a1814;
+    --ink-muted: #5c5650;
+    --ink-faint: #9c9690;
+    --paper: #faf8f4;
+    --paper-warm: #f3efe8;
+    --paper-dark: #ede9e0;
+    --accent: #c8401a;
+    --accent-light: #f5ece8;
+    --teal: #1a6b5c;
+    --teal-light: #e6f2ef;
+    --gold: #b8860b;
+    --gold-light: #faf3dc;
+    --green: #2d7a3a;
+    --green-light: #eaf4ec;
+    --purple: #534AB7;
+    --purple-light: #EEEDFE;
+    --red: #a32d2d;
+    --red-light: #fce8e8;
+    --rule: #d4cfc7;
+    --serif: 'Source Serif 4', Georgia, serif;
+    --display: 'Playfair Display', Georgia, serif;
+    --mono: 'DM Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--paper); color: var(--ink); font-family: var(--serif); font-size: 17px; line-height: 1.75; font-weight: 300; }
+
+  /* ── HEADER ── */
+  .act-header { background: var(--paper-warm); border-bottom: 1px solid var(--rule); padding: 28px 40px 24px; }
+  .act-header-inner { max-width: 820px; margin: 0 auto; display: flex; align-items: flex-start; gap: 20px; }
+  .act-badge { flex-shrink: 0; width: 56px; height: 56px; background: var(--gold); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .act-badge-label { font-family: var(--mono); font-size: 8px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.6); line-height: 1; }
+  .act-badge-num { font-family: var(--display); font-size: 18px; font-weight: 900; color: #fff8e8; line-height: 1.15; }
+  .act-header-text { flex: 1; }
+  .act-eyebrow { font-family: var(--mono); font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: var(--gold); margin-bottom: 6px; display: flex; align-items: center; gap: 10px; }
+  .act-eyebrow::before { content: ''; display: inline-block; width: 18px; height: 1px; background: var(--gold); }
+  .act-title { font-family: var(--display); font-size: clamp(22px, 3.5vw, 32px); font-weight: 900; line-height: 1.1; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 8px; }
+  .act-title em { font-style: italic; color: var(--gold); }
+  .act-meta { display: flex; flex-wrap: wrap; gap: 16px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; color: var(--ink-faint); }
+  .act-meta-item { display: flex; align-items: center; gap: 5px; }
+  .meta-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── SCORE PROGRESS ── */
+  .score-strip { background: var(--ink); padding: 14px 40px; position: sticky; top: 0; z-index: 100; }
+  .score-strip-inner { max-width: 820px; margin: 0 auto; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  .score-strip-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.4); }
+  .score-dots { display: flex; gap: 6px; }
+  .score-dot { width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.3); transition: all 0.3s; }
+  .score-dot.earned { background: var(--green); border-color: var(--green); color: white; }
+  .score-dot.not-earned { background: var(--red); border-color: var(--red); color: white; }
+  .score-dot.scored { border-color: rgba(255,255,255,0.5); color: rgba(255,255,255,0.6); }
+  .score-total { font-family: var(--display); font-size: 22px; font-weight: 900; color: #e8c9a0; margin-left: auto; }
+  .score-total span { font-size: 13px; font-weight: 400; font-family: var(--mono); color: rgba(255,255,255,0.4); margin-left: 4px; }
+
+  /* ── BODY ── */
+  .act-body { max-width: 820px; margin: 0 auto; padding: 40px 40px 60px; }
+  p { margin-bottom: 20px; }
+
+  /* ── OBJECTIVE BOX ── */
+  .objective-box { background: var(--ink); border-radius: 8px; padding: 24px 28px; margin-bottom: 36px; position: relative; overflow: hidden; }
+  .objective-box::before { content: ''; position: absolute; inset: 0; background-image: repeating-linear-gradient(45deg, transparent, transparent 12px, rgba(255,255,255,0.015) 12px, rgba(255,255,255,0.015) 13px); }
+  .objective-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase; color: #e8c9a0; margin-bottom: 10px; position: relative; z-index: 1; }
+  .objective-text { font-size: 16px; color: rgba(250,248,244,0.88); line-height: 1.65; position: relative; z-index: 1; margin: 0; }
+
+  /* ── SECTION RULE ── */
+  .section-rule { display: flex; align-items: center; gap: 14px; margin: 36px 0 20px; }
+  .section-rule::before { content: ''; flex: 1; height: 1px; background: var(--rule); }
+  .section-rule-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-faint); white-space: nowrap; }
+  .section-rule::after { content: ''; width: 5px; height: 5px; background: var(--gold); border-radius: 50%; flex-shrink: 0; }
+  h2 { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 14px; }
+  h3 { font-family: var(--display); font-size: 18px; font-weight: 700; font-style: italic; margin-bottom: 10px; }
+
+  /* ── SUBMISSION DISPLAY ── */
+  .submission-block { border: 1px solid var(--rule); border-radius: 10px; overflow: hidden; margin: 24px 0; }
+  .submission-header { background: var(--paper-dark); padding: 12px 18px; border-bottom: 1px solid var(--rule); display: flex; align-items: center; justify-content: space-between; }
+  .submission-header-title { font-family: var(--mono); font-size: 11px; color: var(--ink-muted); letter-spacing: 0.06em; }
+  .submission-header-tag { font-family: var(--mono); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; background: var(--gold-light); color: var(--gold); border: 1px solid #d4c090; padding: 2px 9px; border-radius: 20px; }
+  .submission-body { padding: 20px 22px; background: var(--paper); }
+  .submission-body p { font-size: 15px; line-height: 1.7; color: var(--ink); margin-bottom: 16px; }
+  .submission-body p:last-child { margin-bottom: 0; }
+  .submission-q { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; margin-top: 18px; }
+  .submission-q:first-child { margin-top: 0; }
+
+  /* code in submission */
+  .code-block { margin: 16px 0; border-radius: 8px; overflow: hidden; border: 1px solid #2e2e3e; }
+  .code-topbar { background: #252535; padding: 8px 14px; display: flex; align-items: center; gap: 8px; }
+  .code-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .code-filename { font-family: var(--mono); font-size: 11px; color: rgba(255,255,255,0.35); margin-left: 6px; }
+  .code-body { background: #1e1e2e; padding: 16px 18px; font-family: var(--mono); font-size: 12px; line-height: 1.85; overflow-x: auto; color: #cdd6f4; white-space: pre; }
+  .kw { color: #cba6f7; }
+  .fn { color: #89b4fa; }
+  .str { color: #a6e3a1; }
+  .cm { color: #6c7086; font-style: italic; }
+  .num { color: #fab387; }
+  .op { color: #89dceb; }
+
+  /* ── RUBRIC ROW SCORING ── */
+  .rubric-rows { display: flex; flex-direction: column; gap: 16px; margin: 24px 0; }
+
+  .rubric-row-card { border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; transition: border-color 0.2s; }
+  .rubric-row-card.scored-earned { border-color: var(--green); }
+  .rubric-row-card.scored-not { border-color: var(--red); }
+
+  .rubric-row-header { padding: 14px 18px; background: var(--paper-warm); border-bottom: 1px solid var(--rule); display: flex; align-items: flex-start; gap: 14px; }
+  .rubric-row-num-badge { font-family: var(--mono); font-size: 10px; font-weight: 500; background: var(--ink); color: #e8c9a0; padding: 3px 10px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+  .rubric-row-title-wrap { flex: 1; }
+  .rubric-row-title { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 3px; }
+  .rubric-row-criteria { font-size: 13px; color: var(--ink-muted); line-height: 1.55; }
+
+  .rubric-row-body { padding: 16px 18px; background: var(--paper); }
+
+  /* scoring buttons */
+  .score-btns { display: flex; gap: 10px; margin-top: 14px; }
+  .score-btn { flex: 1; font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; padding: 10px 16px; border-radius: 6px; border: 1.5px solid var(--rule); background: var(--paper); color: var(--ink-muted); cursor: pointer; transition: all 0.15s; text-align: center; }
+  .score-btn:hover { border-color: var(--ink); color: var(--ink); }
+  .score-btn.selected-earned { background: var(--green-light); border-color: var(--green); color: var(--green); font-weight: 500; }
+  .score-btn.selected-not { background: var(--red-light); border-color: var(--red); color: var(--red); font-weight: 500; }
+
+  /* reveal panel */
+  .reveal-panel { display: none; margin-top: 14px; padding: 14px 16px; border-radius: 6px; }
+  .reveal-panel.open { display: block; animation: fadeIn 0.3s ease; }
+  .reveal-panel.correct { background: var(--green-light); border: 1px solid #a8d0b0; }
+  .reveal-panel.incorrect { background: var(--red-light); border: 1px solid #f0b0b0; }
+  .reveal-panel.correct-anyway { background: var(--gold-light); border: 1px solid #d4c090; }
+  .reveal-verdict { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; margin-bottom: 6px; }
+  .reveal-panel.correct .reveal-verdict { color: var(--green); }
+  .reveal-panel.incorrect .reveal-verdict { color: var(--red); }
+  .reveal-panel.correct-anyway .reveal-verdict { color: var(--gold); }
+  .reveal-explanation { font-size: 13px; color: var(--ink-muted); line-height: 1.6; }
+  .reveal-explanation strong { color: var(--ink); font-weight: 600; }
+
+  .reveal-btn { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--ink); color: white; border: none; padding: 8px 16px; border-radius: 5px; cursor: pointer; margin-top: 12px; transition: opacity 0.15s; }
+  .reveal-btn:hover { opacity: 0.85; }
+  .reveal-btn:disabled { opacity: 0.3; cursor: default; }
+
+  /* ── REVEAL ALL BTN ── */
+  .reveal-all-strip { margin: 28px 0; padding: 18px 22px; background: var(--paper-dark); border: 1px solid var(--rule); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .reveal-all-text { font-size: 15px; color: var(--ink-muted); }
+  .reveal-all-text strong { color: var(--ink); display: block; font-size: 16px; margin-bottom: 2px; }
+  .reveal-all-btn { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; background: var(--gold); color: white; border: none; padding: 11px 22px; border-radius: 5px; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+  .reveal-all-btn:hover { background: #9a7009; }
+  .reveal-all-btn:disabled { opacity: 0.4; cursor: default; }
+
+  /* ── FINAL SCORE ── */
+  .final-score { display: none; margin: 28px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--rule); }
+  .final-score.show { display: block; animation: fadeUp 0.4s ease; }
+  .final-score-header { background: var(--ink); padding: 20px 24px; text-align: center; }
+  .final-score-num { font-family: var(--display); font-size: 56px; font-weight: 900; color: #e8c9a0; line-height: 1; margin-bottom: 4px; }
+  .final-score-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; color: rgba(255,255,255,0.4); }
+  .final-score-body { padding: 20px 24px; background: var(--paper-warm); }
+  .final-score-breakdown { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 16px; }
+  .fsb-cell { text-align: center; padding: 10px 6px; border-radius: 6px; border: 1px solid var(--rule); background: var(--paper); }
+  .fsb-cell.earned { background: var(--green-light); border-color: #a8d0b0; }
+  .fsb-cell.not-earned { background: var(--red-light); border-color: #f0b0b0; }
+  .fsb-row { font-family: var(--mono); font-size: 9px; color: var(--ink-faint); letter-spacing: 0.08em; margin-bottom: 4px; }
+  .fsb-result { font-family: var(--mono); font-size: 14px; font-weight: 500; }
+  .fsb-cell.earned .fsb-result { color: var(--green); }
+  .fsb-cell.not-earned .fsb-result { color: var(--red); }
+  .final-score-reflection { font-size: 14px; color: var(--ink-muted); line-height: 1.65; }
+  .final-score-reflection strong { color: var(--ink); font-weight: 600; }
+
+  /* ── CALLOUT ── */
+  .callout { margin: 24px 0; padding: 18px 22px; border-radius: 6px; }
+  .callout-gold { background: var(--gold-light); border: 1px solid #d4c090; }
+  .callout-teal { background: var(--teal-light); border: 1px solid #a8cfc7; }
+  .callout-label { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; font-weight: 500; margin-bottom: 8px; }
+  .callout-gold .callout-label { color: var(--gold); }
+  .callout-teal .callout-label { color: var(--teal); }
+  .callout p { font-size: 14px; line-height: 1.65; color: var(--ink-muted); margin: 0; }
+  .callout p strong { color: var(--ink); font-weight: 600; }
+
+  code { font-family: var(--mono); font-size: 0.85em; background: var(--paper-dark); border: 1px solid var(--rule); padding: 1px 6px; border-radius: 3px; color: var(--teal); }
+
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .act-header-inner { animation: fadeUp 0.4s ease both; }
+
+  @media (max-width: 640px) {
+    .act-header { padding: 20px; }
+    .score-strip { padding: 10px 20px; }
+    .act-body { padding: 28px 20px 48px; }
+    .final-score-breakdown { grid-template-columns: repeat(3, 1fr); }
+    .score-btns { flex-direction: column; }
+    .reveal-all-strip { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HEADER ══════════════ -->
+<header class="act-header">
+  <div class="act-header-inner">
+    <div class="act-badge">
+      <span class="act-badge-label">Act</span>
+      <span class="act-badge-num">0.C</span>
+    </div>
+    <div class="act-header-text">
+      <div class="act-eyebrow">Unit 0 · Activity 0.C · AP Computer Science Principles</div>
+      <h1 class="act-title">Score a Create PT <em>sample</em></h1>
+      <div class="act-meta">
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--gold)"></span>AP exam prep</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--gold)"></span>~25 min</span>
+        <span class="act-meta-item"><span class="meta-dot" style="background:var(--teal)"></span>Follows Lesson 0.3</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════ STICKY SCORE TRACKER ══════════════ -->
+<div class="score-strip">
+  <div class="score-strip-inner">
+    <span class="score-strip-label">Your scores</span>
+    <div class="score-dots" id="score-dots"></div>
+    <div class="score-total" id="score-total">— <span>/ 6 pts</span></div>
+  </div>
+</div>
+
+<!-- ══════════════ BODY ══════════════ -->
+<main class="act-body">
+
+  <div class="objective-box">
+    <div class="objective-label">What you're doing</div>
+    <p class="objective-text">Read a complete student Create PT submission — written responses and code. Score all 6 rubric rows independently, deciding whether each one earns the point or not. Then reveal the actual verdict one row at a time and see how your judgment compares. The goal isn't a perfect score — it's learning to read the rubric like a College Board reader does.</p>
+  </div>
+
+  <div class="callout callout-gold">
+    <div class="callout-label">How to use this activity</div>
+    <p><strong>Step 1:</strong> Read the full submission below. <strong>Step 2:</strong> Score all 6 rows — earned or not earned. <strong>Step 3:</strong> Click "Reveal all verdicts" to see the actual scores with explanations. Take your time on the submission — skimming leads to wrong scores and missed lessons.</p>
+  </div>
+
+  <!-- ── THE SUBMISSION ── -->
+  <div class="section-rule"><span class="section-rule-label">The submission — read this first</span></div>
+  <h2>Student submission: weather mood tracker</h2>
+
+  <p>This is a fictional student submission written to match real AP CSP Create PT requirements. The program is a weather-based mood tracker — the student describes it below in their own words.</p>
+
+  <!-- Program purpose -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3a — Program purpose and function</span>
+      <span class="submission-header-tag">Prompt 3a</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">i. Describe the overall purpose of the program.</div>
+      <p>My program helps people track how the weather affects their mood over time. A lot of people don't realize that weather has a real impact on how they feel, so my program lets them log their mood alongside the current weather conditions each day. Over time they can look back and see patterns — like noticing they always feel worse on cloudy days or better when it's warm.</p>
+      <div class="submission-q">ii. Describe what the program does to accomplish its purpose.</div>
+      <p>The program asks the user to enter today's weather condition (sunny, cloudy, rainy, or snowy) and their current mood on a scale of 1 to 10. It stores each entry in a list. When the user wants to see their data, the program calculates the average mood for each weather type and displays the results. The user can keep adding entries or view their averages at any time.</p>
+      <div class="submission-q">iii. Describe the input and output of the program.</div>
+      <p>Input: the user enters a weather condition (a string) and a mood score (a number from 1 to 10). Output: the program displays the average mood score for each weather type that has been logged, along with how many entries exist for each type.</p>
+    </div>
+  </div>
+
+  <!-- Code segment 1 — data abstraction -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3b — Data abstraction (code segment 1)</span>
+      <span class="submission-header-tag">Prompt 3b</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">i. The list being used to store data</div>
+      <div class="code-block">
+        <div class="code-topbar"><div class="code-dot" style="background:#f38ba8"></div><div class="code-dot" style="background:#f9e2af"></div><div class="code-dot" style="background:#a6e3a1"></div><span class="code-filename">mood_tracker.py — segment 1</span></div>
+        <div class="code-body">
+<span class="cm"># List of entries — each entry is [weather, mood_score]</span>
+entries = []
+
+weather = <span class="fn">input</span>(<span class="str">"Enter weather (sunny/cloudy/rainy/snowy): "</span>)
+mood = <span class="fn">int</span>(<span class="fn">input</span>(<span class="str">"Enter mood score (1-10): "</span>))
+entries.<span class="fn">append</span>([weather.<span class="fn">lower</span>(), mood])
+        </div>
+      </div>
+      <div class="submission-q">ii. Explain what the data in the list represents.</div>
+      <p>The list called <code>entries</code> stores all the mood log entries the user has made. Each item in the list is itself a list with two elements: the weather condition as a string and the mood score as a number. Without this list I would have to create a separate variable for every entry, which would mean I could only store a fixed number of entries and the code would get very repetitive. The list lets the program store any number of entries using the same structure.</p>
+    </div>
+  </div>
+
+  <!-- Code segment 2 — managing complexity -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3b — Managing complexity (code segment 2)</span>
+      <span class="submission-header-tag">Prompt 3b cont.</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">i. How the list manages complexity</div>
+      <div class="code-block">
+        <div class="code-topbar"><div class="code-dot" style="background:#f38ba8"></div><div class="code-dot" style="background:#f9e2af"></div><div class="code-dot" style="background:#a6e3a1"></div><span class="code-filename">mood_tracker.py — segment 2</span></div>
+        <div class="code-body">
+<span class="kw">def</span> <span class="fn">get_average_mood</span>(entries, weather_type):
+    matching = [e[<span class="num">1</span>] <span class="kw">for</span> e <span class="kw">in</span> entries <span class="kw">if</span> e[<span class="num">0</span>] == weather_type]
+    <span class="kw">if</span> <span class="fn">len</span>(matching) == <span class="num">0</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">return</span> <span class="fn">sum</span>(matching) / <span class="fn">len</span>(matching)
+
+weather_types = [<span class="str">"sunny"</span>, <span class="str">"cloudy"</span>, <span class="str">"rainy"</span>, <span class="str">"snowy"</span>]
+<span class="kw">for</span> w <span class="kw">in</span> weather_types:
+    avg = <span class="fn">get_average_mood</span>(entries, w)
+    <span class="kw">if</span> avg <span class="kw">is not</span> <span class="kw">None</span>:
+        <span class="fn">print</span>(<span class="fn">f</span><span class="str">"{w}: average mood {avg:.1f} ({len([e for e in entries if e[0]==w])} entries)"</span>)
+        </div>
+      </div>
+      <div class="submission-q">ii. Explain how this list manages complexity</div>
+      <p>The list manages complexity because it allows the same loop and the same function to work no matter how many entries the user has logged. If the program used individual variables instead, it would need to check each one separately — the code would be hundreds of lines long if someone logged 50 entries. With the list, adding a new entry is just one line (<code>entries.append(...)</code>) and the existing loop automatically includes it in every calculation.</p>
+    </div>
+  </div>
+
+  <!-- Procedural abstraction -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3c — Procedural abstraction</span>
+      <span class="submission-header-tag">Prompt 3c</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">i. The student-defined procedure</div>
+      <div class="code-block">
+        <div class="code-topbar"><div class="code-dot" style="background:#f38ba8"></div><div class="code-dot" style="background:#f9e2af"></div><div class="code-dot" style="background:#a6e3a1"></div><span class="code-filename">mood_tracker.py — segment 3</span></div>
+        <div class="code-body">
+<span class="kw">def</span> <span class="fn">get_average_mood</span>(entries, weather_type):
+    <span class="cm">"""Returns the average mood score for a given weather type,</span>
+<span class="cm">    or None if no entries exist for that type."""</span>
+    matching = [e[<span class="num">1</span>] <span class="kw">for</span> e <span class="kw">in</span> entries <span class="kw">if</span> e[<span class="num">0</span>] == weather_type]
+    <span class="kw">if</span> <span class="fn">len</span>(matching) == <span class="num">0</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">return</span> <span class="fn">sum</span>(matching) / <span class="fn">len</span>(matching)
+        </div>
+      </div>
+      <div class="submission-q">ii. Describe what the procedure does and how it contributes to the program</div>
+      <p>The <code>get_average_mood</code> function takes the full list of entries and a weather type as parameters. It filters the list to find only entries that match the given weather type, then calculates and returns the average mood score for those entries. If there are no matching entries, it returns None so the rest of the program knows to skip that weather type. This function is called four times in the main program — once for each weather type — which means the averaging logic only needs to be written once.</p>
+    </div>
+  </div>
+
+  <!-- Algorithm -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3c — Algorithm implementation</span>
+      <span class="submission-header-tag">Prompt 3c cont.</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">i. The algorithm including sequencing, selection, and iteration</div>
+      <div class="code-block">
+        <div class="code-topbar"><div class="code-dot" style="background:#f38ba8"></div><div class="code-dot" style="background:#f9e2af"></div><div class="code-dot" style="background:#a6e3a1"></div><span class="code-filename">mood_tracker.py — segment 4</span></div>
+        <div class="code-body">
+<span class="kw">def</span> <span class="fn">get_average_mood</span>(entries, weather_type):
+    matching = [e[<span class="num">1</span>] <span class="kw">for</span> e <span class="kw">in</span> entries <span class="kw">if</span> e[<span class="num">0</span>] == weather_type]
+    <span class="kw">if</span> <span class="fn">len</span>(matching) == <span class="num">0</span>:
+        <span class="kw">return</span> <span class="kw">None</span>
+    <span class="kw">return</span> <span class="fn">sum</span>(matching) / <span class="fn">len</span>(matching)
+        </div>
+      </div>
+      <div class="submission-q">ii. Explain the algorithm in enough detail that someone could reproduce it</div>
+      <p>The algorithm works as follows: first, it uses iteration (a list comprehension) to go through every entry in the entries list and collect the mood scores where the weather type matches the given parameter. This produces a new list called <code>matching</code>. Then, using selection, it checks whether <code>matching</code> is empty — if it is, the function returns None and stops. If matching is not empty, the function calculates the average by dividing the sum of all scores by the number of scores, and returns that value. The result is a single number representing the average mood for that weather type.</p>
+    </div>
+  </div>
+
+  <!-- Testing -->
+  <div class="submission-block">
+    <div class="submission-header">
+      <span class="submission-header-title">Written response 3d — Testing</span>
+      <span class="submission-header-tag">Prompt 3d</span>
+    </div>
+    <div class="submission-body">
+      <div class="submission-q">Describe two calls to your procedure with different arguments and different expected results</div>
+      <p><strong>Call 1:</strong> I called <code>get_average_mood(entries, "sunny")</code> after adding three sunny entries with mood scores of 8, 9, and 7. I expected the function to return 8.0, and it did.</p>
+      <p><strong>Call 2:</strong> I called <code>get_average_mood(entries, "snowy")</code> when no snowy entries had been added yet. I expected the function to return None so the display loop would skip it, and it did. This tested the edge case where a weather type has no data.</p>
+    </div>
+  </div>
+
+  <!-- ── SCORING SECTION ── -->
+  <div class="section-rule"><span class="section-rule-label">Now score it — all 6 rows</span></div>
+  <h2>Your turn — earned or not earned?</h2>
+
+  <p>Score every row before revealing any results. Use the rubric criteria shown for each row. When you've scored all 6, the reveal button unlocks.</p>
+
+  <div class="rubric-rows" id="rubric-rows"></div>
+
+  <div class="reveal-all-strip">
+    <div class="reveal-all-text">
+      <strong>Scored all 6 rows?</strong>
+      Select earned or not earned for every row above, then reveal the verdicts.
+    </div>
+    <button class="reveal-all-btn" id="reveal-all-btn" onclick="revealAll()" disabled>Reveal all verdicts →</button>
+  </div>
+
+  <div class="final-score" id="final-score">
+    <div class="final-score-header">
+      <div class="final-score-num" id="final-num">—</div>
+      <div class="final-score-label">out of 6 points</div>
+    </div>
+    <div class="final-score-body">
+      <div class="final-score-breakdown" id="final-breakdown"></div>
+      <p class="final-score-reflection" id="final-reflection"></p>
+    </div>
+  </div>
+
+  <div class="callout callout-teal" style="margin-top:32px;">
+    <div class="callout-label">What to take from this</div>
+    <p>The rows where your score disagreed with the actual verdict are the most valuable. Those are the places where your mental model of the rubric doesn't match College Board's. When you write your own PT, those are exactly the rows you'll be most likely to miss — so knowing them now is worth a lot.</p>
+  </div>
+
+</main>
+
+<script>
+const rows = [
+  {
+    num: 'Row 1',
+    title: 'Program Purpose and Function',
+    criteria: 'Response describes the overall purpose, what the program does (functionality), and the input and output.',
+    actualEarned: true,
+    explanation: 'All three elements are present and specific. Purpose: helping people track how weather affects mood. Function: log entries, calculate averages, display results. Input: weather string + mood number. Output: averages per weather type with entry counts. Nothing is missing and nothing is vague.',
+    gotchaIfWrong: 'If you marked not earned — look at prompt (iii) again. The student explicitly names input (weather condition string, mood score 1–10) and output (average mood per type, entry counts). Both are there.',
+  },
+  {
+    num: 'Row 2',
+    title: 'Data Abstraction',
+    criteria: 'Response includes a list storing data and explains what the data in the list represents.',
+    actualEarned: true,
+    explanation: 'The list <code>entries</code> is shown storing data (each entry is [weather, mood_score]). The written response explains what the data represents — weather condition paired with mood score. The response also mentions the list is used to fulfill the program\'s purpose by enabling the averaging calculation. Both required elements are present.',
+    gotchaIfWrong: 'The criteria doesn\'t require the managing complexity explanation for Row 2 — that\'s Row 3. Row 2 only needs: a list + what it stores. Both are clearly shown.',
+  },
+  {
+    num: 'Row 3',
+    title: 'Managing Complexity',
+    criteria: 'Response explains how the list manages complexity — what would be harder or impossible without it.',
+    actualEarned: true,
+    explanation: 'The student makes the comparison concrete: without the list, the code "would be hundreds of lines long if someone logged 50 entries." They explain that adding an entry is one line vs. checking individual variables separately. This is the specific, comparative explanation the rubric wants.',
+    gotchaIfWrong: 'A generic statement like "lists make programs simpler" wouldn\'t earn this. But this response is specific — it names the alternative (individual variables), the consequence (hundreds of lines), and the benefit (one line to add, loop handles everything).',
+  },
+  {
+    num: 'Row 4',
+    title: 'Procedural Abstraction',
+    criteria: 'Response includes a student-defined procedure with a name, at least one parameter, and a call to the procedure. Written response describes what it does.',
+    actualEarned: true,
+    explanation: '<code>get_average_mood(entries, weather_type)</code> has a name, two parameters, and is called four times in the display loop. The written response describes what it does and how it contributes. All boxes checked.',
+    gotchaIfWrong: 'Watch for the parameter requirement — this is the most common Row 4 miss. The function has TWO parameters (entries and weather_type). A function with no parameters would not earn this row.',
+  },
+  {
+    num: 'Row 5',
+    title: 'Algorithm Implementation',
+    criteria: 'Response includes an algorithm with sequencing, selection, and iteration. Written explanation is detailed enough to reproduce it.',
+    actualEarned: true,
+    explanation: 'All three are present: iteration (list comprehension loops through entries), selection (if len(matching) == 0), sequencing (build matching → check if empty → return average). The written explanation walks through each step clearly enough that someone could rewrite the function without seeing the code.',
+    gotchaIfWrong: 'The list comprehension <code>[e[1] for e in entries if e[0] == weather_type]</code> contains BOTH iteration (for e in entries) AND selection (if e[0] == weather_type) in one line. If you didn\'t spot the selection inside the comprehension, that\'s a common miss.',
+  },
+  {
+    num: 'Row 6',
+    title: 'Testing',
+    criteria: 'Response describes two calls to the procedure with different arguments, different expected results, and explains what was being tested.',
+    actualEarned: false,
+    explanation: 'This row is NOT earned. The two calls have different arguments and different expected results — that part is fine. But the student never explicitly states <strong>what condition or behavior each call was testing</strong>. Call 1 just describes a normal case. Call 2 mentions an "edge case" but doesn\'t name it as such or explain why testing None-return matters. The rubric requires an explanation of what was being tested, not just what the result was.',
+    gotchaIfWrong: 'If you marked earned — re-read the criteria. The student says "I expected... and it did" but never explains WHY they chose these two calls. What does Call 1 test? The normal path. What does Call 2 test? The empty-list edge case. Neither of those explanations is written in the response — the reader has to infer it.',
+  },
+];
+
+let userScores = new Array(rows.length).fill(null);
+let revealed = new Array(rows.length).fill(false);
+let allRevealed = false;
+
+function renderDots() {
+  const container = document.getElementById('score-dots');
+  container.innerHTML = '';
+  let earnedCount = 0;
+  rows.forEach((row, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'score-dot';
+    dot.textContent = i + 1;
+    if (revealed[i]) {
+      if (row.actualEarned) { dot.classList.add('earned'); dot.textContent = '✓'; earnedCount++; }
+      else { dot.classList.add('not-earned'); dot.textContent = '✕'; }
+    } else if (userScores[i] !== null) {
+      dot.classList.add('scored');
+    }
+    container.appendChild(dot);
+  });
+  const total = document.getElementById('score-total');
+  if (allRevealed) {
+    total.innerHTML = `${earnedCount} <span>/ 6 pts</span>`;
+  } else {
+    total.innerHTML = `— <span>/ 6 pts</span>`;
+  }
+}
+
+function renderRows() {
+  const container = document.getElementById('rubric-rows');
+  container.innerHTML = '';
+  rows.forEach((row, i) => {
+    const userChoice = userScores[i];
+    const isRevealed = revealed[i];
+    const card = document.createElement('div');
+    const cardClass = isRevealed ? (row.actualEarned ? 'scored-earned' : 'scored-not') : '';
+    card.className = `rubric-row-card ${cardClass}`;
+
+    let revealHTML = '';
+    if (isRevealed) {
+      const userCorrect = userChoice === row.actualEarned;
+      const panelClass = userCorrect ? 'correct' : (row.actualEarned ? 'correct-anyway' : 'incorrect');
+      const verdictText = userCorrect
+        ? (row.actualEarned ? 'Point earned — you got it right' : 'Point not earned — you got it right')
+        : (row.actualEarned ? 'Point earned — you marked not earned' : 'Point not earned — you marked earned');
+      revealHTML = `
+        <div class="reveal-panel open ${panelClass}">
+          <div class="reveal-verdict">${verdictText}</div>
+          <div class="reveal-explanation">${row.explanation}${row.gotchaIfWrong && !userCorrect ? `<br><br><strong>Why you might have missed it:</strong> ${row.gotchaIfWrong}` : ''}</div>
+        </div>`;
+    }
+
+    card.innerHTML = `
+      <div class="rubric-row-header">
+        <span class="rubric-row-num-badge">${row.num}</span>
+        <div class="rubric-row-title-wrap">
+          <div class="rubric-row-title">${row.title}</div>
+          <div class="rubric-row-criteria">${row.criteria}</div>
+        </div>
+      </div>
+      <div class="rubric-row-body">
+        <div class="score-btns">
+          <button class="score-btn ${userChoice === true ? 'selected-earned' : ''}" onclick="setScore(${i}, true)" ${isRevealed ? 'disabled' : ''}>
+            ${isRevealed && row.actualEarned ? '✓ ' : ''}Point earned
+          </button>
+          <button class="score-btn ${userChoice === false ? 'selected-not' : ''}" onclick="setScore(${i}, false)" ${isRevealed ? 'disabled' : ''}>
+            ${isRevealed && !row.actualEarned ? '✕ ' : ''}Not earned
+          </button>
+        </div>
+        ${revealHTML}
+      </div>`;
+    container.appendChild(card);
+  });
+
+  // enable reveal button if all scored
+  const allScored = userScores.every(s => s !== null);
+  document.getElementById('reveal-all-btn').disabled = !allScored || allRevealed;
+}
+
+function setScore(i, earned) {
+  userScores[i] = earned;
+  renderRows();
+  renderDots();
+}
+
+function revealAll() {
+  revealed = new Array(rows.length).fill(true);
+  allRevealed = true;
+  renderRows();
+  renderDots();
+  showFinalScore();
+  document.getElementById('reveal-all-btn').disabled = true;
+}
+
+function showFinalScore() {
+  const earnedCount = rows.filter(r => r.actualEarned).length;
+  const userCorrect = rows.filter((r, i) => userScores[i] === r.actualEarned).length;
+
+  document.getElementById('final-num').textContent = earnedCount;
+
+  const breakdown = document.getElementById('final-breakdown');
+  breakdown.innerHTML = '';
+  rows.forEach((row, i) => {
+    const cell = document.createElement('div');
+    cell.className = `fsb-cell ${row.actualEarned ? 'earned' : 'not-earned'}`;
+    cell.innerHTML = `<div class="fsb-row">${row.num}</div><div class="fsb-result">${row.actualEarned ? '1 pt' : '0 pt'}</div>`;
+    breakdown.appendChild(cell);
+  });
+
+  const missed = rows.filter((r, i) => userScores[i] !== r.actualEarned).length;
+  const reflection = document.getElementById('final-reflection');
+  if (missed === 0) {
+    reflection.innerHTML = `Your scoring matched the actual verdict on all 6 rows — that's a strong read of the rubric. When you write your own PT, you know exactly what each row is looking for.`;
+  } else if (missed === 1) {
+    const missedRow = rows.find((r, i) => userScores[i] !== r.actualEarned);
+    reflection.innerHTML = `You matched 5 of 6. The one you missed was <strong>${missedRow.num} — ${missedRow.title}</strong>. Read the explanation for that row carefully — that's the gap to close before you write your own PT.`;
+  } else {
+    const missedNames = rows.filter((r, i) => userScores[i] !== r.actualEarned).map(r => r.title).join(' and ');
+    reflection.innerHTML = `You had ${missed} disagreements with the actual scores — on ${missedNames}. Read those explanations carefully. The rubric is more specific than it looks on first read, and those rows are worth reviewing before you start your own PT.`;
+  }
+
+  document.getElementById('final-score').classList.add('show');
+  setTimeout(() => document.getElementById('final-score').scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+// init
+renderDots();
+renderRows();
+</script>
+
+</body>
+</html>

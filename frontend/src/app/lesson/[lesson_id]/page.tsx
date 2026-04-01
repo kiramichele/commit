@@ -1,10 +1,24 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import ReadAloud from '@/components/ReadAloud'
+import ExerciseBlock from '@/components/ExerciseBlock'
+import MarkCompleteButton from '@/components/MarkCompleteButton'
+
+interface Exercise {
+  type: 'coding' | 'free_response' | 'multiple_choice' | 'short_answer'
+  instructions?: string
+  starter_code?: string
+  prompt?: string
+  min_words?: number
+  max_words?: number
+  question?: string
+  choices?: string[]
+  correct?: string
+}
 
 interface Lesson {
   id: string
@@ -21,6 +35,7 @@ interface Lesson {
     coding_starter_code: string
     example_code?: string
     example_explanation?: string
+    exercises?: Exercise[]
   } | null
 }
 
@@ -105,12 +120,12 @@ export default function LessonPage() {
   const params = useParams()
   const lessonId = params.lesson_id as string
   const classroomId = params.id as string
+  const searchParams = useSearchParams()
+  const assignmentId = searchParams.get('assignment_id')
 
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [lessonUrl, setLessonUrl] = useState<string | null>(null)
   const [lessonHtml, setLessonHtml] = useState<string | null>(null)
-  const [activityUrl, setActivityUrl] = useState<string | null>(null)
-  const [activityHtml, setActivityHtml] = useState<string | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('lesson')
   const [code, setCode] = useState('')
@@ -119,6 +134,29 @@ export default function LessonPage() {
   const [running, setRunning] = useState(false)
   const [docSearch, setDocSearch] = useState('')
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null)
+  const [exerciseOutput, setExerciseOutput] = useState<Record<number, string>>({})
+  const [exerciseErrors, setExerciseErrors] = useState<Record<number, boolean>>({})
+  const [runningExercise, setRunningExercise] = useState<number | null>(null)
+
+  const handleExerciseRun = async (code: string, exerciseIndex: number) => {
+    setRunningExercise(exerciseIndex)
+    setExerciseOutput(prev => ({ ...prev, [exerciseIndex]: '' }))
+    setExerciseErrors(prev => ({ ...prev, [exerciseIndex]: false }))
+    try {
+      const result = await api.post<{ output: string; stderr: string }>('/code/run', { code })
+      if (result.stderr && !result.output) {
+        setExerciseOutput(prev => ({ ...prev, [exerciseIndex]: result.stderr }))
+        setExerciseErrors(prev => ({ ...prev, [exerciseIndex]: true }))
+      } else {
+        setExerciseOutput(prev => ({ ...prev, [exerciseIndex]: result.output || '(no output)' }))
+      }
+    } catch (e: any) {
+      setExerciseOutput(prev => ({ ...prev, [exerciseIndex]: e.message || 'Execution failed.' }))
+      setExerciseErrors(prev => ({ ...prev, [exerciseIndex]: true }))
+    } finally {
+      setRunningExercise(null)
+    }
+  }
 
   useEffect(() => {
     if (loading) return
@@ -144,13 +182,6 @@ export default function LessonPage() {
         fetch(urlData.url).then(r => r.text()).then(setLessonHtml).catch(() => {})
       }
 
-      if (lessonData.lesson_content?.activity_file_path) {
-        const actUrl = await api.get<{ url: string }>(`/curriculum/lessons/${lessonId}/url?file_type=activity`).catch(() => null)
-        if (actUrl) {
-          setActivityUrl(actUrl.url)
-          fetch(actUrl.url).then(r => r.text()).then(setActivityHtml).catch(() => {})
-        }
-      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -278,13 +309,38 @@ export default function LessonPage() {
 
           {/* ── ACTIVITY TAB ── */}
           {activeTab === 'activity' && (
-            <div style={{ flex: 1 }}>
-              {activityHtml ? (
-                <iframe srcDoc={activityHtml} style={{ width: '100%', height: '100%', border: 'none', minHeight: 'calc(100vh - 104px)' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={`${lesson?.title} — Activity`} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '3rem', gap: '1.5rem' }}>
+              {lesson?.lesson_content?.activity_file_path ? (
+                <>
+                  <div style={{ textAlign: 'center' }}>
+                    <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>◈</div>
+                    <h2 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: 700, color: '#0E2D6E' }}>
+                      {lesson.title} — Activity
+                    </h2>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#888780', maxWidth: '400px' }}>
+                      This activity opens in a focused view so you can work through it step by step.
+                    </p>
+                  </div>
+                  <Link
+                    href={`/activity/${lesson.id}`}
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: '8px',
+                      padding: '14px 28px',
+                      background: '#1A56DB', color: 'white',
+                      borderRadius: '10px', textDecoration: 'none',
+                      fontSize: '15px', fontWeight: 700,
+                      boxShadow: '0 4px 16px rgba(26,86,219,0.25)',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    open activity →
+                  </Link>
+                  <p style={{ fontSize: '12px', color: '#888780' }}>
+                    opens in this tab — use the back button to return to the lesson
+                  </p>
+                </>
               ) : (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
-                  {activityUrl ? 'loading activity...' : 'no activity uploaded yet'}
-                </div>
+                <p style={{ fontSize: '14px', color: '#888780' }}>no activity for this lesson yet</p>
               )}
             </div>
           )}
@@ -319,44 +375,62 @@ export default function LessonPage() {
 
           {/* ── PRACTICE TAB ── */}
           {activeTab === 'practice' && (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#1C1C1E' }}>
-              {lesson?.lesson_content?.coding_instructions && (
-                <div style={{ padding: '1.25rem 1.5rem', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                    <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>instructions</div>
-                    <ReadAloud text={lesson.lesson_content.coding_instructions} isPro={false} />
-                  </div>
-                  <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7 }}>
-                    {lesson.lesson_content.coding_instructions}
-                  </p>
-                  {hasExample && (
-                    <button onClick={() => setActiveTab('example')} style={{ marginTop: '10px', padding: '5px 12px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
-                      💡 view example
-                    </button>
+            <div style={{ flex: 1, padding: '1.5rem 2rem', maxWidth: '860px', margin: '0 auto', width: '100%' }}>
+
+              {lesson?.lesson_content?.exercises?.length ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  {lesson.lesson_content.exercises.map((exercise, i) => (
+                    <div key={i}>
+                      {lesson.lesson_content!.exercises!.length > 1 && (
+                        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888780', marginBottom: '8px' }}>
+                          exercise {i + 1} of {lesson.lesson_content!.exercises!.length}
+                        </div>
+                      )}
+                      <ExerciseBlock
+                        exercise={exercise}
+                        exerciseIndex={i}
+                        lessonId={lesson.id}
+                        onRunCode={(code) => handleExerciseRun(code, i)}
+                        output={exerciseOutput[i]}
+                        outputError={exerciseErrors[i]}
+                        running={runningExercise === i}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : lesson?.lesson_content?.has_coding_exercise ? (
+                <div style={{ display: 'flex', flexDirection: 'column', background: '#1C1C1E', borderRadius: '12px', overflow: 'hidden' }}>
+                  {lesson.lesson_content.coding_instructions && (
+                    <div style={{ padding: '1.25rem 1.5rem', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>instructions</div>
+                        <ReadAloud text={lesson.lesson_content.coding_instructions} isPro={false} />
+                      </div>
+                      <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7 }}>
+                        {lesson.lesson_content.coding_instructions}
+                      </p>
+                    </div>
                   )}
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <div style={{ position: 'absolute', top: '10px', right: '1rem', zIndex: 10 }}>
+                      <button onClick={handleRun} disabled={running} style={{ padding: '7px 16px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+                        {running ? '◌ running...' : '▶ run'}
+                      </button>
+                    </div>
+                    <textarea value={code} onChange={e => setCode(e.target.value)} onKeyDown={handleTab} spellCheck={false} style={{ width: '100%', height: '300px', background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', minHeight: '120px' }}>
+                    <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>output</div>
+                    <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                      {output || <span style={{ color: 'rgba(255,255,255,0.2)' }}>run your code to see output here</span>}
+                    </pre>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
+                  no practice exercises for this lesson
                 </div>
               )}
-
-              <div style={{ flex: 1, position: 'relative' }}>
-                <div style={{ position: 'absolute', top: '10px', right: '1rem', zIndex: 10, display: 'flex', gap: '8px' }}>
-                  {hasExample && (
-                    <button onClick={() => setActiveTab('example')} style={{ padding: '6px 12px', background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.5)', border: 'none', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
-                      💡 example
-                    </button>
-                  )}
-                  <button onClick={handleRun} disabled={running} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
-                    {running ? '◌ running...' : '▶ run'}
-                  </button>
-                </div>
-                <textarea value={code} onChange={e => setCode(e.target.value)} onKeyDown={handleTab} spellCheck={false} style={{ width: '100%', height: '300px', background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-              </div>
-
-              <div style={{ background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', minHeight: '120px' }}>
-                <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>output</div>
-                <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {output || <span style={{ color: 'rgba(255,255,255,0.2)' }}>run your code to see output here</span>}
-                </pre>
-              </div>
             </div>
           )}
 
@@ -411,6 +485,10 @@ export default function LessonPage() {
             </div>
           )}
         </div>
+      )}
+
+      {assignmentId && (
+        <MarkCompleteButton assignmentId={assignmentId} />
       )}
     </div>
   )

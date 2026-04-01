@@ -4,7 +4,15 @@
       "Bash(npx tsc:*)",
       "Bash(./venv/Scripts/python.exe -c \":*)",
       "Bash(./venv/Scripts/python.exe -c \"import main; print\\(''ok''\\)\")",
-      "Bash(./venv/Scripts/pip.exe install:*)"
+      "Bash(./venv/Scripts/pip.exe install:*)",
+      "Bash(backend/venv/Scripts/python.exe import_curriculum.py)",
+      "Bash(PYTHONIOENCODING=utf-8 backend/venv/Scripts/python.exe import_curriculum.py)",
+      "Bash(ls -d \"c:/Users/Kira/commit/curriculum/unit-01-Orientation/\"*/)",
+      "Bash([ -f \"$d/lesson.html\" ])",
+      "Bash(mv __TRACKED_VAR__/lesson.html __TRACKED_VAR__/activity.html)",
+      "Bash(mv __TRACKED_VAR__/lesson.html __TRACKED_VAR__/exercise.html)",
+      "Bash(PYTHONIOENCODING=utf-8 backend/venv/Scripts/python.exe import_curriculum.py --dry-run)",
+      "Bash(./venv/Scripts/python.exe -c ':*)"
     ]
   }
 }

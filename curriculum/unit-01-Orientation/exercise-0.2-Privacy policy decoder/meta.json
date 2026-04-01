@@ -1,0 +1,13 @@
+{
+    "order": 9,
+    "title": "Privacy policy decoder",
+    "scaffold_level": "typed_python",
+    "estimated_minutes": 5,
+    "exercises": [
+        {
+            "type": "coding",
+            "instructions": "Parse a real app's privacy policy in Python and flag every sentence that mentions selling your data."
+            
+        }
+    ]
+}
