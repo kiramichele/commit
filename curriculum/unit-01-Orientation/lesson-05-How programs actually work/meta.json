@@ -1,11 +1,14 @@
-
 {
   "order": 11,
   "title": "How programs actually work",
   "scaffold_level": "typed_python",
-  "estimated_minutes": 15,
+  "estimated_minutes": 20,
   "has_coding_exercise": false,
   "coding_instructions": "",
-  "coding_starter_code": ""
+  "coding_starter_code": "",
+  "standards": [
+    "AAP-1.A",
+    "AAP-2.A",
+    "CRD-2.A"
+  ]
 }
-

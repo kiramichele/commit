@@ -3,5 +3,9 @@
   "title": "Data Broker Simulation",
   "scaffold_level": "typed_python",
   "estimated_minutes": 20,
-  "activity_file_path": "unit-01-Orientation/activity-0.D-Data Broker Simulation/lesson.html"
+  "activity_file_path": "unit-01-Orientation/activity-0.D-Data Broker Simulation/lesson.html",
+  "standards": [
+    "IOC-2.A",
+    "IOC-2.B"
+  ]
 }

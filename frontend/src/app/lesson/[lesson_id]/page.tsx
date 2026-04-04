@@ -7,6 +7,8 @@ import { api } from '@/lib/api'
 import ReadAloud from '@/components/ReadAloud'
 import ExerciseBlock from '@/components/ExerciseBlock'
 import MarkCompleteButton from '@/components/MarkCompleteButton'
+import LessonCompleteButton from '@/components/LessonCompleteButton'
+import { StandardsBadgeList } from '@/components/Standards'
 
 interface Exercise {
   type: 'coding' | 'free_response' | 'multiple_choice' | 'short_answer'
@@ -134,6 +136,7 @@ export default function LessonPage() {
   const [running, setRunning] = useState(false)
   const [docSearch, setDocSearch] = useState('')
   const [expandedDoc, setExpandedDoc] = useState<string | null>(null)
+  const [lessonHint, setLessonHint] = useState<string | null>(null)
   const [exerciseOutput, setExerciseOutput] = useState<Record<number, string>>({})
   const [exerciseErrors, setExerciseErrors] = useState<Record<number, boolean>>({})
   const [runningExercise, setRunningExercise] = useState<number | null>(null)
@@ -167,6 +170,27 @@ export default function LessonPage() {
     if (!profile || !lessonId) return
     fetchLesson()
   }, [profile, lessonId])
+
+  useEffect(() => {
+    const tab = searchParams.get('tab')
+    const search = searchParams.get('search')
+    const hint = searchParams.get('hint')
+
+    if (tab) setActiveTab(tab as Tab)
+    if (tab === 'docs' && search) {
+      setDocSearch(search)
+      setTimeout(() => {
+        const el = document.querySelector(`[data-docs-key="${search}"]`)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+          ;(el as HTMLElement).click()
+        }
+      }, 300)
+    }
+    if (tab === 'lesson' && hint) {
+      setLessonHint(hint)
+    }
+  }, [searchParams])
 
   const fetchLesson = async () => {
     setDataLoading(true)
@@ -273,6 +297,9 @@ export default function LessonPage() {
         {lesson?.units && <span style={{ fontSize: '12px', color: '#888780' }}>Unit {lesson.units.order_index}</span>}
         <span style={{ color: '#D3D1C7' }}>/</span>
         <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{lesson?.title}</span>
+        {(lesson as any)?.standards_tags?.length > 0 && (
+          <StandardsBadgeList tags={(lesson as any).standards_tags} max={5} />
+        )}
         {lesson?.lesson_content?.estimated_minutes && (
           <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#888780' }}>~{lesson.lesson_content.estimated_minutes} min</span>
         )}
@@ -296,13 +323,25 @@ export default function LessonPage() {
 
           {/* ── LESSON TAB ── */}
           {activeTab === 'lesson' && (
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {lessonHint && (
+                <div style={{ padding: '10px 16px', background: '#FEF9C3', borderBottom: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>🔍</span>
+                    <span style={{ fontSize: '13px', color: '#854D0E', fontWeight: 500 }}>look for content about: <strong>{lessonHint}</strong></span>
+                  </div>
+                  <button onClick={() => setLessonHint(null)} style={{ background: 'none', border: 'none', color: '#854D0E', cursor: 'pointer', fontSize: '16px' }}>×</button>
+                </div>
+              )}
               {lessonHtml ? (
                 <iframe srcDoc={lessonHtml} style={{ width: '100%', height: '100%', border: 'none', minHeight: 'calc(100vh - 104px)' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={lesson?.title} />
               ) : (
                 <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
                   {lessonUrl ? 'loading lesson...' : 'no lesson content uploaded yet'}
                 </div>
+              )}
+              {profile?.role === 'student' && lesson && (
+                <LessonCompleteButton lessonId={lesson.id} lessonTitle={lesson.title} />
               )}
             </div>
           )}
@@ -341,6 +380,9 @@ export default function LessonPage() {
                 </>
               ) : (
                 <p style={{ fontSize: '14px', color: '#888780' }}>no activity for this lesson yet</p>
+              )}
+              {profile?.role === 'student' && lesson && (
+                <LessonCompleteButton lessonId={lesson.id} lessonTitle={lesson.title} />
               )}
             </div>
           )}
@@ -454,7 +496,7 @@ export default function LessonPage() {
                       {cat.category}
                     </div>
                     {cat.items.map((item, i) => (
-                      <div key={item.name} style={{ borderBottom: i < cat.items.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none' }}>
+                      <div key={item.name} data-docs-key={item.name} style={{ borderBottom: i < cat.items.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none' }}>
                         <div
                           onClick={() => setExpandedDoc(expandedDoc === `${cat.category}-${item.name}` ? null : `${cat.category}-${item.name}`)}
                           style={{ padding: '10px 1.25rem', display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}

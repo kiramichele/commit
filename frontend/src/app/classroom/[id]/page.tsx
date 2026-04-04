@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import HelpQueue from '@/components/HelpQueue'
 import LatePenaltySettings from '@/components/LatePenaltySettings'
+import { StandardsPicker } from '@/components/Standards'
 import InstructionsUpload from '@/components/InstructionsUpload'
 
 type Tab = 'students' | 'assignments' | 'help queue' | 'settings'
@@ -21,6 +22,9 @@ interface Classroom {
   discussion_enabled: boolean
   standup_frequency_days: number
   archived: boolean
+  late_submissions_allowed: boolean
+  late_penalty_per_day: number
+  late_penalty_max: number
 }
 
 interface StudentProgress {
@@ -42,6 +46,7 @@ interface Assignment {
   min_commits: number
   scaffold_level: string
   created_at: string
+  assignment_type: string
 }
 
 interface NewAssignment {
@@ -91,6 +96,10 @@ export default function ClassroomPage() {
     title: '', instructions: '', due_date: '', min_commits: 3,
     scaffold_level: 'typed_python', starter_code: '',
   })
+  const [standardsTags, setStandardsTags] = useState<string[]>([])
+  const [hintsEnabled, setHintsEnabled] = useState(true)
+  const [hint1, setHint1] = useState('')
+  const [hint2, setHint2] = useState('')
 
   useEffect(() => {
     if (!loading && !profile) router.push('/login')
@@ -155,9 +164,17 @@ export default function ClassroomPage() {
         min_commits: newAssignment.min_commits,
         scaffold_level: newAssignment.scaffold_level,
         starter_code: newAssignment.starter_code,
+        standards_tags: standardsTags,
+        hints_enabled: hintsEnabled,
+        hint_1: hint1 || null,
+        hint_2: hint2 || null,
       })
       setShowAddAssignment(false)
       setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '' })
+      setStandardsTags([])
+      setHintsEnabled(true)
+      setHint1('')
+      setHint2('')
       fetchAll()
     } catch (err: any) {
       setActionError(err.message || 'Could not create assignment.')
@@ -372,7 +389,7 @@ export default function ClassroomPage() {
                           )}
                         </div>
                       </div>
-                      <Link href={`/classroom/${classroomId}/submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                      <Link href={a.assignment_type === 'code' || !a.assignment_type ? `/classroom/${classroomId}/submissions/${a.id}` : `/classroom/${classroomId}/curriculum-submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                         view submissions
                       </Link>
                       <InstructionsUpload
@@ -488,6 +505,34 @@ export default function ClassroomPage() {
                 <label style={labelStyle}>starter code <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <textarea value={newAssignment.starter_code} onChange={e => setNewAssignment(s => ({ ...s, starter_code: e.target.value }))} rows={4} placeholder="# starter code for students..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6, fontFamily: "'DM Mono', monospace", fontSize: '12px' }} />
               </div>
+              <div>
+                <label style={labelStyle}>learning objectives <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
+                <StandardsPicker selected={standardsTags} onChange={setStandardsTags} />
+              </div>
+
+              {/* HINTS */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable hints</div>
+                  <div style={{ fontSize: '11px', color: '#888780' }}>students can request hints after running + editing</div>
+                </div>
+                <div onClick={() => setHintsEnabled(h => !h)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: hintsEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
+                  <div style={{ position: 'absolute', top: '3px', left: hintsEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                </div>
+              </div>
+              {hintsEnabled && (
+                <>
+                  <div>
+                    <label style={labelStyle}>hint 1 <span style={{ fontWeight: 400, color: '#888780' }}>(vague nudge — optional, AI generates if blank)</span></label>
+                    <textarea value={hint1} onChange={e => setHint1(e.target.value)} placeholder="e.g. Think about what type of value your function should return..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>hint 2 <span style={{ fontWeight: 400, color: '#888780' }}>(more specific — optional, AI generates if blank)</span></label>
+                    <textarea value={hint2} onChange={e => setHint2(e.target.value)} placeholder="e.g. Check the indentation inside your for loop..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                  </div>
+                </>
+              )}
+
               <div style={{ display: 'flex', gap: '8px', marginTop: '0.25rem' }}>
                 <button type="button" onClick={() => setShowAddAssignment(false)} style={{ flex: 1, padding: '9px', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.15)', background: 'transparent', color: '#5F5E5A', fontWeight: 500, fontSize: '13px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>cancel</button>
                 <button type="submit" disabled={actionLoading} style={{ flex: 1, padding: '9px', borderRadius: '8px', border: 'none', background: actionLoading ? '#93C5FD' : '#1A56DB', color: 'white', fontWeight: 600, fontSize: '13px', cursor: actionLoading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{actionLoading ? 'creating...' : 'create assignment'}</button>

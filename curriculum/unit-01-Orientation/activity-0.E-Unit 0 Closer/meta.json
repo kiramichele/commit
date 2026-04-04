@@ -3,5 +3,9 @@
   "title": "Unit 0 Closer / Goal Setting",
   "scaffold_level": "typed_python",
   "estimated_minutes": 20,
-  "activity_file_path": "unit-01-Orientation/activity-0.E-Unit 0 Closer/lesson.html"
+  "activity_file_path": "unit-01-Orientation/activity-0.E-Unit 0 Closer/lesson.html",
+  "standards": [
+    "CRD-1.A",
+    "IOC-1.A"
+  ]
 }

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import StreakLeaderboard from '@/components/StreakLeaderboard'
+import { StandardsBadgeList } from '@/components/Standards'
 
 type Tab = 'assignments' | 'lessons'
 
@@ -57,6 +58,7 @@ export default function StudentClassroomPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [lessons, setLessons] = useState<UnlockedLesson[]>([])
+  const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
@@ -82,6 +84,11 @@ export default function StudentClassroomPage() {
       setClassroom(classroomData)
       setAssignments(assignmentsData || [])
       setLessons(lessonsData || [])
+
+      const completionsData = await api.get<{ lesson_id: string }[]>(
+        `/curriculum/classroom/${classroomId}/completions`
+      ).catch(() => [])
+      setCompletedLessonIds(new Set((completionsData || []).map(c => c.lesson_id)))
 
       // Fetch submissions for this student
       if (assignmentsData?.length > 0) {
@@ -258,30 +265,37 @@ export default function StudentClassroomPage() {
                         .map((ul, i) => {
                           const lesson = ul.lessons
                           if (!lesson) return null
+                          const isDone = completedLessonIds.has(lesson.id)
                           return (
-                            <div key={ul.lesson_id} style={{ padding: '1rem 1.25rem', borderBottom: i < unitLessons.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                            <div key={ul.lesson_id} style={{ padding: '1rem 1.25rem', borderBottom: i < unitLessons.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', background: isDone ? 'rgba(34,197,94,0.03)' : 'transparent' }}>
+
+                              {/* COMPLETION INDICATOR */}
+                              <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: isDone ? '#22C55E' : '#F1EFE8', border: `2px solid ${isDone ? '#22C55E' : '#D3D1C7'}`, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {isDone && <span style={{ color: 'white', fontSize: '12px', fontWeight: 700 }}>✓</span>}
+                              </div>
+
                               <div style={{ flex: 1, minWidth: '200px' }}>
-                                <div style={{ fontWeight: 500, fontSize: '14px', color: '#0E2D6E', marginBottom: '4px' }}>
+                                <div style={{ fontWeight: 500, fontSize: '14px', color: isDone ? '#888780' : '#0E2D6E', marginBottom: '4px' }}>
                                   {lesson.title}
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                   {lesson.lesson_content?.estimated_minutes && (
                                     <span style={{ fontSize: '11px', color: '#888780' }}>~{lesson.lesson_content.estimated_minutes} min</span>
                                   )}
-                                  {lesson.lesson_content?.has_coding_exercise && (
-                                    <span style={{ fontSize: '11px', fontWeight: 500, padding: '1px 6px', borderRadius: '99px', background: '#DCFCE7', color: '#166534' }}>coding</span>
-                                  )}
-                                  {lesson.lesson_content?.activity_file_path && (
-                                    <span style={{ fontSize: '11px', fontWeight: 500, padding: '1px 6px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C' }}>activity</span>
+                                  {isDone && (
+                                    <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>completed ✓</span>
                                   )}
                                 </div>
+                                {(lesson as any).standards_tags?.length > 0 && (
+                                  <StandardsBadgeList tags={(lesson as any).standards_tags} max={2} />
+                                )}
                               </div>
 
                               <Link
                                 href={`/lesson/${lesson.id}`}
-                                style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                                style={{ padding: '8px 18px', background: isDone ? '#F1EFE8' : '#1A56DB', color: isDone ? '#5F5E5A' : 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
                               >
-                                open →
+                                {isDone ? 'review →' : 'open →'}
                               </Link>
                             </div>
                           )

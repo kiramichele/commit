@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import ReadAloud from '@/components/ReadAloud'
 import ErrorPanel from '@/components/ErrorPanel'
 import type { ScaffoldLevel } from '@/lib/errorInterpreter'
+import HintPanel from '@/components/HintPanel'
 
 interface Assignment {
   id: string
@@ -16,6 +17,8 @@ interface Assignment {
   scaffold_level: string
   due_date: string | null
   starter_code: string
+  hints_enabled: boolean
+  lesson_id: string | null
 }
 
 interface Submission {
@@ -63,6 +66,8 @@ export default function AssignmentEditorPage() {
   const [helpNote, setHelpNote] = useState('')
   const [showHelpModal, setShowHelpModal] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [runCount, setRunCount] = useState(0)
+  const [hasEditedSinceRun, setHasEditedSinceRun] = useState(false)
 
   useEffect(() => {
     if (loading) return
@@ -73,6 +78,23 @@ export default function AssignmentEditorPage() {
     if (!profile || !assignmentId) return
     loadAssignment()
   }, [profile, assignmentId])
+
+  useEffect(() => {
+    if (submission) {
+      setRunCount((submission as any).run_count || 0)
+      setHasEditedSinceRun((submission as any).has_edited_since_last_run || false)
+    }
+  }, [submission?.id])
+
+  const handleFindInDocs = (docsKey: string) => {
+    if (!assignment?.lesson_id) return
+    window.open(`/lesson/${assignment.lesson_id}?tab=docs&search=${encodeURIComponent(docsKey)}`, '_blank')
+  }
+
+  const handleFindInLesson = (hint: string) => {
+    if (!assignment?.lesson_id) return
+    window.open(`/lesson/${assignment.lesson_id}?tab=lesson&hint=${encodeURIComponent(hint)}`, '_blank')
+  }
 
   const loadAssignment = async () => {
     setDataLoading(true)
@@ -120,6 +142,12 @@ export default function AssignmentEditorPage() {
       setOutputError(true)
     } finally {
       setRunning(false)
+      if (submission) {
+        api.post<{ run_count: number }>('/code/track-run', {
+          submission_id: submission.id,
+          code_changed: hasEditedSinceRun,
+        }).then(r => { setRunCount(r.run_count); setHasEditedSinceRun(false) }).catch(() => {})
+      }
     }
   }
 
@@ -349,6 +377,22 @@ export default function AssignmentEditorPage() {
               )}
             </div>
           )}
+
+          {submission && assignment?.hints_enabled !== false && (
+            <HintPanel
+              submissionId={submission.id}
+              runCount={runCount}
+              hasEditedSinceRun={hasEditedSinceRun}
+              hint1UnlockedAt={(submission as any).hint_1_unlocked_at}
+              hint2UnlockedAt={(submission as any).hint_2_unlocked_at}
+              onHintUsed={() => {
+                // Re-fetch just the submission to update hint_*_unlocked_at
+                api.post<{ submission: any }>(`/code/open?assignment_id=${assignmentId}`, {})
+                  .then(data => setSubmission(data.submission))
+                  .catch(() => {})
+              }}
+            />
+          )}
         </div>
 
         {/* CENTER — EDITOR + OUTPUT */}
@@ -363,7 +407,7 @@ export default function AssignmentEditorPage() {
                 </div>
               </div>
             )}
-            <textarea ref={textareaRef} value={viewingCode !== null ? viewingCode : code} onChange={e => { if (viewingCode === null && !isSubmitted) setCode(e.target.value) }} onKeyDown={handleTab} readOnly={viewingCode !== null || isSubmitted} spellCheck={false} style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            <textarea ref={textareaRef} value={viewingCode !== null ? viewingCode : code} onChange={e => { if (viewingCode === null && !isSubmitted) { setCode(e.target.value); if (!hasEditedSinceRun && submission) { setHasEditedSinceRun(true); api.post(`/code/track-edit?submission_id=${submission.id}`, {}).catch(() => {}) } } }} onKeyDown={handleTab} readOnly={viewingCode !== null || isSubmitted} spellCheck={false} style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
           </div>
           <div style={{ minHeight: '160px', background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -374,8 +418,9 @@ export default function AssignmentEditorPage() {
               <ErrorPanel
                 stderr={output}
                 scaffoldLevel={assignment?.scaffold_level as ScaffoldLevel || 'typed_python'}
-                onFindInDocs={() => {}}
-                onFindInLesson={() => {}}
+                onFindInDocs={handleFindInDocs}
+                onFindInLesson={handleFindInLesson}
+                showLessonLink={!!assignment?.lesson_id}
               />
             ) : (
               <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: '#22C55E', lineHeight: 1.7, overflowY: 'auto', height: 'calc(160px - 32px)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>

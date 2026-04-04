@@ -1,4 +1,3 @@
-
 {
   "order": 8,
   "title": "Digital Footprints",
@@ -6,6 +5,10 @@
   "estimated_minutes": 15,
   "has_coding_exercise": false,
   "coding_instructions": "",
-  "coding_starter_code": ""
+  "coding_starter_code": "",
+  "standards": [
+    "IOC-1.A",
+    "IOC-2.A",
+    "IOC-2.B"
+  ]
 }
-

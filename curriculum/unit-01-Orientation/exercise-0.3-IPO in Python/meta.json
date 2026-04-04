@@ -1,12 +1,16 @@
 {
-  "order": 12,
-  "title": "IPO in Python",
-  "scaffold_level": "typed_python",
-  "estimated_minutes": 15,
-  "exercises": [
-    {
-      "type": "coding",
-      "instructions": "Practice the Input-Process-Output pattern in Python."
-    }
-  ]
+    "order": 12,
+    "title": "IPO in Python",
+    "scaffold_level": "typed_python",
+    "estimated_minutes": 15,
+    "exercises": [
+        {
+            "type": "coding",
+            "instructions": "Practice the Input-Process-Output pattern in Python."
+        }
+    ],
+    "standards": [
+        "AAP-1.A",
+        "AAP-2.A"
+    ]
 }

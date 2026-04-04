@@ -7,9 +7,10 @@ interface Props {
   scaffoldLevel: ScaffoldLevel
   onFindInDocs: (docsKey: string) => void
   onFindInLesson: (hint: string) => void
+  showLessonLink?: boolean
 }
 
-export default function ErrorPanel({ stderr, scaffoldLevel, onFindInDocs, onFindInLesson }: Props) {
+export default function ErrorPanel({ stderr, scaffoldLevel, onFindInDocs, onFindInLesson, showLessonLink = true }: Props) {
   const [dismissed, setDismissed] = useState(false)
 
   if (!stderr || dismissed) return null
@@ -65,12 +66,14 @@ export default function ErrorPanel({ stderr, scaffoldLevel, onFindInDocs, onFind
             📚 find in docs
           </button>
         )}
-        <button
-          onClick={() => onFindInLesson(interpretation.lessonHint)}
-          style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
-        >
-          📄 find in lesson
-        </button>
+        {showLessonLink && (
+          <button
+            onClick={() => onFindInLesson(interpretation.lessonHint)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+          >
+            📄 find in lesson
+          </button>
+        )}
 
         {/* RAW ERROR TOGGLE */}
         <RawErrorToggle stderr={stderr} />

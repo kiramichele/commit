@@ -9,6 +9,7 @@ interface UngradedItem {
   classroom_id: string
   classroom_name: string
   ungraded_count: number
+  assignment_type: string
 }
 
 export default function GradingQueue() {
@@ -43,7 +44,10 @@ export default function GradingQueue() {
         {items.map(item => (
           <Link
             key={item.assignment_id}
-            href={`/classroom/${item.classroom_id}/submissions/${item.assignment_id}`}
+            href={item.assignment_type === 'code' || !item.assignment_type
+              ? `/classroom/${item.classroom_id}/submissions/${item.assignment_id}`
+              : `/classroom/${item.classroom_id}/curriculum-submissions/${item.assignment_id}`
+            }
             style={{ textDecoration: 'none', display: 'block' }}
           >
             <div

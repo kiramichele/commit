@@ -421,6 +421,198 @@ async def submit_assignment(
 
 
 # ============================================================
+# HINT SYSTEM
+# ============================================================
+
+ANTHROPIC_CLIENT = None
+
+def get_anthropic():
+    global ANTHROPIC_CLIENT
+    if not ANTHROPIC_CLIENT:
+        import anthropic
+        ANTHROPIC_CLIENT = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    return ANTHROPIC_CLIENT
+
+
+class TrackRun(BaseModel):
+    submission_id: str
+    code_changed: bool
+
+
+@router.post("/track-run")
+async def track_run(
+    body: TrackRun,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Tracks run count and whether student edited before running. Gates hint availability."""
+    submission = (
+        supabase_admin.table("submissions")
+        .select("run_count, has_edited_since_last_run")
+        .eq("id", body.submission_id)
+        .single()
+        .execute()
+    )
+    if not submission.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+
+    current_runs = submission.data.get("run_count", 0)
+
+    supabase_admin.table("submissions").update({
+        "run_count": current_runs + 1,
+        "has_edited_since_last_run": False,
+    }).eq("id", body.submission_id).execute()
+
+    hint_1_available = (current_runs + 1) >= 2 and body.code_changed
+
+    return {
+        "run_count": current_runs + 1,
+        "hint_1_available": hint_1_available,
+    }
+
+
+@router.post("/track-edit")
+async def track_edit(
+    submission_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Called when student edits their code. Marks that they've edited since last run."""
+    supabase_admin.table("submissions").update({
+        "has_edited_since_last_run": True,
+    }).eq("id", submission_id).execute()
+    return {"ok": True}
+
+
+@router.post("/{submission_id}/hint/{level}")
+async def get_hint(
+    submission_id: str,
+    level: int,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a hint for a submission. Level 1: vague nudge. Level 2: targeted hint."""
+    if level not in (1, 2):
+        raise HTTPException(status_code=400, detail="Hint level must be 1 or 2.")
+
+    submission = (
+        supabase_admin.table("submissions")
+        .select("*, assignments!submissions_assignment_id_fkey(title, instructions, scaffold_level, hint_1, hint_2, hints_enabled, starter_code)")
+        .eq("id", submission_id)
+        .eq("student_id", user.profile_id)
+        .single()
+        .execute()
+    )
+
+    if not submission.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+
+    sub = submission.data
+    assignment = sub.get("assignments", {})
+    if assignment is None:
+        assignment = {}
+
+    teacher_hint = (assignment.get(f"hint_{level}") or "").strip()
+
+    if not assignment.get("hints_enabled", True):
+        raise HTTPException(status_code=403, detail="Hints are disabled for this assignment.")
+
+    run_count = sub.get("run_count", 0)
+
+    if level == 1 and run_count < 2:
+        raise HTTPException(status_code=403, detail="Run your code at least twice before getting a hint.")
+
+    if level == 2 and not sub.get("hint_1_unlocked_at"):
+        raise HTTPException(status_code=403, detail="Get hint 1 first.")
+
+    hint_text = teacher_hint if teacher_hint else None
+
+    if not hint_text:
+        hint_text = await _generate_ai_hint(
+            level=level,
+            assignment_title=assignment.get("title", ""),
+            instructions=assignment.get("instructions", ""),
+            scaffold_level=assignment.get("scaffold_level", "typed_python"),
+            student_code=sub.get("final_code", "") if level == 2 else None,
+            starter_code=assignment.get("starter_code", ""),
+        )
+
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"hint_count": (sub.get("hint_count", 0) + 1)}
+    if level == 1 and not sub.get("hint_1_unlocked_at"):
+        update_data["hint_1_unlocked_at"] = now
+    if level == 2 and not sub.get("hint_2_unlocked_at"):
+        update_data["hint_2_unlocked_at"] = now
+
+    supabase_admin.table("submissions").update(update_data).eq("id", submission_id).execute()
+
+    return {
+        "hint": hint_text,
+        "level": level,
+        "source": "teacher" if teacher_hint else "ai",
+    }
+
+
+async def _generate_ai_hint(
+    level: int,
+    assignment_title: str,
+    instructions: str,
+    scaffold_level: str,
+    student_code: str | None,
+    starter_code: str,
+) -> str:
+    """Generates a Socratic hint using the Anthropic API."""
+    SCAFFOLD_DESCRIPTIONS = {
+        "block_pseudo": "a beginner who is just learning programming concepts",
+        "typed_pseudo": "a beginner learning to express algorithms in text",
+        "block_python": "a student learning Python with significant support",
+        "typed_python": "a student learning Python independently",
+    }
+    audience = SCAFFOLD_DESCRIPTIONS.get(scaffold_level, "a high school student")
+
+    if level == 1:
+        system = f"""You are a supportive CS teacher giving a hint to {audience}.
+Give a SHORT, vague nudge (2-3 sentences max) that points them in the right direction WITHOUT revealing the answer.
+Focus on the concept they might be missing, not the specific code.
+Do NOT show any code. Do NOT solve the problem. Ask a guiding question if helpful.
+Be encouraging and warm."""
+        user_msg = f"""Assignment: {assignment_title}
+Instructions: {instructions}
+
+Give hint level 1 — a gentle conceptual nudge. Don't mention specific code."""
+    else:
+        system = f"""You are a supportive CS teacher giving a targeted hint to {audience}.
+The student has already received a general hint and is still stuck.
+Give a MORE SPECIFIC hint (3-4 sentences) that addresses what's wrong in their code WITHOUT fixing it for them.
+You may reference their code but do NOT rewrite it. Point out the specific area that needs attention.
+Be encouraging. Never say "the answer is" or directly solve it."""
+        user_msg = f"""Assignment: {assignment_title}
+Instructions: {instructions}
+
+Student's current code:
+```python
+{student_code or '# no code written yet'}
+```
+
+Starter code was:
+```python
+{starter_code or '# no starter code'}
+```
+
+Give hint level 2 — more targeted, referencing their specific code."""
+
+    try:
+        client = get_anthropic()
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=300,
+            system=system,
+            messages=[{"role": "user", "content": user_msg}]
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"AI hint generation failed: {e}")
+        return "Think about the core concept behind this problem. What does the assignment ask you to produce? Start there and work step by step."
+
+
+# ============================================================
 # COMMIT DIFF
 # Must come before the wildcard /{submission_id}/commits routes
 # ============================================================

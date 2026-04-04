@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import StreakBadge from '@/components/StreakBadge'
+import { StandardsBadgeList } from '@/components/Standards'
 
 interface Classroom {
   id: string
@@ -22,6 +23,7 @@ interface Assignment {
   assignment_type: string
   lesson_id: string | null
   is_graded: boolean
+  standards_tags: string[]
 }
 
 interface Submission {
@@ -354,7 +356,7 @@ function AssignmentKanbanCard({ card, classroomId, colColor, colBorder, onView }
   const isGraded = card.column === 'graded'
   const isSubmitted = card.column === 'submitted'
   const isInProgress = card.column === 'inprogress'
-  const isCode = !assignment.assignment_type || assignment.assignment_type === 'code'
+  const isCode = !assignment.assignment_type || assignment.assignment_type === 'code' || assignment.assignment_type === 'exercises'
   const badge = TYPE_BADGE[assignment.assignment_type] || TYPE_BADGE.code
 
   const accentColor = isGraded ? '#22C55E' : isSubmitted ? '#F59E0B' : isInProgress ? '#1A56DB' : '#D3D1C7'
@@ -392,6 +394,9 @@ function AssignmentKanbanCard({ card, classroomId, colColor, colBorder, onView }
               </span>
             )}
           </div>
+          {assignment.standards_tags?.length > 0 && (
+            <StandardsBadgeList tags={assignment.standards_tags} max={2} />
+          )}
 
           {/* GRADE DISPLAY */}
           {isGraded && submission?.grade != null && (

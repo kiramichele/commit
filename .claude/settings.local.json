@@ -12,7 +12,10 @@
       "Bash(mv __TRACKED_VAR__/lesson.html __TRACKED_VAR__/activity.html)",
       "Bash(mv __TRACKED_VAR__/lesson.html __TRACKED_VAR__/exercise.html)",
       "Bash(PYTHONIOENCODING=utf-8 backend/venv/Scripts/python.exe import_curriculum.py --dry-run)",
-      "Bash(./venv/Scripts/python.exe -c ':*)"
+      "Bash(./venv/Scripts/python.exe -c ':*)",
+      "Bash(grep -rl \"continue to\\\\|Continue to\\\\|next lesson\\\\|Next lesson\\\\|next activity\\\\|Next activity\" \"c:/Users/Kira/commit/curriculum/unit-01-Orientation/\"*.html)",
+      "Bash(grep -n -B2 -A5 \"Up next\\\\|Continue to\\\\|ready for Unit\" \"c:/Users/Kira/commit/curriculum/unit-01-Orientation/\"*/lesson.html \"c:/Users/Kira/commit/curriculum/unit-01-Orientation/\"*/activity.html)",
+      "Bash(./venv/Scripts/python.exe -c \"import main; print\\('ok'\\)\")"
     ]
   }
 }

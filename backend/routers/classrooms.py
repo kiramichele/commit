@@ -284,11 +284,9 @@ async def upload_avatar(file: UploadFile = File(...)):
 @router.get("/")
 async def list_classrooms(user: CurrentUser = Depends(get_current_user)):
     """Returns classrooms for the current user."""
-    client = get_user_client(user.access_token)
-
     if user.role in ("teacher", "admin"):
         response = (
-            client.table("classrooms")
+            supabase_admin.table("classrooms")
             .select("*, classroom_members(count)")
             .eq("teacher_id", user.profile_id)
             .eq("archived", False)
@@ -297,7 +295,7 @@ async def list_classrooms(user: CurrentUser = Depends(get_current_user)):
         )
     else:
         response = (
-            client.table("classroom_members")
+            supabase_admin.table("classroom_members")
             .select("classroom_id, classrooms(*)")
             .eq("student_id", user.profile_id)
             .execute()

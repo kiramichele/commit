@@ -88,7 +88,7 @@ async def get_all_responses(
     """Returns all student responses for a lesson (teacher only)."""
     result = (
         supabase_admin.table("exercise_responses")
-        .select("*, profiles!exercise_responses_student_id_fkey(display_name, avatar_url)")
+        .select("*, profiles!exercise_responses_student_id_fkey(display_name)")
         .eq("lesson_id", lesson_id)
         .order("exercise_index")
         .order("updated_at", desc=True)

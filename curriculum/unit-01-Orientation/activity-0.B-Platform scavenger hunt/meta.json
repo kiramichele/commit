@@ -3,5 +3,8 @@
   "title": "Platform Scavenger Hunt",
   "scaffold_level": "typed_python",
   "estimated_minutes": 20,
-  "activity_file_path": "unit-01-Orientation/activity-0.B-Platform scavenger hunt/lesson.html"
+  "activity_file_path": "unit-01-Orientation/activity-0.B-Platform scavenger hunt/lesson.html",
+  "standards": [
+    "CRD-2.A"
+  ]
 }

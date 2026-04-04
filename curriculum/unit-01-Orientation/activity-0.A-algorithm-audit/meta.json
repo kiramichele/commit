@@ -1,0 +1,12 @@
+{
+  "order": 2,
+  "title": "Algorithm Audit",
+  "scaffold_level": "typed_python",
+  "estimated_minutes": 20,
+  "activity_file_path": "unit-01-Orientation/algorithm-audit-0.A/lesson.html",
+  "standards": [
+    "CRD-1.A",
+    "AAP-2.A",
+    "IOC-1.A"
+  ]
+}

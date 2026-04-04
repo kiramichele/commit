@@ -5,6 +5,10 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import DiffViewer from '@/components/DiffViewer'
+import { StandardsBadgeList } from '@/components/Standards'
+import { ActivityResponseSummary } from '@/components/ActivityResponsesView'
+import AssignmentAnalytics from '@/components/AssignmentAnalytics'
+
 interface Assignment {
   id: string
   title: string
@@ -13,6 +17,7 @@ interface Assignment {
   scaffold_level: string
   due_date: string | null
   starter_code: string
+  standards_tags: string[]
 }
 
 interface Submission {
@@ -27,8 +32,13 @@ interface Submission {
   commit_count: number
   fast_submit_flag: boolean
   time_on_task_seconds: number | null
+  hint_count: number
+  hint_1_unlocked_at: string | null
+  hint_2_unlocked_at: string | null
   penalized_grade: number | null
   late_penalty_applied: number | null
+  assignment_type: string
+  lesson_id: string | null
   profiles: {
     display_name: string
     email: string
@@ -184,6 +194,9 @@ export default function SubmissionsPage() {
         <Link href={`/classroom/${classroomId}`} style={{ fontSize: '13px', color: '#5F5E5A', textDecoration: 'none', fontWeight: 500 }}>classroom</Link>
         <span style={{ color: '#D3D1C7' }}>/</span>
         <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{assignment?.title}</span>
+        {assignment?.standards_tags?.length > 0 && (
+          <StandardsBadgeList tags={assignment.standards_tags} max={6} />
+        )}
 
         {/* STATS */}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem', fontSize: '12px', color: '#888780' }}>
@@ -192,6 +205,8 @@ export default function SubmissionsPage() {
           {lateCount > 0 && <span><strong style={{ color: '#991B1B' }}>{lateCount}</strong> late</span>}
         </div>
       </nav>
+
+      <AssignmentAnalytics assignmentId={assignmentId} />
 
       {/* MAIN — TWO PANEL */}
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: selected ? '320px 1fr' : '1fr', minHeight: 0 }}>
@@ -426,8 +441,33 @@ export default function SubmissionsPage() {
                         </span>
                       </div>
                     )}
+                    {(selected.hint_count || 0) > 0 ? (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#888780' }}>hints used</span>
+                        <span style={{ color: '#854D0E', fontWeight: 600 }}>
+                          {selected.hint_count} hint{selected.hint_count !== 1 ? 's' : ''}
+                          {selected.hint_1_unlocked_at && ' · h1'}
+                          {selected.hint_2_unlocked_at && ' · h2'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ color: '#888780' }}>hints used</span>
+                        <span style={{ color: '#888780' }}>none</span>
+                      </div>
+                    )}
                   </div>
                 </div>
+
+                {selected.assignment_type !== 'code' && selected.lesson_id && (
+                  <div style={{ marginTop: '1rem' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#888780', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>activity responses</div>
+                    <ActivityResponseSummary lessonId={selected.lesson_id} />
+                    <Link href={`/activity/${selected.lesson_id}/responses`} style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none', display: 'block', marginTop: '8px' }}>
+                      view all student responses →
+                    </Link>
+                  </div>
+                )}
               </div>
             </div>
           </div>

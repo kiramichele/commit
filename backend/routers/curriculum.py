@@ -50,6 +50,124 @@ async def get_unit(
     return unit.data
 
 
+# ============================================================
+# LESSON COMPLETIONS
+# ============================================================
+
+@router.post("/lessons/{lesson_id}/complete")
+async def mark_lesson_complete(
+    lesson_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Marks a lesson as complete for the current student."""
+    from datetime import datetime, timezone
+
+    existing = (
+        supabase_admin.table("lesson_completions")
+        .select("id, completed_at")
+        .eq("lesson_id", lesson_id)
+        .eq("student_id", user.profile_id)
+        .execute()
+    )
+
+    if existing.data:
+        return existing.data[0]
+
+    result = supabase_admin.table("lesson_completions").insert({
+        "student_id": user.profile_id,
+        "lesson_id": lesson_id,
+        "completed_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+
+    try:
+        supabase_admin.rpc(
+            "update_student_streak",
+            {"p_student_id": user.profile_id}
+        ).execute()
+    except Exception as e:
+        print(f"Streak update failed: {e}")
+
+    return result.data[0] if result.data else {}
+
+
+@router.get("/lessons/{lesson_id}/completion")
+async def get_lesson_completion(
+    lesson_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the current student's completion status for a lesson."""
+    result = (
+        supabase_admin.table("lesson_completions")
+        .select("id, completed_at")
+        .eq("lesson_id", lesson_id)
+        .eq("student_id", user.profile_id)
+        .execute()
+    )
+    return {"completed": bool(result.data), "completed_at": result.data[0]["completed_at"] if result.data else None}
+
+
+@router.get("/lessons/{lesson_id}/completions/count")
+async def get_lesson_completion_count(
+    lesson_id: str,
+    classroom_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Returns how many students in a classroom have completed a lesson."""
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    )
+    total = len(members.data or [])
+    student_ids = [m["student_id"] for m in (members.data or [])]
+
+    if not student_ids:
+        return {"completed": 0, "total": 0}
+
+    completions = (
+        supabase_admin.table("lesson_completions")
+        .select("id")
+        .eq("lesson_id", lesson_id)
+        .in_("student_id", student_ids)
+        .execute()
+    )
+
+    return {"completed": len(completions.data or []), "total": total}
+
+
+@router.get("/classroom/{classroom_id}/completions")
+async def get_classroom_completions(
+    classroom_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns all lesson completions for the current student in a classroom."""
+    unlocked = (
+        supabase_admin.table("classroom_lesson_unlocks")
+        .select("lesson_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    )
+    lesson_ids = [u["lesson_id"] for u in (unlocked.data or [])]
+
+    if not lesson_ids:
+        return []
+
+    completions = (
+        supabase_admin.table("lesson_completions")
+        .select("lesson_id, completed_at")
+        .eq("student_id", user.profile_id)
+        .in_("lesson_id", lesson_ids)
+        .execute()
+    )
+
+    return completions.data or []
+
+
+# ============================================================
+# LESSON DETAILS
+# ============================================================
+
 @router.get("/lessons/{lesson_id}")
 async def get_lesson(
     lesson_id: str,

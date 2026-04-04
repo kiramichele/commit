@@ -7,7 +7,11 @@
         {
             "type": "coding",
             "instructions": "Parse a real app's privacy policy in Python and flag every sentence that mentions selling your data."
-            
         }
+    ],
+    "standards": [
+        "IOC-2.A",
+        "IOC-2.B",
+        "AAP-1.A"
     ]
 }

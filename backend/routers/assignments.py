@@ -4,7 +4,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import uuid
 
 from auth_deps import CurrentUser, get_current_user, require_teacher
@@ -29,6 +29,10 @@ class AssignmentCreate(BaseModel):
     allow_collab: bool = False
     assignment_type: str = 'code'
     is_graded: bool = True
+    standards_tags: Optional[List[str]] = []
+    hints_enabled: bool = True
+    hint_1: Optional[str] = None
+    hint_2: Optional[str] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -39,6 +43,9 @@ class AssignmentUpdate(BaseModel):
     scaffold_level: Optional[str] = None
     due_date: Optional[str] = None
     allow_collab: Optional[bool] = None
+    hints_enabled: Optional[bool] = None
+    hint_1: Optional[str] = None
+    hint_2: Optional[str] = None
 
 
 # ============================================================
@@ -65,7 +72,7 @@ async def get_ungraded_queue(
 
     assignments = (
         supabase_admin.table("assignments")
-        .select("id, title, classroom_id")
+        .select("id, title, classroom_id, assignment_type")
         .in_("classroom_id", classroom_ids)
         .execute()
     )
@@ -90,6 +97,7 @@ async def get_ungraded_queue(
                 "classroom_id": assignment["classroom_id"],
                 "classroom_name": classroom_map.get(assignment["classroom_id"], "Unknown"),
                 "ungraded_count": count,
+                "assignment_type": assignment.get("assignment_type", "code"),
             })
 
     results.sort(key=lambda x: x["ungraded_count"], reverse=True)
@@ -141,12 +149,16 @@ async def create_assignment(
             "title": body.title,
             "instructions": body.instructions,
             "starter_code": body.starter_code,
-            "min_commits": max(1, body.min_commits),
+            "min_commits": max(0, body.min_commits) if body.assignment_type != 'code' else max(1, body.min_commits),
             "scaffold_level": body.scaffold_level,
             "due_date": body.due_date or None,
             "allow_collab": body.allow_collab,
             "assignment_type": body.assignment_type,
             "is_graded": body.is_graded,
+            "standards_tags": body.standards_tags or [],
+            "hints_enabled": body.hints_enabled,
+            "hint_1": body.hint_1,
+            "hint_2": body.hint_2,
         })
         .execute()
     )
@@ -155,6 +167,103 @@ async def create_assignment(
         raise HTTPException(status_code=500, detail="Failed to create assignment.")
 
     return result.data[0]
+
+
+@router.get("/{assignment_id}/analytics")
+async def get_assignment_analytics(
+    assignment_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Returns analytics for a single assignment."""
+    from datetime import datetime, timezone
+
+    assignment = (
+        supabase_admin.table("assignments")
+        .select("id, classroom_id, title, min_commits")
+        .eq("id", assignment_id)
+        .single()
+        .execute()
+    )
+    if not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+
+    classroom_id = assignment.data["classroom_id"]
+
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    )
+    total_students = len(members.data or [])
+
+    if total_students == 0:
+        return {
+            "total_students": 0, "submitted_count": 0, "submission_rate": 0,
+            "graded_count": 0, "avg_grade": None, "avg_commits": None,
+            "avg_time_to_submit_minutes": None,
+            "grade_distribution": {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0},
+            "hint_usage": {"none": 0, "hint1_only": 0, "hint2": 0},
+        }
+
+    submissions = (
+        supabase_admin.table("submissions")
+        .select("id, submitted_at, grade, first_opened_at, hint_count, hint_1_unlocked_at, hint_2_unlocked_at")
+        .eq("assignment_id", assignment_id)
+        .execute()
+    )
+    subs = submissions.data or []
+
+    submitted_subs = [s for s in subs if s.get("submitted_at")]
+    graded_subs = [s for s in subs if s.get("grade") is not None]
+
+    grades = [s["grade"] for s in graded_subs]
+    avg_grade = round(sum(grades) / len(grades), 1) if grades else None
+
+    dist = {"A": 0, "B": 0, "C": 0, "D": 0, "F": 0}
+    for g in grades:
+        if g >= 90: dist["A"] += 1
+        elif g >= 80: dist["B"] += 1
+        elif g >= 70: dist["C"] += 1
+        elif g >= 60: dist["D"] += 1
+        else: dist["F"] += 1
+
+    commit_counts = []
+    for s in submitted_subs:
+        count = supabase_admin.table("code_commits").select("id", count="exact").eq("submission_id", s["id"]).execute()
+        commit_counts.append(count.count or 0)
+    avg_commits = round(sum(commit_counts) / len(commit_counts), 1) if commit_counts else None
+
+    times = []
+    for s in submitted_subs:
+        if s.get("first_opened_at") and s.get("submitted_at"):
+            try:
+                opened = datetime.fromisoformat(s["first_opened_at"].replace("Z", "+00:00"))
+                submitted = datetime.fromisoformat(s["submitted_at"].replace("Z", "+00:00"))
+                minutes = (submitted - opened).total_seconds() / 60
+                if minutes > 0:
+                    times.append(minutes)
+            except Exception:
+                pass
+    avg_time = round(sum(times) / len(times), 0) if times else None
+
+    hint_usage = {
+        "none": sum(1 for s in subs if not s.get("hint_1_unlocked_at")),
+        "hint1_only": sum(1 for s in subs if s.get("hint_1_unlocked_at") and not s.get("hint_2_unlocked_at")),
+        "hint2": sum(1 for s in subs if s.get("hint_2_unlocked_at")),
+    }
+
+    return {
+        "total_students": total_students,
+        "submitted_count": len(submitted_subs),
+        "submission_rate": round(len(submitted_subs) / total_students * 100),
+        "graded_count": len(graded_subs),
+        "avg_grade": avg_grade,
+        "avg_commits": avg_commits,
+        "avg_time_to_submit_minutes": int(avg_time) if avg_time else None,
+        "grade_distribution": dist,
+        "hint_usage": hint_usage,
+    }
 
 
 @router.get("/{assignment_id}")

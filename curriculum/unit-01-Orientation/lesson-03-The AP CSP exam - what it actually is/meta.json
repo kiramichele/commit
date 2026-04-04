@@ -1,4 +1,3 @@
-
 {
   "order": 6,
   "title": "The AP CSP exam, decoded",
@@ -6,6 +5,8 @@
   "estimated_minutes": 15,
   "has_coding_exercise": false,
   "coding_instructions": "",
-  "coding_starter_code": ""
+  "coding_starter_code": "",
+  "standards": [
+    "CRD-1.A"
+  ]
 }
-

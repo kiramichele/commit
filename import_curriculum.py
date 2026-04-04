@@ -127,6 +127,7 @@ def import_lesson(lesson_dir: Path, unit_id: str, dry_run: bool):
     scaffold_level = meta.get("scaffold_level", "typed_python")
     estimated_minutes = meta.get("estimated_minutes", 20)
     exercises = meta.get("exercises", [])
+    standards = meta.get("standards", [])
 
     # Infer has_coding_exercise from exercises array or legacy field
     has_coding = (
@@ -152,6 +153,7 @@ def import_lesson(lesson_dir: Path, unit_id: str, dry_run: bool):
         supabase.table("lessons").update({
             "title": title,
             "scaffold_level": scaffold_level,
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).eq("id", lesson_id).execute()
     else:
@@ -160,6 +162,7 @@ def import_lesson(lesson_dir: Path, unit_id: str, dry_run: bool):
             "order_index": order,
             "title": title,
             "scaffold_level": scaffold_level,
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).execute()
         lesson_id = result.data[0]["id"]
@@ -224,6 +227,7 @@ def import_activity(activity_dir: Path, unit_id: str, dry_run: bool):
     order = meta.get("order", 99)
     title = meta.get("title", activity_dir.name)
     estimated_minutes = meta.get("estimated_minutes", 20)
+    standards = meta.get("standards", [])
 
     log(f"  Activity {order}: {title}", 1)
 
@@ -235,14 +239,13 @@ def import_activity(activity_dir: Path, unit_id: str, dry_run: bool):
         log(f"[dry-run] would upload activity.html for: {title}", 2)
         return
 
-    # Activities are stored as lessons with scaffold_level='typed_python'
-    # The activity_file_path is what makes them render in the activity viewer
     existing = supabase.table("lessons").select("id").eq("unit_id", unit_id).eq("order_index", order).execute()
     if existing.data:
         lesson_id = existing.data[0]["id"]
         supabase.table("lessons").update({
             "title": title,
             "scaffold_level": "typed_python",
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).eq("id", lesson_id).execute()
     else:
@@ -251,6 +254,7 @@ def import_activity(activity_dir: Path, unit_id: str, dry_run: bool):
             "order_index": order,
             "title": title,
             "scaffold_level": "typed_python",
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).execute()
         lesson_id = result.data[0]["id"]
@@ -302,6 +306,7 @@ def import_exercise(exercise_dir: Path, unit_id: str, dry_run: bool):
     estimated_minutes = meta.get("estimated_minutes", 20)
     exercises = meta.get("exercises", [])
     scaffold_level = meta.get("scaffold_level", "typed_python")
+    standards = meta.get("standards", [])
 
     has_coding = any(e.get("type") == "coding" for e in exercises)
 
@@ -317,6 +322,7 @@ def import_exercise(exercise_dir: Path, unit_id: str, dry_run: bool):
         supabase.table("lessons").update({
             "title": title,
             "scaffold_level": scaffold_level,
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).eq("id", lesson_id).execute()
     else:
@@ -325,6 +331,7 @@ def import_exercise(exercise_dir: Path, unit_id: str, dry_run: bool):
             "order_index": order,
             "title": title,
             "scaffold_level": scaffold_level,
+            "standards_tags": standards if standards else None,
             "is_published": True,
         }).execute()
         lesson_id = result.data[0]["id"]

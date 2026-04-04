@@ -3,5 +3,9 @@
   "title": "Score a Create PT Sample",
   "scaffold_level": "typed_python",
   "estimated_minutes": 20,
-  "activity_file_path": "unit-01-Orientation/activity-0.C-Score a Create PT Sample/lesson.html"
+  "activity_file_path": "unit-01-Orientation/activity-0.C-Score a Create PT Sample/lesson.html",
+  "standards": [
+    "CRD-2.A",
+    "CRD-2.B"
+  ]
 }
