@@ -1,10 +1,5 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
-  webpack: (config) => {
-    config.cache = false  // reduces memory usage during build
-    return config
-  },
-};
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
