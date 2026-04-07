@@ -8,6 +8,7 @@ interface Profile {
   display_name: string
   email: string
   approval_status: string
+  avatar_url?: string | null
 }
 
 interface AuthContextType {

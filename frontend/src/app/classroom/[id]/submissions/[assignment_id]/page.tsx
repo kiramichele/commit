@@ -194,8 +194,8 @@ export default function SubmissionsPage() {
         <Link href={`/classroom/${classroomId}`} style={{ fontSize: '13px', color: '#5F5E5A', textDecoration: 'none', fontWeight: 500 }}>classroom</Link>
         <span style={{ color: '#D3D1C7' }}>/</span>
         <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{assignment?.title}</span>
-        {assignment?.standards_tags?.length > 0 && (
-          <StandardsBadgeList tags={assignment.standards_tags} max={6} />
+        {(assignment?.standards_tags?.length ?? 0) > 0 && (
+          <StandardsBadgeList tags={assignment!.standards_tags} max={6} />
         )}
 
         {/* STATS */}
