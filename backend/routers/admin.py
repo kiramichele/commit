@@ -57,8 +57,6 @@ async def review_application(
         .update({"approval_status": body.action})
         .eq("id", profile_id)
         .eq("role", "teacher")
-        .select()
-        .single()
         .execute()
     )
     if not response.data:
