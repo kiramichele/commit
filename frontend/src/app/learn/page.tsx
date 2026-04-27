@@ -361,7 +361,9 @@ function AssignmentKanbanCard({ card, classroomId, colColor, colBorder, onView }
 
   const accentColor = isGraded ? '#22C55E' : isSubmitted ? '#F59E0B' : isInProgress ? '#1A56DB' : '#D3D1C7'
 
-  const href = isCode
+  const href = !assignment.assignment_type
+    || assignment.assignment_type === 'code'
+    || !assignment.lesson_id
     ? `/classroom/${classroomId}/assignment/${assignment.id}`
     : getCurriculumHref(assignment)
 

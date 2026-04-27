@@ -8,7 +8,7 @@
 //   const classroom  = await api.post('/classrooms', { name: 'Period 1' })
 // ============================================================
 
-const API_URL = 'http://localhost:8888'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8888'
 
 function getToken(): string | null {
   if (typeof window === 'undefined') return null

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/lib/auth-context'
 
 export default function LoginPage() {
+  console.log('API URL:', process.env.NEXT_PUBLIC_API_URL)
   const router = useRouter()
   const { login: authLogin } = useAuth()
   const [email, setEmail] = useState('')
