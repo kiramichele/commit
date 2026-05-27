@@ -5,6 +5,9 @@
 # endpoint that writes to Supabase Storage. Replaces import_curriculum.py.
 # ============================================================
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import Optional, List, Any
@@ -607,6 +610,142 @@ async def update_curriculum_assignment(
 @router.delete("/assignments/{assignment_id}", status_code=204)
 async def delete_curriculum_assignment(assignment_id: str, user: CurrentUser = Depends(require_admin)):
     supabase_admin.table("curriculum_assignments").delete().eq("id", assignment_id).execute()
+
+
+# ============================================================
+# QUIZ QUESTIONS (per curriculum assignment, type=quiz)
+# ============================================================
+
+@router.get("/assignments/{assignment_id}/questions")
+async def list_quiz_questions(assignment_id: str, user: CurrentUser = Depends(require_admin)):
+    response = (
+        supabase_admin.table("quiz_questions")
+        .select("*")
+        .eq("curriculum_assignment_id", assignment_id)
+        .order("order_index")
+        .execute()
+    )
+    return response.data or []
+
+
+@router.post("/assignments/{assignment_id}/questions/upload-csv")
+async def upload_quiz_questions_csv(
+    assignment_id: str,
+    file: UploadFile = File(...),
+    replace: bool = Form(True),
+    user: CurrentUser = Depends(require_admin),
+):
+    """
+    Parses an uploaded CSV and (re)populates the quiz questions for the
+    assignment.
+
+    Expected columns (case-insensitive, order-insensitive):
+      question_type, question, code, a, b, c, d, correct_answer
+    """
+    # Sanity: assignment must exist and be a quiz
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, assignment_type")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not assignment or not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    if assignment.data.get("assignment_type") != "quiz":
+        raise HTTPException(status_code=400, detail="Assignment is not a quiz.")
+
+    body = (await file.read()).decode("utf-8", errors="replace")
+    # Handle BOM and trim
+    body = body.lstrip("﻿").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="Empty CSV.")
+
+    reader = csv.DictReader(io.StringIO(body))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="No CSV header found.")
+
+    # Normalize headers
+    field_map = {name.strip().lower(): name for name in reader.fieldnames}
+    required = ["question_type", "question", "correct_answer"]
+    missing = [r for r in required if r not in field_map]
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing CSV columns: {', '.join(missing)}")
+
+    def cell(row, key):
+        original = field_map.get(key)
+        return (row.get(original) or "").strip() if original else ""
+
+    rows = []
+    errors: list[str] = []
+    for line_num, row in enumerate(reader, start=2):  # account for header on line 1
+        qtype = cell(row, "question_type").lower().replace("-", "_")
+        if qtype in ("mc", "multiple choice", "multiple_choice"):
+            qtype = "multiple_choice"
+        elif qtype in ("cr", "constructed response", "constructed_response", "free_response"):
+            qtype = "constructed_response"
+        else:
+            errors.append(f"Row {line_num}: unknown question_type '{qtype}'")
+            continue
+
+        qtext = cell(row, "question")
+        if not qtext:
+            errors.append(f"Row {line_num}: 'question' is empty")
+            continue
+
+        code_block = cell(row, "code") or None
+        choice_a = cell(row, "a") or None
+        choice_b = cell(row, "b") or None
+        choice_c = cell(row, "c") or None
+        choice_d = cell(row, "d") or None
+        correct = (cell(row, "correct_answer") or "").lower() or None
+
+        if qtype == "multiple_choice":
+            if not (choice_a and choice_b):
+                errors.append(f"Row {line_num}: multiple_choice needs at least choices a and b")
+                continue
+            if correct not in ("a", "b", "c", "d"):
+                errors.append(f"Row {line_num}: correct_answer must be a/b/c/d for multiple_choice")
+                continue
+        else:
+            # constructed response: no choices, no correct_answer required
+            choice_a = choice_b = choice_c = choice_d = None
+            correct = None
+
+        rows.append({
+            "curriculum_assignment_id": assignment_id,
+            "order_index": len(rows) + 1,
+            "question_type": qtype,
+            "question_text": qtext,
+            "code_block": code_block,
+            "choice_a": choice_a,
+            "choice_b": choice_b,
+            "choice_c": choice_c,
+            "choice_d": choice_d,
+            "correct_answer": correct,
+        })
+
+    if errors and not rows:
+        raise HTTPException(status_code=400, detail="No valid rows. " + " | ".join(errors[:5]))
+
+    if replace:
+        supabase_admin.table("quiz_questions").delete().eq("curriculum_assignment_id", assignment_id).execute()
+
+    inserted = 0
+    if rows:
+        result = supabase_admin.table("quiz_questions").insert(rows).execute()
+        inserted = len(result.data or [])
+
+    return {"inserted": inserted, "errors": errors}
+
+
+@router.delete("/assignments/{assignment_id}/questions/{question_id}", status_code=204)
+async def delete_quiz_question(
+    assignment_id: str,
+    question_id: str,
+    user: CurrentUser = Depends(require_admin),
+):
+    supabase_admin.table("quiz_questions").delete().eq("id", question_id).eq("curriculum_assignment_id", assignment_id).execute()
 
 
 # ============================================================
