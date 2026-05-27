@@ -69,6 +69,7 @@ class LessonUpdate(BaseModel):
     standards_tags: Optional[List[str]] = None
     is_published: Optional[bool] = None
     content: Optional[LessonContent] = None
+    unit_id: Optional[str] = None  # supports moving the lesson to another unit
 
 
 # ============================================================
@@ -304,6 +305,7 @@ class ProjectUpdate(BaseModel):
     scaffold_level: Optional[str] = None
     standards_tags: Optional[List[str]] = None
     is_published: Optional[bool] = None
+    unit_id: Optional[str] = None  # supports moving the project to another unit
 
 
 class ProjectStepCreate(BaseModel):
@@ -494,6 +496,7 @@ class CurriculumAssignmentUpdate(BaseModel):
     hint_2: Optional[str] = None
     is_published: Optional[bool] = None
     html_body: Optional[str] = None  # set to "" to clear, None to leave unchanged
+    unit_id: Optional[str] = None  # supports moving the assignment to another unit
 
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project"}
