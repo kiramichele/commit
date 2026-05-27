@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import HelpQueue from '@/components/HelpQueue'
 import LatePenaltySettings from '@/components/LatePenaltySettings'
+import GradeWeightSettings from '@/components/GradeWeightSettings'
 import { StandardsPicker } from '@/components/Standards'
 import InstructionsUpload from '@/components/InstructionsUpload'
 
@@ -56,7 +57,16 @@ interface NewAssignment {
   min_commits: number
   scaffold_level: string
   starter_code: string
+  assignment_type: string
 }
+
+const ASSIGNMENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'code',     label: 'Coding' },
+  { value: 'activity', label: 'Interactive activity' },
+  { value: 'checkin',  label: 'Check-in' },
+  { value: 'quiz',     label: 'Quiz' },
+  { value: 'project',  label: 'Project' },
+]
 
 const SCAFFOLD_LABELS: Record<string, string> = {
   block_pseudo: 'Block pseudocode',
@@ -94,7 +104,7 @@ export default function ClassroomPage() {
   const [newStudent, setNewStudent] = useState({ display_name: '', email: '', password: '' })
   const [newAssignment, setNewAssignment] = useState<NewAssignment>({
     title: '', instructions: '', due_date: '', min_commits: 3,
-    scaffold_level: 'typed_python', starter_code: '',
+    scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code',
   })
   const [standardsTags, setStandardsTags] = useState<string[]>([])
   const [hintsEnabled, setHintsEnabled] = useState(true)
@@ -164,13 +174,14 @@ export default function ClassroomPage() {
         min_commits: newAssignment.min_commits,
         scaffold_level: newAssignment.scaffold_level,
         starter_code: newAssignment.starter_code,
+        assignment_type: newAssignment.assignment_type,
         standards_tags: standardsTags,
         hints_enabled: hintsEnabled,
         hint_1: hint1 || null,
         hint_2: hint2 || null,
       })
       setShowAddAssignment(false)
-      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '' })
+      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code' })
       setStandardsTags([])
       setHintsEnabled(true)
       setHint1('')
@@ -448,6 +459,10 @@ export default function ClassroomPage() {
                 late_penalty_max: classroom.late_penalty_max ?? 0,
               }}
             />
+
+            <div style={{ marginTop: '1.5rem' }}>
+              <GradeWeightSettings classroomId={classroomId} />
+            </div>
           </div>
         )}
       </div>
@@ -486,6 +501,12 @@ export default function ClassroomPage() {
                 <textarea value={newAssignment.instructions} onChange={e => setNewAssignment(s => ({ ...s, instructions: e.target.value }))} rows={3} placeholder="Describe what students need to do..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>assignment type</label>
+                  <select value={newAssignment.assignment_type} onChange={e => setNewAssignment(s => ({ ...s, assignment_type: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                    {ASSIGNMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
                 <div>
                   <label style={labelStyle}>scaffold level</label>
                   <select value={newAssignment.scaffold_level} onChange={e => setNewAssignment(s => ({ ...s, scaffold_level: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>

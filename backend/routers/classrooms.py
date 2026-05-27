@@ -55,6 +55,15 @@ class ClassroomSettings(BaseModel):
     late_penalty_max: Optional[float] = None
 
 
+# Per-classroom grade weights — values are percentages 0-100.
+class GradeWeights(BaseModel):
+    code: int = 35
+    activity: int = 10
+    checkin: int = 5
+    quiz: int = 15
+    project: int = 35
+
+
 # ============================================================
 # HELPERS
 # ============================================================
@@ -407,6 +416,58 @@ async def get_classroom(
     if not response.data:
         raise HTTPException(status_code=404, detail="Classroom not found.")
     return response.data
+
+
+@router.get("/{classroom_id}/grade-weights")
+async def get_grade_weights(
+    classroom_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Returns the per-classroom grade weight config."""
+    response = (
+        supabase_admin.table("classrooms")
+        .select("grade_weights")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+    return response.data.get("grade_weights") or {
+        "code": 35, "project": 35, "quiz": 15, "activity": 10, "checkin": 5,
+    }
+
+
+@router.patch("/{classroom_id}/grade-weights")
+async def update_grade_weights(
+    classroom_id: str,
+    body: GradeWeights,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Updates the per-classroom grade weight config. Values must sum to 100."""
+    total = body.code + body.activity + body.checkin + body.quiz + body.project
+    if total != 100:
+        raise HTTPException(status_code=400, detail=f"Weights must sum to 100 (got {total}).")
+
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .single()
+        .execute()
+    )
+    if not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    result = (
+        supabase_admin.table("classrooms")
+        .update({"grade_weights": body.model_dump()})
+        .eq("id", classroom_id)
+        .execute()
+    )
+    return result.data[0].get("grade_weights") if result.data else body.model_dump()
 
 
 @router.patch("/{classroom_id}/settings")

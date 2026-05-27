@@ -27,7 +27,7 @@ class AssignmentCreate(BaseModel):
     scaffold_level: str = 'typed_python'
     due_date: Optional[str] = None
     allow_collab: bool = False
-    assignment_type: str = 'code'
+    assignment_type: str = 'code'  # code | activity | checkin | quiz | project
     is_graded: bool = True
     standards_tags: Optional[List[str]] = []
     hints_enabled: bool = True
@@ -140,6 +140,9 @@ async def create_assignment(
 
     if body.scaffold_level not in ('block_pseudo', 'typed_pseudo', 'block_python', 'typed_python'):
         raise HTTPException(status_code=400, detail="Invalid scaffold level.")
+
+    if body.assignment_type not in ('code', 'activity', 'checkin', 'quiz', 'project'):
+        raise HTTPException(status_code=400, detail="Invalid assignment type.")
 
     result = (
         supabase_admin.table("assignments")
