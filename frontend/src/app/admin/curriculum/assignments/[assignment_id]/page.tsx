@@ -21,6 +21,8 @@ interface CurriculumAssignment {
   hint_1: string | null
   hint_2: string | null
   is_published: boolean
+  html_file_path: string | null
+  html_body?: string | null
 }
 
 const TYPE_OPTIONS = [
@@ -54,6 +56,11 @@ export default function CurriculumAssignmentEditor() {
   const [hintsEnabled, setHintsEnabled] = useState(true)
   const [hint1, setHint1] = useState('')
   const [hint2, setHint2] = useState('')
+  const [htmlBody, setHtmlBody] = useState('')
+  const [uploading, setUploading] = useState(false)
+
+  const isCoding = assignmentType === 'code'
+  const isActivity = assignmentType === 'activity'
 
   useEffect(() => {
     if (authLoading) return
@@ -81,10 +88,24 @@ export default function CurriculumAssignmentEditor() {
       setHintsEnabled(data.hints_enabled)
       setHint1(data.hint_1 || '')
       setHint2(data.hint_2 || '')
+      setHtmlBody(data.html_body || '')
     } catch (err: any) {
       alert(err.message || 'Failed to load assignment')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const text = await file.text()
+      setHtmlBody(text)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
     }
   }
 
@@ -98,15 +119,16 @@ export default function CurriculumAssignmentEditor() {
         title,
         assignment_type: assignmentType,
         scaffold_level: scaffoldLevel,
-        min_commits: minCommits,
+        min_commits: isCoding ? minCommits : 0,
         standards_tags: standardsList.length ? standardsList : null,
         is_published: isPublished,
         allow_collab: allowCollab,
         instructions,
-        starter_code: starterCode,
+        starter_code: isCoding ? starterCode : '',
         hints_enabled: hintsEnabled,
         hint_1: hint1 || null,
         hint_2: hint2 || null,
+        html_body: isActivity ? htmlBody : null,
       })
       alert('Saved')
     } catch (err: any) {
@@ -175,21 +197,25 @@ export default function CurriculumAssignmentEditor() {
                 </select>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px 120px', gap: '12px', alignItems: 'end' }}>
-              <div>
-                <label style={label}>scaffold level</label>
-                <select value={scaffoldLevel} onChange={e => setScaffoldLevel(e.target.value)} style={input}>
-                  {SCAFFOLD_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isCoding ? '1fr 1fr 120px 120px' : '1fr 120px', gap: '12px', alignItems: 'end' }}>
+              {isCoding && (
+                <div>
+                  <label style={label}>scaffold level</label>
+                  <select value={scaffoldLevel} onChange={e => setScaffoldLevel(e.target.value)} style={input}>
+                    {SCAFFOLD_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label style={label}>standards (comma-separated)</label>
                 <input value={standardsText} onChange={e => setStandardsText(e.target.value)} placeholder="CRD-1.A" style={input} />
               </div>
-              <div>
-                <label style={label}>min commits</label>
-                <input type="number" value={minCommits} onChange={e => setMinCommits(parseInt(e.target.value, 10) || 0)} style={input} />
-              </div>
+              {isCoding && (
+                <div>
+                  <label style={label}>min commits</label>
+                  <input type="number" value={minCommits} onChange={e => setMinCommits(parseInt(e.target.value, 10) || 0)} style={input} />
+                </div>
+              )}
               <div>
                 <label style={label}>published</label>
                 <button onClick={() => setIsPublished(p => !p)} style={{ ...input, textAlign: 'left' as const, cursor: 'pointer', background: isPublished ? '#DCFCE7' : '#FEF9C3', color: isPublished ? '#166534' : '#854D0E', fontWeight: 600 }}>
@@ -201,26 +227,50 @@ export default function CurriculumAssignmentEditor() {
 
           {/* INSTRUCTIONS + CODE */}
           <div style={card}>
-            <label style={label}>instructions</label>
-            <textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={6} placeholder="What the student needs to do." style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: '12px' }} />
+            <label style={label}>{isCoding ? 'instructions' : assignmentType === 'quiz' || assignmentType === 'checkin' ? 'prompt' : 'instructions'}</label>
+            <textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={6} placeholder="What the student needs to do." style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: isCoding ? '12px' : '0' }} />
 
-            <label style={label}>starter code</label>
-            <textarea value={starterCode} onChange={e => setStarterCode(e.target.value)} rows={8} placeholder="# starter code here" style={textareaStyle} />
+            {isCoding && (
+              <>
+                <label style={label}>starter code</label>
+                <textarea value={starterCode} onChange={e => setStarterCode(e.target.value)} rows={8} placeholder="# starter code here" style={textareaStyle} />
+              </>
+            )}
           </div>
 
-          {/* HINTS */}
-          <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>hints</h3>
-              <button onClick={() => setHintsEnabled(h => !h)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', background: hintsEnabled ? '#DCFCE7' : '#FEF9C3', color: hintsEnabled ? '#166534' : '#854D0E', border: 'none' }}>
-                {hintsEnabled ? 'enabled' : 'disabled'}
-              </button>
+          {/* ACTIVITY HTML BODY — only for activity type */}
+          {isActivity && (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
+                <label style={{ ...label, marginBottom: 0 }}>activity html body</label>
+                <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
+                  {uploading ? 'reading...' : '+ upload .html'}
+                  <input type="file" accept=".html" onChange={handleFileUpload} style={{ display: 'none' }} />
+                </label>
+              </div>
+              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
+                Renders like a lesson page; students read it and answer embedded questions.
+                Use the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your submit button (see lesson editor for the activity template).
+              </p>
+              <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Activity title</h1>&#10;<p>Body HTML with form inputs...</p>" style={textareaStyle} />
             </div>
-            <label style={label}>hint 1</label>
-            <textarea value={hint1} onChange={e => setHint1(e.target.value)} rows={2} placeholder="nudge students toward the right idea" style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: '10px' }} />
-            <label style={label}>hint 2 (deeper)</label>
-            <textarea value={hint2} onChange={e => setHint2(e.target.value)} rows={2} placeholder="more direct hint" style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px' }} />
-          </div>
+          )}
+
+          {/* HINTS — coding only */}
+          {isCoding && (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>hints</h3>
+                <button onClick={() => setHintsEnabled(h => !h)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', background: hintsEnabled ? '#DCFCE7' : '#FEF9C3', color: hintsEnabled ? '#166534' : '#854D0E', border: 'none' }}>
+                  {hintsEnabled ? 'enabled' : 'disabled'}
+                </button>
+              </div>
+              <label style={label}>hint 1</label>
+              <textarea value={hint1} onChange={e => setHint1(e.target.value)} rows={2} placeholder="nudge students toward the right idea" style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: '10px' }} />
+              <label style={label}>hint 2 (deeper)</label>
+              <textarea value={hint2} onChange={e => setHint2(e.target.value)} rows={2} placeholder="more direct hint" style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px' }} />
+            </div>
+          )}
 
           {/* COLLAB */}
           <div style={card}>

@@ -476,6 +476,7 @@ class CurriculumAssignmentCreate(BaseModel):
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
     is_published: bool = False
+    html_body: Optional[str] = None  # for activity-type — uploaded to storage
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -492,9 +493,20 @@ class CurriculumAssignmentUpdate(BaseModel):
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
     is_published: Optional[bool] = None
+    html_body: Optional[str] = None  # set to "" to clear, None to leave unchanged
 
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project"}
+
+
+def _upload_assignment_html(assignment_id: str, body: str) -> str:
+    storage_path = f"curriculum_assignments/{assignment_id}/body.html"
+    supabase_admin.storage.from_(BUCKET).upload(
+        path=storage_path,
+        file=body.encode("utf-8"),
+        file_options={"content-type": "text/html", "upsert": "true"},
+    )
+    return storage_path
 
 
 @router.get("/units/{unit_id}/assignments")
@@ -520,9 +532,18 @@ async def create_curriculum_assignment(
     unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
     if not unit or not unit.data:
         raise HTTPException(status_code=404, detail="Unit not found.")
-    row = {**body.model_dump(), "unit_id": unit_id}
+
+    raw = body.model_dump()
+    html_body = raw.pop("html_body", None)
+    row = {**raw, "unit_id": unit_id}
     result = supabase_admin.table("curriculum_assignments").insert(row).execute()
-    return result.data[0]
+    assignment_id = result.data[0]["id"]
+
+    if html_body:
+        path = _upload_assignment_html(assignment_id, html_body)
+        supabase_admin.table("curriculum_assignments").update({"html_file_path": path}).eq("id", assignment_id).execute()
+
+    return supabase_admin.table("curriculum_assignments").select("*").eq("id", assignment_id).single().execute().data
 
 
 @router.get("/assignments/{assignment_id}")
@@ -536,7 +557,13 @@ async def get_curriculum_assignment(assignment_id: str, user: CurrentUser = Depe
     )
     if not response or not response.data:
         raise HTTPException(status_code=404, detail="Assignment not found.")
-    return response.data
+    data = response.data
+    # Hydrate the activity HTML body so the editor can populate.
+    if data.get("html_file_path"):
+        data["html_body"] = _download_html(data["html_file_path"])
+    else:
+        data["html_body"] = None
+    return data
 
 
 @router.patch("/assignments/{assignment_id}")
@@ -547,18 +574,31 @@ async def update_curriculum_assignment(
 ):
     if body.assignment_type and body.assignment_type not in _VALID_ASSIGNMENT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid assignment_type.")
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    if not updates:
+    raw = body.model_dump()
+    html_body = raw.pop("html_body", None)
+    updates = {k: v for k, v in raw.items() if v is not None}
+
+    if updates:
+        response = (
+            supabase_admin.table("curriculum_assignments")
+            .update(updates)
+            .eq("id", assignment_id)
+            .execute()
+        )
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Assignment not found.")
+
+    if html_body is not None:
+        if html_body:
+            path = _upload_assignment_html(assignment_id, html_body)
+            supabase_admin.table("curriculum_assignments").update({"html_file_path": path}).eq("id", assignment_id).execute()
+        else:
+            supabase_admin.table("curriculum_assignments").update({"html_file_path": None}).eq("id", assignment_id).execute()
+
+    if not updates and html_body is None:
         raise HTTPException(status_code=400, detail="No fields to update.")
-    response = (
-        supabase_admin.table("curriculum_assignments")
-        .update(updates)
-        .eq("id", assignment_id)
-        .execute()
-    )
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Assignment not found.")
-    return response.data[0]
+
+    return supabase_admin.table("curriculum_assignments").select("*").eq("id", assignment_id).single().execute().data
 
 
 @router.delete("/assignments/{assignment_id}", status_code=204)

@@ -500,57 +500,67 @@ export default function ClassroomPage() {
                 <label style={labelStyle}>instructions</label>
                 <textarea value={newAssignment.instructions} onChange={e => setNewAssignment(s => ({ ...s, instructions: e.target.value }))} rows={3} placeholder="Describe what students need to do..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: newAssignment.assignment_type === 'code' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
                 <div>
                   <label style={labelStyle}>assignment type</label>
                   <select value={newAssignment.assignment_type} onChange={e => setNewAssignment(s => ({ ...s, assignment_type: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
                     {ASSIGNMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label style={labelStyle}>scaffold level</label>
-                  <select value={newAssignment.scaffold_level} onChange={e => setNewAssignment(s => ({ ...s, scaffold_level: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    {Object.entries(SCAFFOLD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>min commits required</label>
-                  <input type="number" min={1} max={20} value={newAssignment.min_commits} onChange={e => setNewAssignment(s => ({ ...s, min_commits: parseInt(e.target.value) }))} style={inputStyle} />
-                </div>
+                {newAssignment.assignment_type === 'code' && (
+                  <>
+                    <div>
+                      <label style={labelStyle}>scaffold level</label>
+                      <select value={newAssignment.scaffold_level} onChange={e => setNewAssignment(s => ({ ...s, scaffold_level: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
+                        {Object.entries(SCAFFOLD_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>min commits required</label>
+                      <input type="number" min={1} max={20} value={newAssignment.min_commits} onChange={e => setNewAssignment(s => ({ ...s, min_commits: parseInt(e.target.value) }))} style={inputStyle} />
+                    </div>
+                  </>
+                )}
               </div>
               <div>
                 <label style={labelStyle}>due date <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <input type="datetime-local" value={newAssignment.due_date} onChange={e => setNewAssignment(s => ({ ...s, due_date: e.target.value }))} style={inputStyle} />
               </div>
-              <div>
-                <label style={labelStyle}>starter code <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
-                <textarea value={newAssignment.starter_code} onChange={e => setNewAssignment(s => ({ ...s, starter_code: e.target.value }))} rows={4} placeholder="# starter code for students..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6, fontFamily: "'DM Mono', monospace", fontSize: '12px' }} />
-              </div>
+              {newAssignment.assignment_type === 'code' && (
+                <div>
+                  <label style={labelStyle}>starter code <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
+                  <textarea value={newAssignment.starter_code} onChange={e => setNewAssignment(s => ({ ...s, starter_code: e.target.value }))} rows={4} placeholder="# starter code for students..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6, fontFamily: "'DM Mono', monospace", fontSize: '12px' }} />
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>learning objectives <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <StandardsPicker selected={standardsTags} onChange={setStandardsTags} />
               </div>
 
-              {/* HINTS */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable hints</div>
-                  <div style={{ fontSize: '11px', color: '#888780' }}>students can request hints after running + editing</div>
-                </div>
-                <div onClick={() => setHintsEnabled(h => !h)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: hintsEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
-                  <div style={{ position: 'absolute', top: '3px', left: hintsEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
-                </div>
-              </div>
-              {hintsEnabled && (
+              {/* HINTS — coding only */}
+              {newAssignment.assignment_type === 'code' && (
                 <>
-                  <div>
-                    <label style={labelStyle}>hint 1 <span style={{ fontWeight: 400, color: '#888780' }}>(vague nudge — optional, AI generates if blank)</span></label>
-                    <textarea value={hint1} onChange={e => setHint1(e.target.value)} placeholder="e.g. Think about what type of value your function should return..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
+                    <div>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable hints</div>
+                      <div style={{ fontSize: '11px', color: '#888780' }}>students can request hints after running + editing</div>
+                    </div>
+                    <div onClick={() => setHintsEnabled(h => !h)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: hintsEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
+                      <div style={{ position: 'absolute', top: '3px', left: hintsEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                    </div>
                   </div>
-                  <div>
-                    <label style={labelStyle}>hint 2 <span style={{ fontWeight: 400, color: '#888780' }}>(more specific — optional, AI generates if blank)</span></label>
-                    <textarea value={hint2} onChange={e => setHint2(e.target.value)} placeholder="e.g. Check the indentation inside your for loop..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
-                  </div>
+                  {hintsEnabled && (
+                    <>
+                      <div>
+                        <label style={labelStyle}>hint 1 <span style={{ fontWeight: 400, color: '#888780' }}>(vague nudge — optional, AI generates if blank)</span></label>
+                        <textarea value={hint1} onChange={e => setHint1(e.target.value)} placeholder="e.g. Think about what type of value your function should return..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                      </div>
+                      <div>
+                        <label style={labelStyle}>hint 2 <span style={{ fontWeight: 400, color: '#888780' }}>(more specific — optional, AI generates if blank)</span></label>
+                        <textarea value={hint2} onChange={e => setHint2(e.target.value)} placeholder="e.g. Check the indentation inside your for loop..." rows={2} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
