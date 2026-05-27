@@ -268,6 +268,30 @@ def send_student_joined_notification(
     )
 
 
+def send_password_reset_email(
+    email: str,
+    display_name: Optional[str],
+    reset_url: str,
+):
+    """Sends a branded password-reset email with a recovery link."""
+    greeting = f"hi {display_name.split(' ')[0]}," if display_name else "hi there,"
+
+    content = f"""
+    {_h1("reset your password")}
+    {_p(greeting)}
+    {_p("we got a request to reset the password on your commit account. click the button below to choose a new one.")}
+    {_button("reset password", reset_url)}
+    {_divider()}
+    {_p("this link expires in 1 hour. if you didn't request a reset, you can safely ignore this email — your password won't change.", muted=True)}
+    """
+
+    _send(
+        to=email,
+        subject="reset your commit password",
+        html=_base_template(content, preheader="reset the password on your commit account"),
+    )
+
+
 def send_new_assignment_notification(
     student_email: str,
     student_name: str,

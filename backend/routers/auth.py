@@ -6,8 +6,11 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
+import os
+
 from db import supabase_anon, supabase_admin
 from auth_deps import CurrentUser, get_current_user
+from email_service import send_password_reset_email
 
 router = APIRouter()
 
@@ -28,6 +31,10 @@ class TeacherSignup(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
 
 
 # ============================================================
@@ -130,6 +137,54 @@ async def login(body: LoginRequest):
         "refresh_token": response.session.refresh_token,
         "profile": profile.data,
     }
+
+
+@router.post("/forgot-password")
+async def forgot_password(body: ForgotPasswordRequest):
+    """
+    Sends a password-reset email if an account exists for the given address.
+    Always returns the same response to prevent email enumeration.
+    """
+    generic_response = {"message": "If an account exists for that email, a reset link has been sent."}
+
+    profile = (
+        supabase_admin.table("profiles")
+        .select("email, display_name")
+        .eq("email", body.email)
+        .maybe_single()
+        .execute()
+    )
+    if not profile or not profile.data:
+        return generic_response
+
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    try:
+        link_response = supabase_admin.auth.admin.generate_link({
+            "type": "recovery",
+            "email": body.email,
+            "options": {"redirect_to": f"{frontend_url}/reset-password"},
+        })
+        action_link = (
+            getattr(link_response, "properties", None)
+            and getattr(link_response.properties, "action_link", None)
+        ) or (
+            isinstance(link_response, dict)
+            and link_response.get("properties", {}).get("action_link")
+        )
+        if not action_link:
+            print(f"[AUTH] generate_link returned no action_link for {body.email}")
+            return generic_response
+    except Exception as e:
+        print(f"[AUTH] Could not generate recovery link for {body.email}: {e}")
+        return generic_response
+
+    send_password_reset_email(
+        email=profile.data["email"],
+        display_name=profile.data.get("display_name"),
+        reset_url=action_link,
+    )
+
+    return generic_response
 
 
 @router.post("/logout")

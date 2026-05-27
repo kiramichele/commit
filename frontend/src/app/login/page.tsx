@@ -83,10 +83,16 @@ export default function LoginPage() {
                 {loading ? 'signing in...' : 'sign in →'}
               </button>
             </form>
+
+            <div style={{ marginTop: '1rem', textAlign: 'center' }}>
+              <Link href="/forgot-password" style={{ fontSize: '13px', color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>
+                forgot your password?
+              </Link>
+            </div>
           </div>
 
-          <p>are you a teacher? <Link href="/signup">apply for an account</Link></p>
-          <p>are you a student? <Link href="/join">join a classroom →</Link></p>
+          <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '14px', color: '#888780' }}>are you a teacher? <Link href="/signup" style={{ color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>apply for an account</Link></p>
+          <p style={{ textAlign: 'center', marginTop: '0.25rem', fontSize: '14px', color: '#888780' }}>are you a student? <Link href="/join" style={{ color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>join a classroom →</Link></p>
 
         </div>
       </div>
