@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 
@@ -184,6 +185,9 @@ export default function AdminPage() {
               {t}
             </button>
           ))}
+          <Link href="/admin/curriculum" style={{ padding: '7px 20px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, background: 'transparent', color: '#5F5E5A', textDecoration: 'none', fontFamily: "'DM Sans', sans-serif" }}>
+            curriculum →
+          </Link>
         </div>
 
         {/* ── APPLICATIONS TAB ── */}
