@@ -21,13 +21,14 @@ STORAGE_BUCKET = "lesson-content"
 
 @router.get("/units")
 async def list_units(user: CurrentUser = Depends(get_current_user)):
-    """Returns all published units with their lessons and projects."""
+    """Returns all published units with their lessons, projects, and curriculum assignments."""
     units = (
         supabase_admin.table("units")
         .select(
             "*, "
             "lessons(id, order_index, title, scaffold_level, is_published), "
-            "projects(id, order_index, title, description, estimated_minutes, is_published)"
+            "projects(id, order_index, title, description, estimated_minutes, is_published), "
+            "curriculum_assignments(id, order_index, title, assignment_type, is_published)"
         )
         .eq("is_published", True)
         .order("order_index")

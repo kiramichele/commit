@@ -459,6 +459,114 @@ async def delete_step(step_id: str, user: CurrentUser = Depends(require_admin)):
 
 
 # ============================================================
+# CURRICULUM ASSIGNMENTS (admin-authored templates per unit)
+# ============================================================
+
+class CurriculumAssignmentCreate(BaseModel):
+    order_index: int
+    title: str
+    instructions: Optional[str] = ""
+    starter_code: Optional[str] = ""
+    assignment_type: str = "code"
+    min_commits: int = 1
+    scaffold_level: str = "typed_python"
+    allow_collab: bool = False
+    standards_tags: Optional[List[str]] = None
+    hints_enabled: bool = True
+    hint_1: Optional[str] = None
+    hint_2: Optional[str] = None
+    is_published: bool = False
+
+
+class CurriculumAssignmentUpdate(BaseModel):
+    order_index: Optional[int] = None
+    title: Optional[str] = None
+    instructions: Optional[str] = None
+    starter_code: Optional[str] = None
+    assignment_type: Optional[str] = None
+    min_commits: Optional[int] = None
+    scaffold_level: Optional[str] = None
+    allow_collab: Optional[bool] = None
+    standards_tags: Optional[List[str]] = None
+    hints_enabled: Optional[bool] = None
+    hint_1: Optional[str] = None
+    hint_2: Optional[str] = None
+    is_published: Optional[bool] = None
+
+
+_VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project"}
+
+
+@router.get("/units/{unit_id}/assignments")
+async def list_curriculum_assignments(unit_id: str, user: CurrentUser = Depends(require_admin)):
+    response = (
+        supabase_admin.table("curriculum_assignments")
+        .select("*")
+        .eq("unit_id", unit_id)
+        .order("order_index")
+        .execute()
+    )
+    return response.data or []
+
+
+@router.post("/units/{unit_id}/assignments", status_code=201)
+async def create_curriculum_assignment(
+    unit_id: str,
+    body: CurriculumAssignmentCreate,
+    user: CurrentUser = Depends(require_admin),
+):
+    if body.assignment_type not in _VALID_ASSIGNMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid assignment_type.")
+    unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
+    if not unit or not unit.data:
+        raise HTTPException(status_code=404, detail="Unit not found.")
+    row = {**body.model_dump(), "unit_id": unit_id}
+    result = supabase_admin.table("curriculum_assignments").insert(row).execute()
+    return result.data[0]
+
+
+@router.get("/assignments/{assignment_id}")
+async def get_curriculum_assignment(assignment_id: str, user: CurrentUser = Depends(require_admin)):
+    response = (
+        supabase_admin.table("curriculum_assignments")
+        .select("*")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not response or not response.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    return response.data
+
+
+@router.patch("/assignments/{assignment_id}")
+async def update_curriculum_assignment(
+    assignment_id: str,
+    body: CurriculumAssignmentUpdate,
+    user: CurrentUser = Depends(require_admin),
+):
+    if body.assignment_type and body.assignment_type not in _VALID_ASSIGNMENT_TYPES:
+        raise HTTPException(status_code=400, detail="Invalid assignment_type.")
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    response = (
+        supabase_admin.table("curriculum_assignments")
+        .update(updates)
+        .eq("id", assignment_id)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    return response.data[0]
+
+
+@router.delete("/assignments/{assignment_id}", status_code=204)
+async def delete_curriculum_assignment(assignment_id: str, user: CurrentUser = Depends(require_admin)):
+    supabase_admin.table("curriculum_assignments").delete().eq("id", assignment_id).execute()
+
+
+# ============================================================
 # FILE UPLOAD (for .html file picker in the admin UI)
 # ============================================================
 
