@@ -21,10 +21,14 @@ STORAGE_BUCKET = "lesson-content"
 
 @router.get("/units")
 async def list_units(user: CurrentUser = Depends(get_current_user)):
-    """Returns all published units with their lessons."""
+    """Returns all published units with their lessons and projects."""
     units = (
         supabase_admin.table("units")
-        .select("*, lessons(id, order_index, title, scaffold_level, is_published)")
+        .select(
+            "*, "
+            "lessons(id, order_index, title, scaffold_level, is_published), "
+            "projects(id, order_index, title, description, estimated_minutes, is_published)"
+        )
         .eq("is_published", True)
         .order("order_index")
         .execute()
@@ -306,3 +310,128 @@ async def lock_lesson(
         "classroom_id", classroom_id
     ).eq("lesson_id", lesson_id).execute()
     return {"locked": True}
+
+
+# ============================================================
+# PROJECTS (student-facing reads)
+# ============================================================
+
+@router.get("/projects/{project_id}")
+async def get_project(
+    project_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a published project with its published steps."""
+    project = (
+        supabase_admin.table("projects")
+        .select("*, units(id, title, order_index), project_steps(*)")
+        .eq("id", project_id)
+        .eq("is_published", True)
+        .maybe_single()
+        .execute()
+    )
+    if not project or not project.data:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    data = project.data
+    steps = data.get("project_steps") or []
+    # Only published steps for students
+    steps = [s for s in steps if s.get("is_published")]
+    steps.sort(key=lambda s: s.get("order_index", 0))
+    data["project_steps"] = steps
+    return data
+
+
+@router.get("/steps/{step_id}")
+async def get_project_step(
+    step_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a single published project step."""
+    step = (
+        supabase_admin.table("project_steps")
+        .select("*, projects(id, title, unit_id, units(id, title, order_index))")
+        .eq("id", step_id)
+        .eq("is_published", True)
+        .maybe_single()
+        .execute()
+    )
+    if not step or not step.data:
+        raise HTTPException(status_code=404, detail="Step not found.")
+    return step.data
+
+
+@router.get("/steps/{step_id}/html-url")
+async def get_step_html_url(
+    step_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Signed URL for a reading step's HTML body."""
+    step = (
+        supabase_admin.table("project_steps")
+        .select("html_file_path")
+        .eq("id", step_id)
+        .maybe_single()
+        .execute()
+    )
+    if not step or not step.data or not step.data.get("html_file_path"):
+        raise HTTPException(status_code=404, detail="No HTML for this step.")
+    try:
+        signed = supabase_admin.storage.from_(STORAGE_BUCKET).create_signed_url(
+            step.data["html_file_path"], 60 * 60
+        )
+        return {"url": signed.get("signedURL") or signed.get("signedUrl")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not generate URL: {str(e)}")
+
+
+# ============================================================
+# PROJECT STEP COMPLETIONS
+# ============================================================
+
+class StepCompletion(BaseModel):
+    response_text: Optional[str] = None
+    code_snapshot: Optional[str] = None
+
+
+@router.post("/steps/{step_id}/complete")
+async def complete_step(
+    step_id: str,
+    body: StepCompletion,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Marks a project step complete (upserts the completion row)."""
+    existing = (
+        supabase_admin.table("project_step_completions")
+        .select("id")
+        .eq("student_id", user.profile_id)
+        .eq("step_id", step_id)
+        .maybe_single()
+        .execute()
+    )
+    row = {
+        "student_id": user.profile_id,
+        "step_id": step_id,
+        "response_text": body.response_text,
+        "code_snapshot": body.code_snapshot,
+    }
+    if existing and existing.data:
+        supabase_admin.table("project_step_completions").update(row).eq("id", existing.data["id"]).execute()
+    else:
+        supabase_admin.table("project_step_completions").insert(row).execute()
+    return {"completed": True}
+
+
+@router.get("/projects/{project_id}/my-progress")
+async def my_project_progress(
+    project_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the current student's completion rows for a project's steps."""
+    rows = (
+        supabase_admin.table("project_step_completions")
+        .select("step_id, response_text, code_snapshot, completed_at, project_steps!inner(project_id)")
+        .eq("student_id", user.profile_id)
+        .eq("project_steps.project_id", project_id)
+        .execute()
+    )
+    return rows.data or []

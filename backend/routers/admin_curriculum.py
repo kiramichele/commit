@@ -282,6 +282,186 @@ async def delete_lesson(lesson_id: str, user: CurrentUser = Depends(require_admi
 # FILE UPLOAD (for .html file picker in the admin UI)
 # ============================================================
 
+# ============================================================
+# PROJECTS (admin)
+# ============================================================
+
+class ProjectCreate(BaseModel):
+    order_index: int
+    title: str
+    description: Optional[str] = ""
+    estimated_minutes: int = 60
+    scaffold_level: str = "typed_python"
+    standards_tags: Optional[List[str]] = None
+    is_published: bool = False
+
+
+class ProjectUpdate(BaseModel):
+    order_index: Optional[int] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    estimated_minutes: Optional[int] = None
+    scaffold_level: Optional[str] = None
+    standards_tags: Optional[List[str]] = None
+    is_published: Optional[bool] = None
+
+
+class ProjectStepCreate(BaseModel):
+    order_index: int
+    title: str
+    step_type: str  # 'coding' | 'reading' | 'free_response'
+    instructions: Optional[str] = ""
+    starter_code: Optional[str] = ""
+    example_code: Optional[str] = ""
+    example_explanation: Optional[str] = ""
+    html_body: Optional[str] = None  # uploaded to storage when provided
+    prompt: Optional[str] = ""
+    min_words: Optional[int] = 0
+    max_words: Optional[int] = 0
+    is_published: bool = False
+
+
+class ProjectStepUpdate(BaseModel):
+    order_index: Optional[int] = None
+    title: Optional[str] = None
+    step_type: Optional[str] = None
+    instructions: Optional[str] = None
+    starter_code: Optional[str] = None
+    example_code: Optional[str] = None
+    example_explanation: Optional[str] = None
+    html_body: Optional[str] = None
+    prompt: Optional[str] = None
+    min_words: Optional[int] = None
+    max_words: Optional[int] = None
+    is_published: Optional[bool] = None
+
+
+def _upload_step_html(project_id: str, step_id: str, body: str) -> str:
+    storage_path = f"projects/{project_id}/steps/{step_id}/reading.html"
+    supabase_admin.storage.from_(BUCKET).upload(
+        path=storage_path,
+        file=body.encode("utf-8"),
+        file_options={"content-type": "text/html", "upsert": "true"},
+    )
+    return storage_path
+
+
+@router.get("/units/{unit_id}/projects")
+async def list_projects(unit_id: str, user: CurrentUser = Depends(require_admin)):
+    response = (
+        supabase_admin.table("projects")
+        .select("*, project_steps(id, order_index, title, step_type, is_published)")
+        .eq("unit_id", unit_id)
+        .order("order_index")
+        .execute()
+    )
+    return response.data or []
+
+
+@router.post("/units/{unit_id}/projects", status_code=201)
+async def create_project(unit_id: str, body: ProjectCreate, user: CurrentUser = Depends(require_admin)):
+    unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
+    if not unit or not unit.data:
+        raise HTTPException(status_code=404, detail="Unit not found.")
+    row = {**body.model_dump(), "unit_id": unit_id}
+    result = supabase_admin.table("projects").insert(row).execute()
+    return result.data[0]
+
+
+@router.get("/projects/{project_id}")
+async def get_project(project_id: str, user: CurrentUser = Depends(require_admin)):
+    response = (
+        supabase_admin.table("projects")
+        .select("*, project_steps(*)")
+        .eq("id", project_id)
+        .maybe_single()
+        .execute()
+    )
+    if not response or not response.data:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    project = response.data
+    steps = project.get("project_steps") or []
+    steps.sort(key=lambda s: s.get("order_index", 0))
+    # Hydrate reading-step HTML bodies for the editor
+    for step in steps:
+        if step.get("step_type") == "reading" and step.get("html_file_path"):
+            step["html_body"] = _download_html(step["html_file_path"])
+        else:
+            step["html_body"] = None
+    project["project_steps"] = steps
+    return project
+
+
+@router.patch("/projects/{project_id}")
+async def update_project(project_id: str, body: ProjectUpdate, user: CurrentUser = Depends(require_admin)):
+    updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+    response = supabase_admin.table("projects").update(updates).eq("id", project_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return response.data[0]
+
+
+@router.delete("/projects/{project_id}", status_code=204)
+async def delete_project(project_id: str, user: CurrentUser = Depends(require_admin)):
+    # Cascade-deletes steps via FK; storage files are left behind
+    supabase_admin.table("projects").delete().eq("id", project_id).execute()
+
+
+@router.post("/projects/{project_id}/steps", status_code=201)
+async def create_step(project_id: str, body: ProjectStepCreate, user: CurrentUser = Depends(require_admin)):
+    project = supabase_admin.table("projects").select("id").eq("id", project_id).maybe_single().execute()
+    if not project or not project.data:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    if body.step_type not in ("coding", "reading", "free_response"):
+        raise HTTPException(status_code=400, detail="step_type must be coding, reading, or free_response.")
+
+    row = {k: v for k, v in body.model_dump().items() if k != "html_body"}
+    row["project_id"] = project_id
+    result = supabase_admin.table("project_steps").insert(row).execute()
+    step_id = result.data[0]["id"]
+
+    if body.step_type == "reading" and body.html_body:
+        path = _upload_step_html(project_id, step_id, body.html_body)
+        supabase_admin.table("project_steps").update({"html_file_path": path}).eq("id", step_id).execute()
+
+    return supabase_admin.table("project_steps").select("*").eq("id", step_id).single().execute().data
+
+
+@router.patch("/steps/{step_id}")
+async def update_step(step_id: str, body: ProjectStepUpdate, user: CurrentUser = Depends(require_admin)):
+    existing = supabase_admin.table("project_steps").select("id, project_id, step_type").eq("id", step_id).maybe_single().execute()
+    if not existing or not existing.data:
+        raise HTTPException(status_code=404, detail="Step not found.")
+
+    raw = body.model_dump()
+    html_body = raw.pop("html_body", None)
+    updates = {k: v for k, v in raw.items() if v is not None}
+
+    if updates:
+        supabase_admin.table("project_steps").update(updates).eq("id", step_id).execute()
+
+    if html_body is not None:
+        if html_body:
+            path = _upload_step_html(existing.data["project_id"], step_id, html_body)
+            supabase_admin.table("project_steps").update({"html_file_path": path}).eq("id", step_id).execute()
+        else:
+            supabase_admin.table("project_steps").update({"html_file_path": None}).eq("id", step_id).execute()
+
+    return supabase_admin.table("project_steps").select("*").eq("id", step_id).single().execute().data
+
+
+@router.delete("/steps/{step_id}", status_code=204)
+async def delete_step(step_id: str, user: CurrentUser = Depends(require_admin)):
+    supabase_admin.table("project_steps").delete().eq("id", step_id).execute()
+
+
+# ============================================================
+# FILE UPLOAD (for .html file picker in the admin UI)
+# ============================================================
+
 @router.post("/lessons/{lesson_id}/upload-html")
 async def upload_html_file(
     lesson_id: str,

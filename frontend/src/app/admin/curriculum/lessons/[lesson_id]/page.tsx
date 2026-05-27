@@ -40,6 +40,81 @@ interface LessonResponse {
 
 const SCAFFOLD_LEVELS = ['typed_python', 'pseudocode', 'block_python', 'free_python']
 
+// Starter template that demonstrates the Commit SDK contract.
+// Activities call `Commit.submit(responses)` from their own submit button.
+const ACTIVITY_TEMPLATE = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Activity</title>
+  <style>
+    body { font-family: 'DM Sans', system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1.5rem; color: #0E2D6E; line-height: 1.6; }
+    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
+    p { color: #5F5E5A; }
+    label { display: block; font-weight: 600; margin: 1.25rem 0 0.5rem; font-size: 14px; }
+    textarea, input[type=text] { width: 100%; padding: 10px 12px; border: 1.5px solid rgba(14,45,110,0.15); border-radius: 8px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
+    textarea { resize: vertical; min-height: 90px; }
+    button { background: #1A56DB; color: white; border: none; padding: 11px 22px; border-radius: 8px; font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 1.5rem; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { margin-top: 0.75rem; font-size: 13px; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1>Activity title</h1>
+  <p>Brief intro for the student.</p>
+
+  <label for="q1">Question 1 — open-ended</label>
+  <textarea id="q1" rows="3"></textarea>
+
+  <label for="q2">Question 2 — short answer</label>
+  <input type="text" id="q2" />
+
+  <button id="submitBtn">submit</button>
+  <div id="status"></div>
+
+  <script>
+    var btn = document.getElementById('submitBtn');
+    var status = document.getElementById('status');
+
+    // Optional: prefill prior responses when the student revisits.
+    Commit.onReady(function() {
+      Commit.getPriorResponses().then(function(prior) {
+        if (!prior) return;
+        if (prior.q1) document.getElementById('q1').value = prior.q1;
+        if (prior.q2) document.getElementById('q2').value = prior.q2;
+      });
+    });
+
+    Commit.on('submitting', function() {
+      btn.disabled = true;
+      status.textContent = 'saving...';
+      status.style.color = '#888780';
+    });
+
+    Commit.on('submitted', function() {
+      btn.disabled = false;
+      status.textContent = '✓ saved';
+      status.style.color = '#166534';
+    });
+
+    Commit.on('error', function(err) {
+      btn.disabled = false;
+      status.textContent = (err && err.message) || 'something went wrong, try again';
+      status.style.color = '#991B1B';
+    });
+
+    btn.addEventListener('click', function() {
+      Commit.submit({
+        q1: document.getElementById('q1').value,
+        q2: document.getElementById('q2').value
+      });
+    });
+  </script>
+</body>
+</html>
+`
+
 export default function LessonEditorPage() {
   const { profile, loading: authLoading } = useAuth()
   const router = useRouter()
@@ -296,13 +371,30 @@ export default function LessonEditorPage() {
           {/* ACTIVITY BODY */}
           {lessonType === 'activity' && (
             <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
                 <label style={{ ...label, marginBottom: 0 }}>activity html (full-screen)</label>
-                <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
-                  {uploading ? 'reading...' : '+ upload .html'}
-                  <input type="file" accept=".html" onChange={e => handleFileUpload(e, 'activity')} style={{ display: 'none' }} />
-                </label>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (activityBody.trim() && !confirm('Replace current activity HTML with the template?')) return
+                      setActivityBody(ACTIVITY_TEMPLATE)
+                    }}
+                    style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}
+                    title="Load a starter HTML that uses the Commit SDK (Commit.submit, Commit.getPriorResponses, etc.)"
+                  >
+                    ↶ load template
+                  </button>
+                  <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
+                    {uploading ? 'reading...' : '+ upload .html'}
+                    <input type="file" accept=".html" onChange={e => handleFileUpload(e, 'activity')} style={{ display: 'none' }} />
+                  </label>
+                </div>
               </div>
+              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
+                Activities can talk to Commit via <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> — call it from your own submit button.
+                See the template for the full API (submit, getPriorResponses, status events).
+              </p>
               <textarea value={activityBody} onChange={e => setActivityBody(e.target.value)} rows={20} placeholder="<!DOCTYPE html>&#10;<html>...</html>" style={textareaStyle} />
             </div>
           )}

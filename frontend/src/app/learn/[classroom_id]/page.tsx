@@ -41,6 +41,14 @@ interface UnlockedLesson {
   }
 }
 
+interface UnitWithProjects {
+  id: string
+  title: string
+  order_index: number
+  is_published: boolean
+  projects?: Array<{ id: string; order_index: number; title: string; description: string; estimated_minutes: number; is_published: boolean }>
+}
+
 interface Classroom {
   id: string
   name: string
@@ -59,6 +67,7 @@ export default function StudentClassroomPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [lessons, setLessons] = useState<UnlockedLesson[]>([])
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
+  const [projectsByUnitTitle, setProjectsByUnitTitle] = useState<Record<string, UnitWithProjects['projects']>>({})
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
@@ -76,14 +85,24 @@ export default function StudentClassroomPage() {
   const fetchData = async () => {
     setDataLoading(true)
     try {
-      const [classroomData, assignmentsData, lessonsData] = await Promise.all([
+      const [classroomData, assignmentsData, lessonsData, unitsData] = await Promise.all([
         api.get<Classroom>(`/classrooms/${classroomId}`),
         api.get<Assignment[]>(`/assignments/?classroom_id=${classroomId}`),
         api.get<UnlockedLesson[]>(`/curriculum/classroom/${classroomId}/unlocked`),
+        api.get<UnitWithProjects[]>(`/curriculum/units`).catch(() => []),
       ])
       setClassroom(classroomData)
       setAssignments(assignmentsData || [])
       setLessons(lessonsData || [])
+
+      // Build a unitTitle → published projects map so we can render projects
+      // alongside lessons in the same per-unit blocks.
+      const projectsMap: Record<string, UnitWithProjects['projects']> = {}
+      for (const u of unitsData || []) {
+        const published = (u.projects || []).filter(p => p.is_published).sort((a, b) => a.order_index - b.order_index)
+        if (published.length) projectsMap[u.title] = published
+      }
+      setProjectsByUnitTitle(projectsMap)
 
       const completionsData = await api.get<{ lesson_id: string }[]>(
         `/curriculum/classroom/${classroomId}/completions`
@@ -260,6 +279,27 @@ export default function StudentClassroomPage() {
                       <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unitTitle}</span>
                       </div>
+
+                      {/* PROJECTS in this unit */}
+                      {(projectsByUnitTitle[unitTitle] || []).map(p => (
+                        <div key={p.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', background: 'rgba(254,243,199,0.3)' }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#FEF3C7', border: '2px solid #FDE68A', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: '#92400E', fontSize: '11px', fontWeight: 700 }}>★</span>
+                          </div>
+                          <div style={{ flex: 1, minWidth: '200px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{p.title}</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
+                            </div>
+                            {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginBottom: '2px' }}>{p.description}</div>}
+                            <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
+                          </div>
+                          <Link href={`/project/${p.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            open →
+                          </Link>
+                        </div>
+                      ))}
+
                       {unitLessons
                         .sort((a, b) => (a.lessons?.order_index || 0) - (b.lessons?.order_index || 0))
                         .map((ul, i) => {

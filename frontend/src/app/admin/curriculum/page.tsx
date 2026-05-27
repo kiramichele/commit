@@ -27,6 +27,17 @@ interface Lesson {
   }>
 }
 
+interface Project {
+  id: string
+  unit_id: string
+  order_index: number
+  title: string
+  description: string
+  estimated_minutes: number
+  is_published: boolean
+  project_steps?: Array<{ id: string; order_index: number; title: string; step_type: string; is_published: boolean }>
+}
+
 export default function AdminCurriculumPage() {
   const { profile, loading } = useAuth()
   const router = useRouter()
@@ -34,6 +45,7 @@ export default function AdminCurriculumPage() {
   const [units, setUnits] = useState<Unit[]>([])
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null)
   const [lessons, setLessons] = useState<Lesson[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [unitsLoading, setUnitsLoading] = useState(true)
   const [lessonsLoading, setLessonsLoading] = useState(false)
 
@@ -51,7 +63,10 @@ export default function AdminCurriculumPage() {
   }, [profile])
 
   useEffect(() => {
-    if (selectedUnit) fetchLessons(selectedUnit.id)
+    if (selectedUnit) {
+      fetchLessons(selectedUnit.id)
+      fetchProjects(selectedUnit.id)
+    }
   }, [selectedUnit])
 
   const fetchUnits = async () => {
@@ -71,6 +86,52 @@ export default function AdminCurriculumPage() {
       setLessons(await api.get<Lesson[]>(`/admin/curriculum/units/${unitId}/lessons`))
     } finally {
       setLessonsLoading(false)
+    }
+  }
+
+  const fetchProjects = async (unitId: string) => {
+    try {
+      setProjects(await api.get<Project[]>(`/admin/curriculum/units/${unitId}/projects`))
+    } catch {
+      setProjects([])
+    }
+  }
+
+  const createProject = async () => {
+    if (!selectedUnit) return
+    const title = prompt('Project title?')
+    if (!title?.trim()) return
+    const orderStr = prompt('Order number?', String((projects[projects.length - 1]?.order_index || 0) + 1))
+    if (!orderStr) return
+    try {
+      const created = await api.post<Project>(`/admin/curriculum/units/${selectedUnit.id}/projects`, {
+        title,
+        order_index: parseInt(orderStr, 10),
+        is_published: false,
+      })
+      setProjects(p => [...p, created].sort((a, b) => a.order_index - b.order_index))
+      router.push(`/admin/curriculum/projects/${created.id}`)
+    } catch (err: any) {
+      alert(err.message || 'Failed to create project')
+    }
+  }
+
+  const toggleProjectPublish = async (p: Project) => {
+    try {
+      const updated = await api.patch<Project>(`/admin/curriculum/projects/${p.id}`, { is_published: !p.is_published })
+      setProjects(ps => ps.map(x => x.id === p.id ? { ...x, is_published: updated.is_published } : x))
+    } catch (err: any) {
+      alert(err.message)
+    }
+  }
+
+  const deleteProject = async (p: Project) => {
+    if (!confirm(`Delete project "${p.title}"? All its steps will be deleted too.`)) return
+    try {
+      await api.delete(`/admin/curriculum/projects/${p.id}`)
+      setProjects(ps => ps.filter(x => x.id !== p.id))
+    } catch (err: any) {
+      alert(err.message)
     }
   }
 
@@ -225,16 +286,44 @@ export default function AdminCurriculumPage() {
               <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
                   <h2 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#0E2D6E' }}>{selectedUnit.title}</h2>
-                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#888780' }}>{lessons.length} lesson(s) · order {selectedUnit.order_index}</p>
+                  <p style={{ margin: '2px 0 0', fontSize: '12px', color: '#888780' }}>{lessons.length} lesson(s) · {projects.length} project(s) · order {selectedUnit.order_index}</p>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <button onClick={() => togglePublish(selectedUnit)} style={btn(false)}>
                     {selectedUnit.is_published ? 'unpublish' : 'publish'}
                   </button>
                   <button onClick={() => deleteUnit(selectedUnit)} style={{ ...btn(false), borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
+                  <button onClick={createProject} style={btn(false)}>+ new project</button>
                   <Link href={`/admin/curriculum/lessons/new?unit=${selectedUnit.id}`} style={{ ...btn(true), textDecoration: 'none' }}>+ new lesson</Link>
                 </div>
               </div>
+
+              {/* PROJECTS SECTION */}
+              {projects.length > 0 && (
+                <div style={{ background: '#FAFAF8', padding: '0.5rem 0' }}>
+                  <div style={{ padding: '6px 1.25rem', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>
+                    projects
+                  </div>
+                  {projects.map(p => (
+                    <div key={p.id} style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: "'DM Mono', monospace", color: '#888780' }}>{p.order_index}</span>
+                          {p.title}
+                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
+                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C' }}>{p.project_steps?.length || 0} step(s)</span>
+                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: p.is_published ? '#DCFCE7' : '#FEF9C3', color: p.is_published ? '#166534' : '#854D0E' }}>{p.is_published ? 'live' : 'draft'}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button onClick={() => toggleProjectPublish(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{p.is_published ? 'unpublish' : 'publish'}</button>
+                        <Link href={`/admin/curriculum/projects/${p.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
+                        <button onClick={() => deleteProject(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {lessonsLoading ? (
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#888780', fontSize: '13px' }}>loading...</div>

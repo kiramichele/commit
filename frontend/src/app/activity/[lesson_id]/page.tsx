@@ -17,90 +17,54 @@ interface Lesson {
 
 type SaveStatus = 'idle' | 'saving' | 'saved'
 
-const ACTIVITY_RESPONSE_SCRIPT = `<script>
+// ============================================================
+// Commit SDK — injected into every activity iframe.
+// Activity HTML talks to the parent through `window.Commit`:
+//   Commit.submit(responses)         — send final responses
+//   Commit.getPriorResponses()       — Promise<object|null>
+//   Commit.onReady(cb)               — fired when DOM is ready
+//   Commit.on('submitting' | 'submitted' | 'error', cb)
+// Message protocol (iframe -> parent):
+//   COMMIT_IFRAME_READY
+//   COMMIT_SUBMIT { responses }
+//   COMMIT_GET_PRIOR_RESPONSES
+// Message protocol (parent -> iframe):
+//   COMMIT_PRIOR_RESPONSES { responses: object | null }
+//   COMMIT_SUBMIT_OK
+//   COMMIT_SUBMIT_ERROR { message }
+// ============================================================
+const COMMIT_SDK_SCRIPT = `<script>
 (function(){
   if(window.self===window.top)return;
-  var t=null;
-  function collect(){
-    var r={};
-    document.querySelectorAll('textarea').forEach(function(el,i){
-      var k=el.name||el.id||el.dataset.responseKey||('textarea_'+i);
-      r[k]={type:'text',label:el.placeholder||el.getAttribute('aria-label')||k,value:el.value,wordCount:el.value.trim()?el.value.trim().split(/\\s+/).length:0};
-    });
-    document.querySelectorAll('input[type="text"],input[type="number"]').forEach(function(el,i){
-      var k=el.name||el.id||('input_'+i);
-      if(!k.startsWith('input_')||el.value)r[k]={type:'text',label:el.placeholder||el.getAttribute('aria-label')||k,value:el.value};
-    });
-    document.querySelectorAll('select').forEach(function(el,i){
-      var k=el.name||el.id||('select_'+i);
-      r[k]={type:'select',label:k,value:el.value,text:el.options[el.selectedIndex]?.text||el.value};
-    });
-    var cg={};
-    document.querySelectorAll('input[type="checkbox"],input[type="radio"]').forEach(function(el){
-      var g=el.name||el.dataset.group||'checks';if(!cg[g])cg[g]=[];
-      if(el.checked)cg[g].push(el.value||el.id||el.dataset.label||'checked');
-    });
-    Object.keys(cg).forEach(function(g){r['check_'+g]={type:'checkbox',label:g,value:cg[g].join(', '),selected:cg[g]};});
-    document.querySelectorAll('[data-response-value]').forEach(function(el){
-      var k=el.dataset.responseKey||'selection';
-      r[k]={type:'selection',label:el.dataset.responseLabel||k,value:el.dataset.responseValue};
-    });
-    return r;
-  }
-  function post(){
-    var r=collect();
-    if(!Object.values(r).some(function(v){return v.value&&v.value.toString().trim().length>0}))return;
-    window.parent.postMessage({type:'COMMIT_ACTIVITY_RESPONSES',responses:r,timestamp:new Date().toISOString()},'*');
-  }
-  function sched(){clearTimeout(t);t=setTimeout(post,1500);}
-  document.addEventListener('input',sched);
-  document.addEventListener('change',sched);
-  document.addEventListener('click',function(e){
-    if(e.target.closest('[onclick]')||e.target.closest('.platform-card')||e.target.closest('.signal-item')||e.target.closest('[data-response-value]'))sched();
-  });
-  setTimeout(post,500);
-  window.addEventListener('hashchange',sched);
-})();
-<\/script>`
-
-const ACTIVITY_PREFILL_SCRIPT = `<script>
-(function(){
-  if(window.self===window.top)return;
-  window.addEventListener('message',function(event){
-    if(!event.data||event.data.type!=='COMMIT_PREFILL_RESPONSES')return;
-    var r=event.data.responses;if(!r)return;
-    document.body.setAttribute('data-commit-review','true');
-    var existing=document.getElementById('commit-review-banner');
-    if(!existing){
-      var b=document.createElement('div');b.id='commit-review-banner';
-      b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:#1A56DB;color:white;padding:8px 16px;font-family:sans-serif;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(0,0,0,0.2)';
-      b.innerHTML='\\ud83d\\udc41 '+(event.data.studentName||'Student')+"\\'s responses \\u2014 read only";
-      document.body.style.paddingTop='40px';
-      document.body.insertBefore(b,document.body.firstChild);
+  var listeners={ready:[],submitting:[],submitted:[],error:[]};
+  var priorResolvers=[];
+  function emit(ev,payload){(listeners[ev]||[]).forEach(function(fn){try{fn(payload)}catch(e){console.error(e)}});}
+  window.addEventListener('message',function(e){
+    var d=e.data;if(!d||!d.type)return;
+    if(d.type==='COMMIT_SUBMIT_OK')emit('submitted',d.payload);
+    else if(d.type==='COMMIT_SUBMIT_ERROR')emit('error',d.payload||{message:'submit failed'});
+    else if(d.type==='COMMIT_PRIOR_RESPONSES'){
+      var r=priorResolvers;priorResolvers=[];
+      r.forEach(function(res){res(d.responses||null)});
     }
-    document.querySelectorAll('textarea').forEach(function(el,i){
-      var k=el.name||el.id||el.dataset.responseKey||('textarea_'+i);
-      if(r[k]&&r[k].value){el.value=r[k].value;el.style.background='#fffef0';el.style.borderColor='#F59E0B';el.readOnly=true;}
-    });
-    document.querySelectorAll('input[type="text"],input[type="number"]').forEach(function(el,i){
-      var k=el.name||el.id||('input_'+i);
-      if(r[k]&&r[k].value){el.value=r[k].value;el.style.background='#fffef0';el.readOnly=true;}
-    });
-    Object.keys(r).forEach(function(k){
-      var v=r[k];if(v.type==='selection'||v.type==='checkbox')return;
-      document.querySelectorAll('.platform-card,.signal-item').forEach(function(card){
-        if(v.value&&(card.textContent||'').includes(v.value))card.classList.add('selected');
-      });
-    });
-    Object.keys(r).forEach(function(k){
-      var v=r[k];if(v.type!=='checkbox')return;
-      var sel=v.selected||[];
-      document.querySelectorAll('.signal-item').forEach(function(item){
-        if(sel.some(function(s){return(item.textContent||'').includes(s);}))item.classList.add('checked');
-      });
-    });
-    window.parent.postMessage({type:'COMMIT_PREFILL_COMPLETE'},'*');
   });
+  window.Commit={
+    submit:function(responses){
+      emit('submitting',null);
+      window.parent.postMessage({type:'COMMIT_SUBMIT',responses:responses||{}},'*');
+    },
+    getPriorResponses:function(){
+      return new Promise(function(resolve){
+        priorResolvers.push(resolve);
+        window.parent.postMessage({type:'COMMIT_GET_PRIOR_RESPONSES'},'*');
+      });
+    },
+    on:function(ev,cb){if(!listeners[ev])listeners[ev]=[];listeners[ev].push(cb);},
+    onReady:function(cb){
+      if(document.readyState!=='loading'){cb()}
+      else{document.addEventListener('DOMContentLoaded',cb)}
+    }
+  };
   window.parent.postMessage({type:'COMMIT_IFRAME_READY'},'*');
 })();
 <\/script>`
@@ -144,7 +108,7 @@ export default function ActivityPage() {
       const urlData = await api.get<{ url: string }>(`/curriculum/lessons/${lessonId}/activity-url`)
       setActivityUrl(urlData.url)
       fetch(urlData.url).then(r => r.text()).then(html => {
-        setActivityHtml(html + ACTIVITY_RESPONSE_SCRIPT + ACTIVITY_PREFILL_SCRIPT)
+        setActivityHtml(html + COMMIT_SDK_SCRIPT)
       }).catch(() => {})
     } catch (e) {
       setError('Could not load activity.')
@@ -153,33 +117,52 @@ export default function ActivityPage() {
     }
   }
 
-  // ── RESPONSE CAPTURE ────────────────────────────────────────
+  // ── COMMIT SDK MESSAGE HANDLER ──────────────────────────────
   const handleMessage = useCallback(async (event: MessageEvent) => {
-    if (event.data?.type !== 'COMMIT_ACTIVITY_RESPONSES') return
-    const responses = event.data.responses as Record<string, { type: string; label: string; value: string; wordCount?: number }>
+    const data = event.data
+    if (!data || !data.type) return
+    const iframe = (event.source as Window | null) || undefined
 
-    const nonEmpty = Object.entries(responses).filter(([_, r]) => r.value?.toString().trim())
-    if (nonEmpty.length === 0) return
+    if (data.type === 'COMMIT_SUBMIT') {
+      const responses = data.responses || {}
+      const fieldCount = Object.keys(responses).length
+      setResponseCount(fieldCount)
+      setSaveStatus('saving')
 
-    setResponseCount(nonEmpty.length)
-    setSaveStatus('saving')
+      try {
+        await api.post('/exercises/save', {
+          lesson_id: lessonId,
+          exercise_index: 0,
+          exercise_type: 'activity_responses',
+          response_text: JSON.stringify(responses),
+        })
+        setSaveStatus('saved')
+        setLastSaved(new Date())
+        setTimeout(() => setSaveStatus('idle'), 2000)
+        iframe?.postMessage({ type: 'COMMIT_SUBMIT_OK' }, '*')
+      } catch (e: any) {
+        console.error('Failed to save activity responses:', e)
+        setSaveStatus('idle')
+        iframe?.postMessage({ type: 'COMMIT_SUBMIT_ERROR', payload: { message: e?.message || 'save failed' } }, '*')
+      }
+      return
+    }
 
-    try {
-      // Save as a single exercise_response with index 0
-      // The full responses object is stored as JSON in response_text
-      await api.post('/exercises/save', {
-        lesson_id: lessonId,
-        exercise_index: 0,
-        exercise_type: 'activity_responses',
-        response_text: JSON.stringify(responses),
-        word_count: Object.values(responses).reduce((sum, r) => sum + (r.wordCount || 0), 0),
-      })
-      setSaveStatus('saved')
-      setLastSaved(new Date())
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    } catch (e) {
-      console.error('Failed to save activity responses:', e)
-      setSaveStatus('idle')
+    if (data.type === 'COMMIT_GET_PRIOR_RESPONSES') {
+      try {
+        const all = await api.get<Array<{ exercise_index: number; exercise_type: string; response_text: string | null }>>(
+          `/exercises/lesson/${lessonId}/my`
+        )
+        const mine = (all || []).find(r => r.exercise_index === 0 && r.exercise_type === 'activity_responses')
+        let parsed: any = null
+        if (mine?.response_text) {
+          try { parsed = JSON.parse(mine.response_text) } catch { parsed = null }
+        }
+        iframe?.postMessage({ type: 'COMMIT_PRIOR_RESPONSES', responses: parsed }, '*')
+      } catch (e) {
+        iframe?.postMessage({ type: 'COMMIT_PRIOR_RESPONSES', responses: null }, '*')
+      }
+      return
     }
   }, [lessonId])
 
