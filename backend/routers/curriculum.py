@@ -380,6 +380,22 @@ async def get_curriculum_assignment_questions(
     return response.data or []
 
 
+@router.get("/curriculum-assignments/{assignment_id}/questions-for-grading")
+async def get_curriculum_assignment_questions_for_grading(
+    assignment_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Same as /questions but includes correct_answer so the teacher can grade."""
+    response = (
+        supabase_admin.table("quiz_questions")
+        .select("*")
+        .eq("curriculum_assignment_id", assignment_id)
+        .order("order_index")
+        .execute()
+    )
+    return response.data or []
+
+
 @router.post("/curriculum-assignments/{assignment_id}/submit")
 async def submit_curriculum_assignment(
     assignment_id: str,
@@ -464,6 +480,114 @@ async def get_my_curriculum_assignment_submission(
         .execute()
     )
     return response.data if response else None
+
+
+# ── TEACHER GRADING (for constructed-response quizzes etc.) ──
+
+@router.get("/curriculum-assignments/{assignment_id}/classroom/{classroom_id}/submissions")
+async def list_curriculum_assignment_submissions(
+    assignment_id: str,
+    classroom_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """
+    Returns every submission for a curriculum assignment from students
+    who belong to the given classroom. Scoped so a teacher only ever
+    sees submissions from their own classrooms.
+    """
+    # Verify the teacher owns the classroom.
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not classroom or not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    # Roster for the classroom.
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id, profiles!classroom_members_student_id_fkey(id, display_name, email)")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    roster_by_id = {m["student_id"]: m.get("profiles") for m in members}
+    student_ids = list(roster_by_id.keys())
+    if not student_ids:
+        return []
+
+    submissions = (
+        supabase_admin.table("exercise_responses")
+        .select("*")
+        .eq("lesson_id", assignment_id)
+        .eq("exercise_type", "curriculum_assignment")
+        .in_("student_id", student_ids)
+        .execute()
+    ).data or []
+
+    for s in submissions:
+        s["student"] = roster_by_id.get(s["student_id"])
+    return submissions
+
+
+class GradeSubmissionBody(BaseModel):
+    score: Optional[float] = None
+    teacher_feedback: Optional[str] = None
+    per_question_grades: Optional[dict] = None   # { question_id: numeric score }
+    per_question_feedback: Optional[dict] = None # { question_id: text }
+
+
+@router.patch("/curriculum-assignments/submissions/{submission_id}/grade")
+async def grade_curriculum_submission(
+    submission_id: str,
+    body: GradeSubmissionBody,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """
+    Sets the score / feedback / per-question grades on a single submission.
+    Per-question grades + feedback are merged into the response_text JSON
+    (under 'grades' and 'feedback' keys) so the original student answers
+    aren't touched.
+    """
+    existing = (
+        supabase_admin.table("exercise_responses")
+        .select("id, response_text, lesson_id")
+        .eq("id", submission_id)
+        .maybe_single()
+        .execute()
+    )
+    if not existing or not existing.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+
+    import json
+    try:
+        payload = json.loads(existing.data.get("response_text") or "{}")
+    except Exception:
+        payload = {}
+    if body.per_question_grades is not None:
+        payload["grades"] = body.per_question_grades
+    if body.per_question_feedback is not None:
+        payload["feedback"] = body.per_question_feedback
+
+    updates: dict = {"response_text": json.dumps(payload)}
+    if body.score is not None:
+        updates["score"] = body.score
+    if body.teacher_feedback is not None:
+        updates["teacher_feedback"] = body.teacher_feedback
+    from datetime import datetime, timezone
+    updates["graded_at"] = datetime.now(timezone.utc).isoformat()
+    updates["graded_by"] = user.profile_id
+
+    result = (
+        supabase_admin.table("exercise_responses")
+        .update(updates)
+        .eq("id", submission_id)
+        .execute()
+    )
+    return result.data[0] if result.data else {}
 
 
 # ============================================================

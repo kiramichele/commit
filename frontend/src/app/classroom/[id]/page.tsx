@@ -555,7 +555,10 @@ export default function ClassroomPage() {
                               <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
                             </div>
                           </div>
-                          <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                            <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
+                          </div>
                         </div>
                       )
                     })}
