@@ -140,6 +140,8 @@ export default function LessonPage() {
   const [exerciseOutput, setExerciseOutput] = useState<Record<number, string>>({})
   const [exerciseErrors, setExerciseErrors] = useState<Record<number, boolean>>({})
   const [runningExercise, setRunningExercise] = useState<number | null>(null)
+  const [exerciseCode, setExerciseCode] = useState<Record<number, string>>({})
+  const [selectedExercise, setSelectedExercise] = useState<number>(0)
 
   const handleExerciseRun = async (code: string, exerciseIndex: number) => {
     setRunningExercise(exerciseIndex)
@@ -201,6 +203,16 @@ export default function LessonPage() {
       ])
       setLesson(lessonData)
       setCode(lessonData.lesson_content?.coding_starter_code || '')
+
+      // Pre-fill per-exercise code from each exercise's starter_code
+      const starters: Record<number, string> = {}
+      const exs = lessonData.lesson_content?.exercises || []
+      exs.forEach((ex, i) => {
+        if (ex.type === 'coding') starters[i] = ex.starter_code || ''
+      })
+      setExerciseCode(starters)
+      setSelectedExercise(0)
+
       if (urlData) {
         setLessonUrl(urlData.url)
         fetch(urlData.url).then(r => r.text()).then(setLessonHtml).catch(() => {})
@@ -211,6 +223,13 @@ export default function LessonPage() {
     } finally {
       setDataLoading(false)
     }
+  }
+
+  const resetExerciseToStarter = (i: number) => {
+    const exs = lesson?.lesson_content?.exercises || []
+    const starter = exs[i]?.starter_code || ''
+    if (exerciseCode[i] && exerciseCode[i] !== starter && !confirm('Reset to starter code? Your edits will be lost.')) return
+    setExerciseCode(prev => ({ ...prev, [i]: starter }))
   }
 
   const handleRun = async () => {
@@ -253,14 +272,16 @@ export default function LessonPage() {
   })).filter(cat => cat.items.length > 0)
 
   const hasActivity = !!lesson?.lesson_content?.activity_file_path
-  const hasCoding = !!lesson?.lesson_content?.has_coding_exercise
+  const codingExercises = (lesson?.lesson_content?.exercises || []).filter(ex => ex.type === 'coding')
+  const hasExercises = codingExercises.length > 0
+  const hasLegacyCoding = !!lesson?.lesson_content?.has_coding_exercise && !hasExercises
+  const isCodingLesson = hasExercises || hasLegacyCoding
   const hasExample = !!(lesson?.lesson_content?.example_code)
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'lesson', label: '📄 lesson' },
+    { id: 'lesson', label: isCodingLesson ? '⌨ code' : '📄 lesson' },
     ...(hasActivity ? [{ id: 'activity' as Tab, label: '⚡ activity' }] : []),
     ...(hasExample ? [{ id: 'example' as Tab, label: '💡 example' }] : []),
-    ...(hasCoding ? [{ id: 'practice' as Tab, label: '⌨ practice' }] : []),
     { id: 'docs', label: '📚 python docs' },
   ]
 
@@ -322,7 +343,7 @@ export default function LessonPage() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
 
           {/* ── LESSON TAB ── */}
-          {activeTab === 'lesson' && (
+          {activeTab === 'lesson' && !isCodingLesson && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
               {lessonHint && (
                 <div style={{ padding: '10px 16px', background: '#FEF9C3', borderBottom: '1px solid rgba(245,158,11,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexShrink: 0 }}>
@@ -345,6 +366,128 @@ export default function LessonPage() {
               )}
             </div>
           )}
+
+          {/* ── CODING LESSON 3-PANE ── */}
+          {activeTab === 'lesson' && isCodingLesson && (() => {
+            // Build the canonical "current exercise" — works for both new (exercises[]) and legacy (single coding fields)
+            const currentExercise: Exercise = hasExercises
+              ? codingExercises[selectedExercise] || codingExercises[0]
+              : {
+                  type: 'coding',
+                  instructions: lesson?.lesson_content?.coding_instructions || '',
+                  starter_code: lesson?.lesson_content?.coding_starter_code || '',
+                }
+            const exIdx = hasExercises ? selectedExercise : -1  // -1 = legacy single
+            const codeKey = hasExercises ? selectedExercise : -1
+            const currentCode = exerciseCode[codeKey] ?? (currentExercise.starter_code || '')
+            const currentOutput = exerciseOutput[codeKey] || ''
+            const currentError = !!exerciseErrors[codeKey]
+            const isRunning = runningExercise === codeKey
+            const starterForCurrent = currentExercise.starter_code || ''
+
+            const runCurrent = () => handleExerciseRun(currentCode, codeKey)
+            const updateCode = (val: string) => setExerciseCode(prev => ({ ...prev, [codeKey]: val }))
+
+            const handleEditorTab = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+              if (e.key === 'Tab') {
+                e.preventDefault()
+                const el = e.currentTarget
+                const start = el.selectionStart
+                const next = currentCode.substring(0, start) + '    ' + currentCode.substring(start)
+                updateCode(next)
+                setTimeout(() => { el.selectionStart = el.selectionEnd = start + 4 }, 0)
+              }
+            }
+
+            return (
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 104px)' }}>
+
+                {/* LEFT PANE — PROBLEM */}
+                <div style={{ borderRight: '1px solid rgba(14,45,110,0.08)', background: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                  <div style={{ padding: '10px 16px', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>
+                    problem
+                  </div>
+                  {lessonHtml ? (
+                    <iframe srcDoc={lessonHtml} style={{ flex: 1, width: '100%', border: 'none' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={lesson?.title} />
+                  ) : currentExercise.instructions ? (
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                      {currentExercise.instructions}
+                    </div>
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem', color: '#888780', fontSize: '13px', textAlign: 'center' }}>
+                      no problem description uploaded yet
+                    </div>
+                  )}
+                </div>
+
+                {/* MIDDLE PANE — EDITOR */}
+                <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
+
+                  {/* Exercise tabs (only if multiple) */}
+                  {hasExercises && codingExercises.length > 1 && (
+                    <div style={{ display: 'flex', gap: '0', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)', overflowX: 'auto' }}>
+                      {codingExercises.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setSelectedExercise(i)}
+                          style={{
+                            padding: '8px 16px', fontSize: '12px', fontWeight: 600,
+                            background: i === selectedExercise ? '#1C1C1E' : 'transparent',
+                            color: i === selectedExercise ? '#EBF1FD' : 'rgba(255,255,255,0.5)',
+                            border: 'none', borderBottom: i === selectedExercise ? '2px solid #1A56DB' : '2px solid transparent',
+                            cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
+                          }}
+                        >
+                          exercise {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Editor toolbar */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>editor · python</span>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        onClick={() => resetExerciseToStarter(codeKey)}
+                        disabled={!starterForCurrent || currentCode === starterForCurrent}
+                        title="restore the original starter code"
+                        style={{ padding: '5px 12px', background: 'transparent', color: 'rgba(255,255,255,0.6)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        ↺ starter
+                      </button>
+                      <button
+                        onClick={runCurrent}
+                        disabled={isRunning}
+                        style={{ padding: '5px 14px', background: isRunning ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: isRunning ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                      >
+                        {isRunning ? '◌ running...' : '▶ run'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={currentCode}
+                    onChange={e => updateCode(e.target.value)}
+                    onKeyDown={handleEditorTab}
+                    spellCheck={false}
+                    style={{ flex: 1, width: '100%', background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+
+                {/* RIGHT PANE — CONSOLE */}
+                <div style={{ background: '#111113', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '10px 16px', background: '#1C1C1E', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>
+                    console
+                  </div>
+                  <pre style={{ flex: 1, margin: 0, padding: '1rem 1.25rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: currentError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}>
+                    {currentOutput || <span style={{ color: 'rgba(255,255,255,0.25)' }}>run your code to see output here</span>}
+                  </pre>
+                </div>
+
+              </div>
+            )
+          })()}
 
           {/* ── ACTIVITY TAB ── */}
           {activeTab === 'activity' && (
@@ -415,66 +558,6 @@ export default function LessonPage() {
             </div>
           )}
 
-          {/* ── PRACTICE TAB ── */}
-          {activeTab === 'practice' && (
-            <div style={{ flex: 1, padding: '1.5rem 2rem', maxWidth: '860px', margin: '0 auto', width: '100%' }}>
-
-              {lesson?.lesson_content?.exercises?.length ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {lesson.lesson_content.exercises.map((exercise, i) => (
-                    <div key={i}>
-                      {lesson.lesson_content!.exercises!.length > 1 && (
-                        <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888780', marginBottom: '8px' }}>
-                          exercise {i + 1} of {lesson.lesson_content!.exercises!.length}
-                        </div>
-                      )}
-                      <ExerciseBlock
-                        exercise={exercise}
-                        exerciseIndex={i}
-                        lessonId={lesson.id}
-                        onRunCode={(code) => handleExerciseRun(code, i)}
-                        output={exerciseOutput[i]}
-                        outputError={exerciseErrors[i]}
-                        running={runningExercise === i}
-                      />
-                    </div>
-                  ))}
-                </div>
-              ) : lesson?.lesson_content?.has_coding_exercise ? (
-                <div style={{ display: 'flex', flexDirection: 'column', background: '#1C1C1E', borderRadius: '12px', overflow: 'hidden' }}>
-                  {lesson.lesson_content.coding_instructions && (
-                    <div style={{ padding: '1.25rem 1.5rem', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>instructions</div>
-                        <ReadAloud text={lesson.lesson_content.coding_instructions} isPro={false} />
-                      </div>
-                      <p style={{ margin: 0, fontSize: '13px', color: 'rgba(255,255,255,0.75)', lineHeight: 1.7 }}>
-                        {lesson.lesson_content.coding_instructions}
-                      </p>
-                    </div>
-                  )}
-                  <div style={{ flex: 1, position: 'relative' }}>
-                    <div style={{ position: 'absolute', top: '10px', right: '1rem', zIndex: 10 }}>
-                      <button onClick={handleRun} disabled={running} style={{ padding: '7px 16px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '7px', fontSize: '13px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
-                        {running ? '◌ running...' : '▶ run'}
-                      </button>
-                    </div>
-                    <textarea value={code} onChange={e => setCode(e.target.value)} onKeyDown={handleTab} spellCheck={false} style={{ width: '100%', height: '300px', background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
-                  </div>
-                  <div style={{ background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', minHeight: '120px' }}>
-                    <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.3)' }}>output</div>
-                    <pre style={{ margin: 0, padding: '10px 1rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                      {output || <span style={{ color: 'rgba(255,255,255,0.2)' }}>run your code to see output here</span>}
-                    </pre>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
-                  no practice exercises for this lesson
-                </div>
-              )}
-            </div>
-          )}
 
           {/* ── DOCS TAB ── */}
           {activeTab === 'docs' && (
