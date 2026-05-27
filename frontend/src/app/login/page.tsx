@@ -76,19 +76,26 @@ export default function LoginPage() {
                 />
               </div>
 
+              <div style={{ textAlign: 'right', marginTop: '-0.5rem' }}>
+                <Link href="/forgot-password" style={{ fontSize: '13px', color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>
+                  forgot your password?
+                </Link>
+              </div>
+
               <button
                 type="submit" disabled={loading}
                 style={{ width: '100%', padding: '12px', background: loading ? '#93C5FD' : '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '15px', cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}
               >
                 {loading ? 'signing in...' : 'sign in →'}
               </button>
-            </form>
 
-            <div style={{ marginTop: '1rem', textAlign: 'center' }}>
-              <Link href="/forgot-password" style={{ fontSize: '13px', color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>
-                forgot your password?
+              <Link
+                href="/forgot-password"
+                style={{ width: '100%', padding: '11px', background: 'transparent', color: '#1A56DB', border: '1.5px solid rgba(26,86,219,0.3)', borderRadius: '8px', fontWeight: 600, fontSize: '14px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", textAlign: 'center', textDecoration: 'none', boxSizing: 'border-box' }}
+              >
+                reset password
               </Link>
-            </div>
+            </form>
           </div>
 
           <p style={{ textAlign: 'center', marginTop: '1.5rem', fontSize: '14px', color: '#888780' }}>are you a teacher? <Link href="/signup" style={{ color: '#1A56DB', textDecoration: 'none', fontWeight: 500 }}>apply for an account</Link></p>
