@@ -2,12 +2,18 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-)
+let supabaseSingleton: SupabaseClient | null = null
+function getSupabase(): SupabaseClient {
+  if (!supabaseSingleton) {
+    supabaseSingleton = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
+  }
+  return supabaseSingleton
+}
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -19,9 +25,8 @@ export default function ResetPasswordPage() {
   const [sessionReady, setSessionReady] = useState(false)
 
   useEffect(() => {
-    // Supabase puts the recovery token in the URL hash
-    // The JS client auto-detects it and sets the session
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    // Supabase puts the recovery token in the URL hash; client auto-detects it.
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setSessionReady(true)
       }
@@ -44,7 +49,7 @@ export default function ResetPasswordPage() {
 
     setLoading(true)
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { error: updateError } = await getSupabase().auth.updateUser({
         password,
       })
       if (updateError) throw updateError
