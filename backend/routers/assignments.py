@@ -34,7 +34,7 @@ class AssignmentCreate(BaseModel):
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
     curriculum_unit_id: Optional[str] = None  # if set, this assignment shows in the curriculum tab of the teacher's classroom
-    curriculum_order: Optional[int] = None
+    curriculum_order: Optional[float] = None  # numeric so we can slot between admin items via half-steps
 
 
 class AssignmentUpdate(BaseModel):
@@ -49,7 +49,7 @@ class AssignmentUpdate(BaseModel):
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
     curriculum_unit_id: Optional[str] = None
-    curriculum_order: Optional[int] = None
+    curriculum_order: Optional[float] = None
 
 
 # ============================================================

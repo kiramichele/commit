@@ -169,6 +169,42 @@ export default function ClassroomPage() {
       .finally(() => setCurriculumLoading(false))
   }, [tab, profile])
 
+  // Move a teacher's classroom assignment up or down in the merged curriculum
+  // view. We slot it next to the adjacent item by setting curriculum_order to
+  // a half-step value — admin items keep their integer order_index, teacher
+  // items can shift around them freely.
+  const moveTeacherAssignment = async (
+    assignmentId: string,
+    mergedList: Array<{ id: string; order_index: number; kind: string }>,
+    direction: -1 | 1,
+  ) => {
+    const idx = mergedList.findIndex(x => x.id === assignmentId)
+    if (idx < 0) return
+    const target = mergedList[idx + direction]
+    if (!target) return  // already at the top/bottom
+
+    let newOrder: number
+    if (direction === -1) {
+      // Moving up: slot above the target.
+      const above = mergedList[idx + direction - 1]
+      newOrder = above ? (above.order_index + target.order_index) / 2 : target.order_index - 0.5
+    } else {
+      // Moving down: slot below the target.
+      const below = mergedList[idx + direction + 1]
+      newOrder = below ? (target.order_index + below.order_index) / 2 : target.order_index + 0.5
+    }
+
+    // Optimistic local update so the UI moves immediately.
+    setAssignments(prev => prev.map(a => a.id === assignmentId ? { ...a, curriculum_order: newOrder } : a))
+    try {
+      await api.patch(`/assignments/${assignmentId}`, { curriculum_order: newOrder })
+    } catch (err: any) {
+      alert(err.message || 'Failed to reorder')
+      // Refetch on failure to revert.
+      fetchAll()
+    }
+  }
+
   const fetchAll = async () => {
     setDataLoading(true)
     try {
@@ -580,9 +616,24 @@ export default function ClassroomPage() {
                       // Teacher's own classroom assignment, attached to this unit
                       const ta = item.data
                       const tatc = typeColors[ta.assignment_type || 'code'] || typeColors.code
+                      const isFirst = i === 0
+                      const isLast = i === merged.length - 1
+                      const arrowBtn = (disabled: boolean): React.CSSProperties => ({
+                        width: '24px', height: '20px', padding: 0, borderRadius: '4px',
+                        border: disabled ? '1px solid rgba(14,45,110,0.08)' : '1.5px solid #166534',
+                        background: disabled ? 'transparent' : '#DCFCE7',
+                        color: disabled ? '#D3D1C7' : '#166534',
+                        fontSize: '11px', fontWeight: 700,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        lineHeight: 1,
+                      })
                       return (
                         <div key={`teacher-${ta.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(220,252,231,0.35)' }}>
                           <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#DCFCE7', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#166534', flexShrink: 0 }}>{stepNum}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
+                            <button onClick={() => moveTeacherAssignment(ta.id, merged, -1)} disabled={isFirst} style={arrowBtn(isFirst)} title="move up">↑</button>
+                            <button onClick={() => moveTeacherAssignment(ta.id, merged, 1)} disabled={isLast} style={arrowBtn(isLast)} title="move down">↓</button>
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{ta.title}</span>
