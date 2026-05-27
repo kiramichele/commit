@@ -24,8 +24,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         frontend_url,
-        "http://localhost:3000",
         "https://committocode.netlify.app",
+        "http://localhost:3000"
     ],
     allow_credentials=True,
     allow_methods=["*"],
