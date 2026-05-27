@@ -23,7 +23,15 @@ interface CurriculumAssignment {
   is_published: boolean
   html_file_path: string | null
   html_body?: string | null
+  checkin_format?: string | null
 }
+
+const CHECKIN_FORMAT_OPTIONS = [
+  { value: 'short_answer', label: 'Short answer', desc: 'Plain prompt → textarea response' },
+  { value: 'rating',       label: '1–5 rating',   desc: 'Plain prompt → 1–5 scale response' },
+  { value: 'coding',       label: 'Coding',       desc: 'Plain prompt → code snippet response' },
+  { value: 'html',         label: 'HTML prompt',  desc: 'Rich HTML body + short text response' },
+]
 
 const TYPE_OPTIONS = [
   { value: 'code',     label: 'Coding' },
@@ -59,9 +67,18 @@ export default function CurriculumAssignmentEditor() {
   const [htmlBody, setHtmlBody] = useState('')
   const [uploading, setUploading] = useState(false)
 
+  const [checkinFormat, setCheckinFormat] = useState<string>('short_answer')
+
   const isCoding = assignmentType === 'code'
   const isActivity = assignmentType === 'activity'
   const isQuiz = assignmentType === 'quiz'
+  const isCheckin = assignmentType === 'checkin'
+  // Check-ins with html or coding format need the same field surfaces as
+  // activity / code types. Compute these once.
+  const checkinIsHtml = isCheckin && checkinFormat === 'html'
+  const checkinIsCoding = isCheckin && checkinFormat === 'coding'
+  const showHtmlBody = isActivity || checkinIsHtml
+  const showStarterCode = isCoding || checkinIsCoding
 
   const [quizQuestions, setQuizQuestions] = useState<Array<{
     id: string
@@ -105,6 +122,7 @@ export default function CurriculumAssignmentEditor() {
       setHint1(data.hint_1 || '')
       setHint2(data.hint_2 || '')
       setHtmlBody(data.html_body || '')
+      setCheckinFormat(data.checkin_format || 'short_answer')
 
       // Fetch quiz questions if applicable
       if (data.assignment_type === 'quiz') {
@@ -184,16 +202,17 @@ export default function CurriculumAssignmentEditor() {
         title,
         assignment_type: assignmentType,
         scaffold_level: scaffoldLevel,
-        min_commits: isCoding ? minCommits : 0,
+        min_commits: showStarterCode ? minCommits : 0,
         standards_tags: standardsList.length ? standardsList : null,
         is_published: isPublished,
         allow_collab: allowCollab,
         instructions,
-        starter_code: isCoding ? starterCode : '',
+        starter_code: showStarterCode ? starterCode : '',
         hints_enabled: hintsEnabled,
         hint_1: hint1 || null,
         hint_2: hint2 || null,
-        html_body: isActivity ? htmlBody : null,
+        html_body: showHtmlBody ? htmlBody : null,
+        checkin_format: isCheckin ? checkinFormat : null,
       })
       alert('Saved')
     } catch (err: any) {
@@ -262,8 +281,8 @@ export default function CurriculumAssignmentEditor() {
                 </select>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: isCoding ? '1fr 1fr 120px 120px' : '1fr 120px', gap: '12px', alignItems: 'end' }}>
-              {isCoding && (
+            <div style={{ display: 'grid', gridTemplateColumns: showStarterCode ? '1fr 1fr 120px 120px' : '1fr 120px', gap: '12px', alignItems: 'end' }}>
+              {showStarterCode && (
                 <div>
                   <label style={label}>scaffold level</label>
                   <select value={scaffoldLevel} onChange={e => setScaffoldLevel(e.target.value)} style={input}>
@@ -275,7 +294,7 @@ export default function CurriculumAssignmentEditor() {
                 <label style={label}>standards (comma-separated)</label>
                 <input value={standardsText} onChange={e => setStandardsText(e.target.value)} placeholder="CRD-1.A" style={input} />
               </div>
-              {isCoding && (
+              {showStarterCode && (
                 <div>
                   <label style={label}>min commits</label>
                   <input type="number" value={minCommits} onChange={e => setMinCommits(parseInt(e.target.value, 10) || 0)} style={input} />
@@ -290,12 +309,37 @@ export default function CurriculumAssignmentEditor() {
             </div>
           </div>
 
+          {/* CHECK-IN FORMAT PICKER */}
+          {isCheckin && (
+            <div style={card}>
+              <label style={label}>check-in format</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', marginTop: '4px' }}>
+                {CHECKIN_FORMAT_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setCheckinFormat(opt.value)}
+                    style={{
+                      padding: '10px 14px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+                      border: checkinFormat === opt.value ? '2px solid #1A56DB' : '2px solid rgba(14,45,110,0.1)',
+                      background: checkinFormat === opt.value ? '#EBF1FD' : 'white',
+                      color: '#0E2D6E',
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '2px' }}>{opt.label}</div>
+                    <div style={{ fontSize: '11px', color: '#888780' }}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* INSTRUCTIONS + CODE */}
           <div style={card}>
-            <label style={label}>{isCoding ? 'instructions' : assignmentType === 'quiz' || assignmentType === 'checkin' ? 'prompt' : 'instructions'}</label>
-            <textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={6} placeholder="What the student needs to do." style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: isCoding ? '12px' : '0' }} />
+            <label style={label}>{showStarterCode ? 'instructions' : assignmentType === 'quiz' || isCheckin ? 'prompt' : 'instructions'}</label>
+            <textarea value={instructions} onChange={e => setInstructions(e.target.value)} rows={6} placeholder="What the student needs to do." style={{ ...input, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', marginBottom: showStarterCode ? '12px' : '0' }} />
 
-            {isCoding && (
+            {showStarterCode && (
               <>
                 <label style={label}>starter code</label>
                 <textarea value={starterCode} onChange={e => setStarterCode(e.target.value)} rows={8} placeholder="# starter code here" style={textareaStyle} />
@@ -377,26 +421,27 @@ export default function CurriculumAssignmentEditor() {
             </div>
           )}
 
-          {/* ACTIVITY HTML BODY — only for activity type */}
-          {isActivity && (
+          {/* HTML BODY — for activities and html check-ins */}
+          {showHtmlBody && (
             <div style={card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                <label style={{ ...label, marginBottom: 0 }}>activity html body</label>
+                <label style={{ ...label, marginBottom: 0 }}>{isActivity ? 'activity html body' : 'check-in html prompt'}</label>
                 <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
                   {uploading ? 'reading...' : '+ upload .html'}
                   <input type="file" accept=".html" onChange={handleFileUpload} style={{ display: 'none' }} />
                 </label>
               </div>
               <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
-                Renders like a lesson page; students read it and answer embedded questions.
-                Use the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your submit button (see lesson editor for the activity template).
+                {isActivity
+                  ? <>Renders like a lesson page; students read it and answer embedded questions. Use the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your submit button (see lesson editor for the activity template).</>
+                  : <>Renders the HTML above a single text response field. Use this when your prompt needs rich formatting (lists, code blocks, images) but the student just writes a short reflection.</>}
               </p>
-              <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Activity title</h1>&#10;<p>Body HTML with form inputs...</p>" style={textareaStyle} />
+              <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Title</h1>&#10;<p>Body HTML...</p>" style={textareaStyle} />
             </div>
           )}
 
           {/* HINTS — coding only */}
-          {isCoding && (
+          {showStarterCode && (
             <div style={card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                 <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>hints</h3>

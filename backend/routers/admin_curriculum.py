@@ -481,7 +481,8 @@ class CurriculumAssignmentCreate(BaseModel):
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
     is_published: bool = False
-    html_body: Optional[str] = None  # for activity-type — uploaded to storage
+    html_body: Optional[str] = None  # for activity-type and html check-ins — uploaded to storage
+    checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -500,6 +501,7 @@ class CurriculumAssignmentUpdate(BaseModel):
     is_published: Optional[bool] = None
     html_body: Optional[str] = None  # set to "" to clear, None to leave unchanged
     unit_id: Optional[str] = None  # supports moving the assignment to another unit
+    checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
 
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project"}

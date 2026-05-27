@@ -14,6 +14,8 @@ interface Assignment {
   starter_code: string
   assignment_type: AssignmentType
   units: { id: string; title: string; order_index: number } | null
+  checkin_format: 'html' | 'short_answer' | 'rating' | 'coding' | null
+  html_file_path: string | null
 }
 
 interface Question {
@@ -79,6 +81,8 @@ export default function CurriculumAssignmentPage() {
   const [questions, setQuestions] = useState<Question[]>([])
   const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({})
   const [textResponse, setTextResponse] = useState('')
+  const [ratingResponse, setRatingResponse] = useState<number | null>(null)
+  const [checkinHtml, setCheckinHtml] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [output, setOutput] = useState('')
   const [outputError, setOutputError] = useState(false)
@@ -108,11 +112,24 @@ export default function CurriculumAssignmentPage() {
         setCode(a.starter_code || '')
       }
 
+      if (a.assignment_type === 'checkin' && a.checkin_format === 'coding') {
+        setCode(a.starter_code || '')
+      }
+
       if (a.assignment_type === 'activity') {
         try {
           const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
           const html = await fetch(url).then(r => r.text())
           setActivityHtml(html + COMMIT_SDK_SCRIPT)
+        } catch {}
+      }
+
+      // Check-in with HTML prompt: fetch and render the body above the response field.
+      if (a.assignment_type === 'checkin' && a.checkin_format === 'html' && a.html_file_path) {
+        try {
+          const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
+          const html = await fetch(url).then(r => r.text())
+          setCheckinHtml(html)
         } catch {}
       }
 
@@ -129,8 +146,13 @@ export default function CurriculumAssignmentPage() {
         if (prior?.response_text) {
           const parsed = JSON.parse(prior.response_text)
           if (a.assignment_type === 'quiz') setQuizAnswers(parsed)
-          else if (a.assignment_type === 'checkin' || a.assignment_type === 'project') setTextResponse(parsed.text || '')
           else if (a.assignment_type === 'code') setCode(parsed.code || a.starter_code || '')
+          else if (a.assignment_type === 'checkin') {
+            if (a.checkin_format === 'rating' && typeof parsed.rating === 'number') setRatingResponse(parsed.rating)
+            else if (a.checkin_format === 'coding') setCode(parsed.code || a.starter_code || '')
+            else setTextResponse(parsed.text || '')
+          }
+          else if (a.assignment_type === 'project') setTextResponse(parsed.text || '')
           setSubmitted(true)
         }
       } catch {}
@@ -251,6 +273,93 @@ export default function CurriculumAssignmentPage() {
           <div style={{ fontSize: '2rem', opacity: 0.4 }}>◎</div>
           <p style={{ fontSize: '14px', margin: 0 }}>{error || 'assignment not found'}</p>
           <Link href="/learn" style={{ fontSize: '13px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>← back to learn</Link>
+        </div>
+      ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'coding' ? (
+        // ── CHECK-IN: coding format → 3-pane editor ──
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>
+          <div style={{ borderRight: '1px solid rgba(14,45,110,0.08)', background: 'white', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '10px 16px', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>check-in</div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{assignment.instructions || 'no prompt'}</div>
+          </div>
+          <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>your code</span>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button onClick={handleRun} disabled={running} style={{ padding: '5px 14px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{running ? '◌ running...' : '▶ run'}</button>
+                <button onClick={() => submit({ code })} disabled={saving} style={{ padding: '5px 14px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'saving...' : submitted ? 'resubmit' : 'submit'}</button>
+              </div>
+            </div>
+            <textarea value={code} onChange={e => setCode(e.target.value)} onKeyDown={handleTab} spellCheck={false} style={{ flex: 1, background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ background: '#111113', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '10px 16px', background: '#1C1C1E', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>console</div>
+            <pre style={{ flex: 1, margin: 0, padding: '1rem 1.25rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}>
+              {output || <span style={{ color: 'rgba(255,255,255,0.25)' }}>run your code to see output here</span>}
+            </pre>
+          </div>
+        </div>
+      ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'rating' ? (
+        // ── CHECK-IN: 1-5 rating ──
+        <div style={{ flex: 1, maxWidth: '600px', margin: '0 auto', padding: '2rem', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.75rem 2rem' }}>
+            <div style={{ fontSize: '10px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#0C447C', marginBottom: '10px' }}>check-in</div>
+            <p style={{ margin: '0 0 1.5rem', fontSize: '15px', color: '#0E2D6E', lineHeight: 1.7, fontWeight: 500, whiteSpace: 'pre-wrap' }}>{assignment.instructions}</p>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '1.5rem' }}>
+              {[1, 2, 3, 4, 5].map(n => {
+                const active = ratingResponse === n
+                return (
+                  <button
+                    key={n}
+                    onClick={() => setRatingResponse(n)}
+                    style={{
+                      width: '60px', height: '60px', borderRadius: '12px', fontSize: '20px', fontWeight: 700,
+                      border: active ? '3px solid #1A56DB' : '2px solid rgba(14,45,110,0.12)',
+                      background: active ? '#EBF1FD' : 'white',
+                      color: active ? '#0C447C' : '#5F5E5A',
+                      cursor: 'pointer',
+                      fontFamily: "'DM Sans', sans-serif",
+                      transition: 'all 0.1s',
+                    }}
+                  >
+                    {n}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#888780', padding: '0 12px', marginBottom: '1.5rem' }}>
+              <span>1 — low</span>
+              <span>5 — high</span>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => submit({ rating: ratingResponse })}
+                disabled={saving || ratingResponse == null}
+                style={{ padding: '10px 22px', background: ratingResponse == null ? '#D3D1C7' : '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: saving || ratingResponse == null ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+              >
+                {saving ? 'submitting...' : submitted ? 'resubmit' : 'submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'html' ? (
+        // ── CHECK-IN: html prompt + text response ──
+        <div style={{ flex: 1, maxWidth: '860px', margin: '0 auto', padding: '2rem', width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden', marginBottom: '1rem' }}>
+            {checkinHtml ? (
+              <iframe srcDoc={checkinHtml} style={{ width: '100%', minHeight: '420px', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={assignment.title} />
+            ) : (
+              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>loading prompt...</div>
+            )}
+          </div>
+          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
+            <div style={{ padding: '0.75rem 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>your response</div>
+            <textarea value={textResponse} onChange={e => setTextResponse(e.target.value)} rows={6} placeholder="Write your response..." style={{ width: '100%', padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'vertical', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", lineHeight: 1.7, color: '#333', boxSizing: 'border-box' }} />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.75rem 1.25rem', background: '#F8F7F5', borderTop: '1px solid rgba(14,45,110,0.06)' }}>
+              <button onClick={() => submit({ text: textResponse })} disabled={saving} style={{ padding: '9px 20px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'submitting...' : submitted ? 'resubmit' : 'submit'}</button>
+            </div>
+          </div>
         </div>
       ) : assignment.assignment_type === 'code' ? (
         // ── 3-PANE FOR CODING ──

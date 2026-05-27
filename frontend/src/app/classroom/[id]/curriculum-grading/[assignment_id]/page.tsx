@@ -10,6 +10,7 @@ interface Assignment {
   title: string
   assignment_type: string
   instructions: string
+  checkin_format?: 'html' | 'short_answer' | 'rating' | 'coding' | null
 }
 
 interface Question {
@@ -50,12 +51,13 @@ const parsePayload = (text: string | null): ParsedSubmission => {
     const feedback = (obj.feedback && typeof obj.feedback === 'object') ? obj.feedback : {}
     const answers: Record<string, string> = {}
     for (const k of Object.keys(obj)) {
-      if (k === 'grades' || k === 'feedback' || k === 'text' || k === 'code') continue
+      if (k === 'grades' || k === 'feedback' || k === 'text' || k === 'code' || k === 'rating') continue
       answers[k] = obj[k]
     }
-    // For checkin/project type with {text: '...'} payload, surface as a single 'answer' field
+    // For checkin/project type with single-field payloads, surface them via reserved keys.
     if (typeof obj.text === 'string') answers['_text'] = obj.text
     if (typeof obj.code === 'string') answers['_code'] = obj.code
+    if (typeof obj.rating === 'number') answers['_rating'] = String(obj.rating)
     return { answers, grades, feedback }
   } catch {
     return { answers: {}, grades: {}, feedback: {} }
@@ -337,15 +339,36 @@ export default function CurriculumGradingPage() {
                     )
                   })
                 ) : (
-                  // Non-quiz submission (checkin / project): just show the textarea response.
+                  // Non-quiz submission. Render the student response based on
+                  // the assignment's check-in format (or fall back to text).
                   <div style={card}>
                     <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
                       <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>student response</h3>
+                      {assignment.assignment_type === 'checkin' && assignment.checkin_format && (
+                        <p style={{ margin: '2px 0 0', fontSize: '11px', color: '#888780' }}>format: {assignment.checkin_format.replace('_', ' ')}</p>
+                      )}
                     </div>
                     <div style={{ padding: '1rem 1.25rem' }}>
-                      <div style={{ padding: '12px 16px', background: '#FAFAF8', borderRadius: '8px', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: '60px' }}>
-                        {parsed.answers._text || parsed.answers._code || <span style={{ color: '#888780', fontStyle: 'italic' }}>no response</span>}
-                      </div>
+                      {assignment.checkin_format === 'rating' ? (
+                        parsed.answers._rating ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ fontSize: '36px', fontWeight: 700, color: '#0E2D6E', fontFamily: "'DM Mono', monospace" }}>{parsed.answers._rating}</span>
+                            <span style={{ fontSize: '14px', color: '#888780' }}>/ 5</span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#888780', fontStyle: 'italic', fontSize: '14px' }}>no rating</span>
+                        )
+                      ) : assignment.checkin_format === 'coding' ? (
+                        parsed.answers._code ? (
+                          <pre style={{ margin: 0, padding: '12px 16px', background: '#1C1C1E', color: '#EBF1FD', borderRadius: '8px', fontFamily: "'DM Mono', monospace", fontSize: '13px', lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>{parsed.answers._code}</pre>
+                        ) : (
+                          <span style={{ color: '#888780', fontStyle: 'italic', fontSize: '14px' }}>no code</span>
+                        )
+                      ) : (
+                        <div style={{ padding: '12px 16px', background: '#FAFAF8', borderRadius: '8px', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: '60px' }}>
+                          {parsed.answers._text || parsed.answers._code || <span style={{ color: '#888780', fontStyle: 'italic' }}>no response</span>}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
