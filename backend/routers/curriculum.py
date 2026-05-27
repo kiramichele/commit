@@ -482,6 +482,101 @@ async def get_my_curriculum_assignment_submission(
     return response.data if response else None
 
 
+# ── GRADEBOOK DATA (all curriculum assignment scores in a classroom) ──
+
+@router.get("/classroom/{classroom_id}/curriculum-grade-data")
+async def curriculum_grade_data_for_classroom(
+    classroom_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """
+    Returns:
+      assignments: list of published curriculum_assignments (gradable types only)
+      submissions: list of exercise_responses for those assignments, filtered
+                   to students who belong to the given classroom.
+    Lets the gradebook merge curriculum scores alongside classroom assignments.
+    """
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not classroom or not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    assignments = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, unit_id, title, assignment_type, order_index")
+        .eq("is_published", True)
+        .order("order_index")
+        .execute()
+    ).data or []
+    if not assignments:
+        return {"assignments": [], "submissions": []}
+
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    student_ids = [m["student_id"] for m in members]
+    if not student_ids:
+        return {"assignments": assignments, "submissions": []}
+
+    submissions = (
+        supabase_admin.table("exercise_responses")
+        .select("id, student_id, lesson_id, score, is_correct, graded_at")
+        .eq("exercise_type", "curriculum_assignment")
+        .in_("student_id", student_ids)
+        .in_("lesson_id", [a["id"] for a in assignments])
+        .execute()
+    ).data or []
+
+    return {"assignments": assignments, "submissions": submissions}
+
+
+@router.get("/my/classroom/{classroom_id}/curriculum-grades")
+async def my_curriculum_grades(
+    classroom_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the current student's curriculum assignment submissions + the assignment metadata."""
+    # Confirm the caller is a member of this classroom.
+    member = (
+        supabase_admin.table("classroom_members")
+        .select("id")
+        .eq("classroom_id", classroom_id)
+        .eq("student_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not member or not member.data:
+        # Not a member — return empty rather than 403 so the grades page just shows nothing for that tab.
+        return {"assignments": [], "submissions": []}
+
+    assignments = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, title, assignment_type, order_index")
+        .eq("is_published", True)
+        .order("order_index")
+        .execute()
+    ).data or []
+
+    submissions = (
+        supabase_admin.table("exercise_responses")
+        .select("id, lesson_id, score, is_correct, graded_at")
+        .eq("exercise_type", "curriculum_assignment")
+        .eq("student_id", user.profile_id)
+        .execute()
+    ).data or []
+
+    return {"assignments": assignments, "submissions": submissions}
+
+
 # ── TEACHER GRADING (for constructed-response quizzes etc.) ──
 
 @router.get("/curriculum-assignments/{assignment_id}/classroom/{classroom_id}/submissions")

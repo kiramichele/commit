@@ -59,6 +59,7 @@ export default function GradesPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [selectedClassroom, setSelectedClassroom] = useState<string>('')
   const [rows, setRows] = useState<GradeRow[]>([])
+  const [curriculumGrades, setCurriculumGrades] = useState<Array<{ id: string; title: string; assignment_type: string; score: number | null; submitted: boolean }>>([])
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
@@ -104,6 +105,20 @@ export default function GradesPage() {
         assignment: a,
         submission: submissionResults[i],
       })))
+
+      // Fold in curriculum assignment grades for this classroom.
+      try {
+        const cd = await api.get<{ assignments: Array<{ id: string; title: string; assignment_type: string }>; submissions: Array<{ lesson_id: string; score: number | null; graded_at: string | null }> }>(
+          `/curriculum/my/classroom/${selectedClassroom}/curriculum-grades`
+        )
+        const subsByAssignment = new Map(cd.submissions.map(s => [s.lesson_id, s]))
+        setCurriculumGrades(cd.assignments.map(a => {
+          const sub = subsByAssignment.get(a.id)
+          return { id: a.id, title: a.title, assignment_type: a.assignment_type, score: sub?.score ?? null, submitted: !!sub }
+        }))
+      } catch {
+        setCurriculumGrades([])
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -127,7 +142,13 @@ export default function GradesPage() {
     return TYPE_KEYS.includes(t) ? t : 'code'
   }
 
-  // Per-type averages from the student's graded assignments.
+  const curriculumTypeOf = (c: { assignment_type: string }): keyof Weights => {
+    const t = (c.assignment_type || 'code') as keyof Weights
+    return TYPE_KEYS.includes(t) ? t : 'code'
+  }
+
+  // Per-type averages folding in curriculum assignment scores alongside
+  // classroom assignment grades. Each type bucket averages over both sources.
   const typeAverages = (): Partial<Record<keyof Weights, number>> => {
     const buckets: Partial<Record<keyof Weights, number[]>> = {}
     gradedRows.forEach(r => {
@@ -135,6 +156,12 @@ export default function GradesPage() {
       const g = effectiveGrade(r.submission!)
       if (!buckets[t]) buckets[t] = []
       buckets[t]!.push(g)
+    })
+    curriculumGrades.forEach(c => {
+      if (c.score == null) return
+      const t = curriculumTypeOf(c)
+      if (!buckets[t]) buckets[t] = []
+      buckets[t]!.push(c.score)
     })
     const out: Partial<Record<keyof Weights, number>> = {}
     for (const t of TYPE_KEYS) {
@@ -423,6 +450,51 @@ export default function GradesPage() {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* CURRICULUM ASSIGNMENTS */}
+        {!dataLoading && curriculumGrades.length > 0 && (
+          <div style={{ marginTop: '2rem' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '0.75rem' }}>
+              <h3 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: '#0E2D6E', letterSpacing: '0.02em' }}>curriculum assignments</h3>
+              <span style={{ fontSize: '11px', color: '#888780' }}>from the platform curriculum</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {curriculumGrades.map(c => {
+                const hasGrade = c.score != null
+                const lg = hasGrade ? getLetterGrade(c.score!) : null
+                return (
+                  <div key={c.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{c.title}</span>
+                        <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{c.assignment_type}</span>
+                        {!hasGrade && c.submitted && (
+                          <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#FEF9C3', color: '#854D0E' }}>awaiting grade</span>
+                        )}
+                        {!c.submitted && (
+                          <span style={{ fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#F1EFE8', color: '#5F5E5A' }}>not started</span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      {hasGrade ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '1.4rem', fontWeight: 700, color: '#0E2D6E', fontFamily: "'DM Mono', monospace" }}>{c.score}</span>
+                          <span style={{ fontSize: '11px', color: '#888780' }}>/100</span>
+                          {lg && <span style={{ fontSize: '1rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px', background: lg.bg, color: lg.color }}>{lg.letter}</span>}
+                        </div>
+                      ) : (
+                        <Link href={`/curriculum-assignment/${c.id}`} style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none', padding: '6px 12px', borderRadius: '6px', background: '#EBF1FD' }}>
+                          open →
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>

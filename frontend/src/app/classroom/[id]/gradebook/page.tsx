@@ -60,6 +60,8 @@ export default function GradebookPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
   const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS)
+  const [curriculumAssignments, setCurriculumAssignments] = useState<Array<{ id: string; title: string; assignment_type: string }>>([])
+  const [curriculumSubmissions, setCurriculumSubmissions] = useState<Array<{ student_id: string; lesson_id: string; score: number | null; is_correct: boolean | null; graded_at: string | null }>>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [studentFilter, setStudentFilter] = useState('')
   const [classroomName, setClassroomName] = useState('')
@@ -96,6 +98,18 @@ export default function GradebookPage() {
         )
       )
       setSubmissions(allSubmissions.flat())
+
+      // Fetch curriculum assignment grade data for this classroom.
+      try {
+        const cd = await api.get<{ assignments: Array<{ id: string; title: string; assignment_type: string }>; submissions: Array<any> }>(
+          `/curriculum/classroom/${classroomId}/curriculum-grade-data`
+        )
+        setCurriculumAssignments(cd.assignments || [])
+        setCurriculumSubmissions(cd.submissions || [])
+      } catch {
+        setCurriculumAssignments([])
+        setCurriculumSubmissions([])
+      }
     } catch (e) {
       console.error(e)
     } finally {
@@ -138,8 +152,15 @@ export default function GradebookPage() {
     return (graded.reduce((sum, s) => sum + (effectiveGrade(s) || 0), 0) / graded.length).toFixed(1)
   }
 
+  const curriculumAssignmentType = (assignmentId: string): keyof Weights => {
+    const a = curriculumAssignments.find(x => x.id === assignmentId)
+    const t = (a?.assignment_type || 'code') as keyof Weights
+    return TYPE_KEYS.includes(t) ? t : 'code'
+  }
+
   // Per-type averages for a student. Returns map from type -> average (0-100).
-  // Types with no grades are omitted (they won't drag the weighted average down).
+  // Mixes classroom assignment grades and curriculum assignment scores into
+  // the same type buckets. Types with no grades are omitted.
   const studentTypeAverages = (studentId: string): Partial<Record<keyof Weights, number>> => {
     const buckets: Partial<Record<keyof Weights, number[]>> = {}
     submissions
@@ -151,12 +172,32 @@ export default function GradebookPage() {
         if (!buckets[t]) buckets[t] = []
         buckets[t]!.push(g)
       })
+    curriculumSubmissions
+      .filter(s => s.student_id === studentId && s.score != null)
+      .forEach(s => {
+        const t = curriculumAssignmentType(s.lesson_id)
+        if (!buckets[t]) buckets[t] = []
+        buckets[t]!.push(s.score as number)
+      })
     const out: Partial<Record<keyof Weights, number>> = {}
     for (const t of TYPE_KEYS) {
       const arr = buckets[t]
       if (arr && arr.length) out[t] = arr.reduce((a, b) => a + b, 0) / arr.length
     }
     return out
+  }
+
+  const getCurriculumCell = (studentId: string, assignmentId: string) => {
+    const sub = curriculumSubmissions.find(s => s.student_id === studentId && s.lesson_id === assignmentId)
+    if (!sub) return { state: 'not_started' as const, score: null as number | null }
+    if (sub.score != null) return { state: 'graded' as const, score: sub.score }
+    return { state: 'submitted' as const, score: null }
+  }
+
+  const curriculumClassAverage = (assignmentId: string): string | null => {
+    const graded = curriculumSubmissions.filter(s => s.lesson_id === assignmentId && s.score != null)
+    if (graded.length === 0) return null
+    return (graded.reduce((sum, s) => sum + (s.score as number), 0) / graded.length).toFixed(1)
   }
 
   // Weighted average across only the types the student has grades in.
@@ -177,7 +218,8 @@ export default function GradebookPage() {
 
   const exportCSV = () => {
     const typeHeaders = TYPE_KEYS.map(t => `${TYPE_LABELS[t]} avg (${weights[t]}%)`)
-    const headers = ['Student', ...assignments.map(a => a.title), ...typeHeaders, 'Weighted Avg']
+    const curricHeaders = curriculumAssignments.map(a => `${a.title} (curr · ${a.assignment_type})`)
+    const headers = ['Student', ...assignments.map(a => a.title), ...curricHeaders, ...typeHeaders, 'Weighted Avg']
     const rows = students.map(student => {
       const grades = assignments.map(a => {
         const cell = getCell(student.student_id, a.id)
@@ -186,16 +228,23 @@ export default function GradebookPage() {
         if (cell.status === 'in_progress') return 'in progress'
         return 'not started'
       })
+      const curricGrades = curriculumAssignments.map(a => {
+        const c = getCurriculumCell(student.student_id, a.id)
+        if (c.state === 'graded') return c.score?.toString() || ''
+        if (c.state === 'submitted') return 'submitted'
+        return 'not started'
+      })
       const byType = studentTypeAverages(student.student_id)
       const typeCells = TYPE_KEYS.map(t => byType[t] != null ? byType[t]!.toFixed(1) : '')
       const avg = studentAverage(student.student_id) || ''
-      return [student.student_name, ...grades, ...typeCells, avg]
+      return [student.student_name, ...grades, ...curricGrades, ...typeCells, avg]
     })
 
     // Add class average row
     const avgRow = [
       'Class Average',
       ...assignments.map(a => classAverage(a.id) || ''),
+      ...curriculumAssignments.map(a => curriculumClassAverage(a.id) || ''),
       ...TYPE_KEYS.map(() => ''),
       ''
     ]
@@ -308,6 +357,22 @@ export default function GradebookPage() {
                       )}
                     </th>
                   ))}
+                  {/* CURRICULUM ASSIGNMENT COLUMNS */}
+                  {curriculumAssignments.map(a => (
+                    <th key={a.id} style={{ padding: '10px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 600, color: '#075985', minWidth: '120px', maxWidth: '160px', background: '#F0F9FF' }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${a.title} (curriculum · ${a.assignment_type})`}>
+                        {a.title}
+                      </div>
+                      <div style={{ fontSize: '9px', color: '#0369A1', fontWeight: 700, marginTop: '2px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        curriculum
+                      </div>
+                      {curriculumClassAverage(a.id) && (
+                        <div style={{ fontSize: '10px', color: '#888780', fontWeight: 400, marginTop: '2px' }}>
+                          avg: {curriculumClassAverage(a.id)}
+                        </div>
+                      )}
+                    </th>
+                  ))}
                   {/* WEIGHTED AVERAGE COLUMN */}
                   <th
                     style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780', width: '90px' }}
@@ -352,6 +417,32 @@ export default function GradebookPage() {
                               —
                             </div>
                           )}
+                        </td>
+                      )
+                    })}
+
+                    {/* CURRICULUM ASSIGNMENT CELLS */}
+                    {curriculumAssignments.map(a => {
+                      const c = getCurriculumCell(student.student_id, a.id)
+                      const cellStyle =
+                        c.state === 'graded'      ? { bg: '#DCFCE7', color: '#166534', border: 'rgba(34,197,94,0.3)' }
+                        : c.state === 'submitted' ? { bg: '#FEF9C3', color: '#854D0E', border: 'rgba(245,158,11,0.3)' }
+                        :                           { bg: '#F0F9FF', color: '#888780', border: 'rgba(14,45,110,0.06)' }
+                      return (
+                        <td key={a.id} style={{ padding: '6px 8px', textAlign: 'center' }}>
+                          <Link
+                            href={`/classroom/${classroomId}/curriculum-grading/${a.id}`}
+                            style={{ textDecoration: 'none', display: 'block' }}
+                          >
+                            <div style={{ padding: '5px 8px', borderRadius: '6px', background: cellStyle.bg, color: cellStyle.color, fontSize: '13px', fontWeight: 600, border: `1px solid ${cellStyle.border}`, cursor: 'pointer' }}>
+                              {c.state === 'graded'
+                                ? c.score
+                                : c.state === 'submitted'
+                                ? 'sub'
+                                : '—'
+                              }
+                            </div>
+                          </Link>
                         </td>
                       )
                     })}
