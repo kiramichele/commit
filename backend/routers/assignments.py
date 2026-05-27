@@ -33,6 +33,8 @@ class AssignmentCreate(BaseModel):
     hints_enabled: bool = True
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
+    curriculum_unit_id: Optional[str] = None  # if set, this assignment shows in the curriculum tab of the teacher's classroom
+    curriculum_order: Optional[int] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -46,6 +48,8 @@ class AssignmentUpdate(BaseModel):
     hints_enabled: Optional[bool] = None
     hint_1: Optional[str] = None
     hint_2: Optional[str] = None
+    curriculum_unit_id: Optional[str] = None
+    curriculum_order: Optional[int] = None
 
 
 # ============================================================
@@ -162,6 +166,8 @@ async def create_assignment(
             "hints_enabled": body.hints_enabled,
             "hint_1": body.hint_1,
             "hint_2": body.hint_2,
+            "curriculum_unit_id": body.curriculum_unit_id,
+            "curriculum_order": body.curriculum_order,
         })
         .execute()
     )

@@ -79,6 +79,8 @@ interface Assignment {
   scaffold_level: string
   created_at: string
   assignment_type: string
+  curriculum_unit_id?: string | null
+  curriculum_order?: number | null
 }
 
 interface NewAssignment {
@@ -89,6 +91,8 @@ interface NewAssignment {
   scaffold_level: string
   starter_code: string
   assignment_type: string
+  curriculum_unit_id: string
+  curriculum_order: string
 }
 
 const ASSIGNMENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -138,6 +142,7 @@ export default function ClassroomPage() {
   const [newAssignment, setNewAssignment] = useState<NewAssignment>({
     title: '', instructions: '', due_date: '', min_commits: 3,
     scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code',
+    curriculum_unit_id: '', curriculum_order: '',
   })
   const [standardsTags, setStandardsTags] = useState<string[]>([])
   const [hintsEnabled, setHintsEnabled] = useState(true)
@@ -223,9 +228,13 @@ export default function ClassroomPage() {
         hints_enabled: hintsEnabled,
         hint_1: hint1 || null,
         hint_2: hint2 || null,
+        curriculum_unit_id: newAssignment.curriculum_unit_id || null,
+        curriculum_order: newAssignment.curriculum_unit_id && newAssignment.curriculum_order
+          ? parseInt(newAssignment.curriculum_order, 10) || null
+          : null,
       })
       setShowAddAssignment(false)
-      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code' })
+      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '', curriculum_order: '' })
       setStandardsTags([])
       setHintsEnabled(true)
       setHint1('')
@@ -483,13 +492,17 @@ export default function ClassroomPage() {
                   | { kind: 'lesson'; data: CurriculumLesson; order_index: number; id: string }
                   | { kind: 'project'; data: CurriculumProject; order_index: number; id: string }
                   | { kind: 'assignment'; data: CurriculumAssignmentRow; order_index: number; id: string }
+                  | { kind: 'teacher_assignment'; data: Assignment; order_index: number; id: string }
+                const teacherAssignmentsInUnit = assignments
+                  .filter(a => a.curriculum_unit_id === unit.id)
                 const merged: MergedRow[] = [
                   ...(unit.lessons || []).filter(l => l.is_published).map(l => ({ kind: 'lesson' as const, data: l, order_index: l.order_index, id: l.id })),
                   ...(unit.projects || []).filter(p => p.is_published).map(p => ({ kind: 'project' as const, data: p, order_index: p.order_index, id: p.id })),
                   ...(unit.curriculum_assignments || []).filter(a => a.is_published).map(a => ({ kind: 'assignment' as const, data: a, order_index: a.order_index, id: a.id })),
+                  ...teacherAssignmentsInUnit.map(a => ({ kind: 'teacher_assignment' as const, data: a, order_index: a.curriculum_order || 9999, id: a.id })),
                 ].sort((a, b) => {
                   if (a.order_index !== b.order_index) return a.order_index - b.order_index
-                  const rank = { lesson: 0, project: 1, assignment: 2 }
+                  const rank = { lesson: 0, project: 1, assignment: 2, teacher_assignment: 3 }
                   return rank[a.kind] - rank[b.kind]
                 })
                 if (merged.length === 0) return null
@@ -543,22 +556,41 @@ export default function ClassroomPage() {
                           </div>
                         )
                       }
-                      const a = item.data
-                      const tc = typeColors[a.assignment_type] || typeColors.code
-                      return (
-                        <div key={`assignment-${a.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(224,242,254,0.25)' }}>
-                          <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>{stepNum}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{a.title}</span>
-                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>assignment</span>
-                              <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
+                      if (item.kind === 'assignment') {
+                        const a = item.data
+                        const tc = typeColors[a.assignment_type] || typeColors.code
+                        return (
+                          <div key={`assignment-${a.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(224,242,254,0.25)' }}>
+                            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>{stepNum}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{a.title}</span>
+                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>assignment</span>
+                                <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
+                              </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                              <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                              <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
                             </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
-                            <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
-                            <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
+                        )
+                      }
+
+                      // Teacher's own classroom assignment, attached to this unit
+                      const ta = item.data
+                      const tatc = typeColors[ta.assignment_type || 'code'] || typeColors.code
+                      return (
+                        <div key={`teacher-${ta.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(220,252,231,0.35)' }}>
+                          <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#DCFCE7', border: '1.5px solid #BBF7D0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#166534', flexShrink: 0 }}>{stepNum}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{ta.title}</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#DCFCE7', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em' }}>yours</span>
+                              <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tatc.bg, color: tatc.color }}>{tatc.label}</span>
+                            </div>
                           </div>
+                          <Link href={ta.assignment_type === 'code' || !ta.assignment_type ? `/classroom/${classroomId}/submissions/${ta.id}` : `/classroom/${classroomId}/curriculum-submissions/${ta.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>submissions →</Link>
                         </div>
                       )
                     })}
@@ -678,6 +710,34 @@ export default function ClassroomPage() {
               <div>
                 <label style={labelStyle}>due date <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <input type="datetime-local" value={newAssignment.due_date} onChange={e => setNewAssignment(s => ({ ...s, due_date: e.target.value }))} style={inputStyle} />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>add to curriculum unit <span style={{ color: '#888780', fontWeight: 400 }}>(optional — only your classroom)</span></label>
+                  <select
+                    value={newAssignment.curriculum_unit_id}
+                    onChange={e => setNewAssignment(s => ({ ...s, curriculum_unit_id: e.target.value }))}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="">— not in curriculum —</option>
+                    {curriculumUnits.map(u => (
+                      <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
+                    ))}
+                  </select>
+                </div>
+                {newAssignment.curriculum_unit_id && (
+                  <div>
+                    <label style={labelStyle}>position</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={newAssignment.curriculum_order}
+                      onChange={e => setNewAssignment(s => ({ ...s, curriculum_order: e.target.value }))}
+                      placeholder="1"
+                      style={inputStyle}
+                    />
+                  </div>
+                )}
               </div>
               {newAssignment.assignment_type === 'code' && (
                 <div>
