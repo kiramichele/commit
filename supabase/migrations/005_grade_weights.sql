@@ -21,9 +21,19 @@ set grade_weights = '{"code": 35, "project": 35, "quiz": 15, "activity": 10, "ch
 where grade_weights is null;
 
 -- ── EXPAND ASSIGNMENT TYPES ──────────────────────────────────
--- Drop any old check constraint that might restrict assignment_type,
--- then add the canonical one allowing the 5 supported types.
+-- Drop any old check constraint that might restrict assignment_type.
 alter table assignments drop constraint if exists assignments_assignment_type_check;
+
+-- Normalize any pre-existing rows whose assignment_type isn't in the
+-- canonical set. NULL and unknown legacy values get defaulted to 'code'.
+-- This makes the migration safe to re-run on databases that contain
+-- assignments authored before the type was constrained.
+update assignments
+set assignment_type = 'code'
+where assignment_type is null
+   or assignment_type not in ('code', 'activity', 'checkin', 'quiz', 'project');
+
+-- Now safe to add the canonical check constraint.
 alter table assignments
   add constraint assignments_assignment_type_check
   check (assignment_type in ('code', 'activity', 'checkin', 'quiz', 'project'));

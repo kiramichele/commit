@@ -10,6 +10,21 @@ interface Assignment {
   title: string
   due_date: string | null
   min_commits: number
+  assignment_type?: string
+}
+
+interface Weights {
+  code: number
+  activity: number
+  checkin: number
+  quiz: number
+  project: number
+}
+
+const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5 }
+const TYPE_KEYS: Array<keyof Weights> = ['code', 'activity', 'checkin', 'quiz', 'project']
+const TYPE_LABELS: Record<keyof Weights, string> = {
+  code: 'coding', activity: 'activity', checkin: 'check-in', quiz: 'quiz', project: 'project',
 }
 
 interface Submission {
@@ -44,6 +59,7 @@ export default function GradebookPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [submissions, setSubmissions] = useState<Submission[]>([])
+  const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS)
   const [dataLoading, setDataLoading] = useState(true)
   const [studentFilter, setStudentFilter] = useState('')
   const [classroomName, setClassroomName] = useState('')
@@ -62,14 +78,16 @@ export default function GradebookPage() {
   const fetchData = async () => {
     setDataLoading(true)
     try {
-      const [classroom, studentData, assignmentData] = await Promise.all([
+      const [classroom, studentData, assignmentData, weightsData] = await Promise.all([
         api.get<{ name: string }>(`/classrooms/${classroomId}`),
         api.get<Student[]>(`/classrooms/${classroomId}/students`),
         api.get<Assignment[]>(`/assignments/?classroom_id=${classroomId}`),
+        api.get<Weights>(`/classrooms/${classroomId}/grade-weights`).catch(() => DEFAULT_WEIGHTS),
       ])
       setClassroomName(classroom.name)
       setStudents(studentData || [])
       setAssignments(assignmentData || [])
+      setWeights({ ...DEFAULT_WEIGHTS, ...(weightsData || {}) })
 
       // Fetch all submissions for all assignments
       const allSubmissions = await Promise.all(
@@ -83,6 +101,12 @@ export default function GradebookPage() {
     } finally {
       setDataLoading(false)
     }
+  }
+
+  const assignmentType = (assignmentId: string): keyof Weights => {
+    const a = assignments.find(x => x.id === assignmentId)
+    const t = (a?.assignment_type || 'code') as keyof Weights
+    return TYPE_KEYS.includes(t) ? t : 'code'
   }
 
   const effectiveGrade = (sub: Submission): number | null => {
@@ -114,16 +138,46 @@ export default function GradebookPage() {
     return (graded.reduce((sum, s) => sum + (effectiveGrade(s) || 0), 0) / graded.length).toFixed(1)
   }
 
-  const studentAverage = (studentId: string) => {
-    const graded = submissions.filter(
-      s => s.student_id === studentId && s.grade != null
-    )
-    if (graded.length === 0) return null
-    return (graded.reduce((sum, s) => sum + (effectiveGrade(s) || 0), 0) / graded.length).toFixed(1)
+  // Per-type averages for a student. Returns map from type -> average (0-100).
+  // Types with no grades are omitted (they won't drag the weighted average down).
+  const studentTypeAverages = (studentId: string): Partial<Record<keyof Weights, number>> => {
+    const buckets: Partial<Record<keyof Weights, number[]>> = {}
+    submissions
+      .filter(s => s.student_id === studentId && s.grade != null)
+      .forEach(s => {
+        const t = assignmentType(s.assignment_id)
+        const g = effectiveGrade(s)
+        if (g == null) return
+        if (!buckets[t]) buckets[t] = []
+        buckets[t]!.push(g)
+      })
+    const out: Partial<Record<keyof Weights, number>> = {}
+    for (const t of TYPE_KEYS) {
+      const arr = buckets[t]
+      if (arr && arr.length) out[t] = arr.reduce((a, b) => a + b, 0) / arr.length
+    }
+    return out
+  }
+
+  // Weighted average across only the types the student has grades in.
+  // Denominator renormalizes so missing categories don't penalize.
+  const studentAverage = (studentId: string): string | null => {
+    const byType = studentTypeAverages(studentId)
+    const presentTypes = Object.keys(byType) as Array<keyof Weights>
+    if (presentTypes.length === 0) return null
+    const totalWeight = presentTypes.reduce((sum, t) => sum + (weights[t] || 0), 0)
+    if (totalWeight === 0) {
+      // Edge case: all present types have 0 weight — fall back to straight average.
+      const vals = presentTypes.map(t => byType[t]!)
+      return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
+    }
+    const weighted = presentTypes.reduce((sum, t) => sum + (byType[t]! * (weights[t] || 0)), 0)
+    return (weighted / totalWeight).toFixed(1)
   }
 
   const exportCSV = () => {
-    const headers = ['Student', ...assignments.map(a => a.title), 'Average']
+    const typeHeaders = TYPE_KEYS.map(t => `${TYPE_LABELS[t]} avg (${weights[t]}%)`)
+    const headers = ['Student', ...assignments.map(a => a.title), ...typeHeaders, 'Weighted Avg']
     const rows = students.map(student => {
       const grades = assignments.map(a => {
         const cell = getCell(student.student_id, a.id)
@@ -132,14 +186,17 @@ export default function GradebookPage() {
         if (cell.status === 'in_progress') return 'in progress'
         return 'not started'
       })
+      const byType = studentTypeAverages(student.student_id)
+      const typeCells = TYPE_KEYS.map(t => byType[t] != null ? byType[t]!.toFixed(1) : '')
       const avg = studentAverage(student.student_id) || ''
-      return [student.student_name, ...grades, avg]
+      return [student.student_name, ...grades, ...typeCells, avg]
     })
 
     // Add class average row
     const avgRow = [
       'Class Average',
       ...assignments.map(a => classAverage(a.id) || ''),
+      ...TYPE_KEYS.map(() => ''),
       ''
     ]
 
@@ -251,9 +308,12 @@ export default function GradebookPage() {
                       )}
                     </th>
                   ))}
-                  {/* AVERAGE COLUMN */}
-                  <th style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780', width: '80px' }}>
-                    avg
+                  {/* WEIGHTED AVERAGE COLUMN */}
+                  <th
+                    style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780', width: '90px' }}
+                    title={`Weighted by type — code:${weights.code}% project:${weights.project}% quiz:${weights.quiz}% activity:${weights.activity}% checkin:${weights.checkin}%`}
+                  >
+                    weighted avg
                   </th>
                 </tr>
               </thead>
