@@ -606,6 +606,18 @@ export default function ClassroomPage() {
                       if (item.kind === 'assignment') {
                         const a = item.data
                         const tc = typeColors[a.assignment_type] || typeColors.code
+                        const isReview = a.assignment_type === 'code_review'
+                        const generatePairings = async () => {
+                          try {
+                            const res = await api.post<{ created: number; total_pairs: number; strategy: string }>(
+                              `/curriculum/code-review/${a.id}/classroom/${classroomId}/generate-pairings?replace=true`,
+                              {}
+                            )
+                            alert(`Created ${res.created} pairings using "${res.strategy}". ${res.total_pairs} students paired total.`)
+                          } catch (err: any) {
+                            alert(err.message || 'Failed to generate pairings')
+                          }
+                        }
                         return (
                           <div key={`assignment-${a.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(224,242,254,0.25)' }}>
                             <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>{stepNum}</span>
@@ -616,7 +628,16 @@ export default function ClassroomPage() {
                                 <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
                               </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                              {isReview && (
+                                <button
+                                  onClick={generatePairings}
+                                  style={{ padding: '6px 14px', borderRadius: '8px', background: '#FEF3C7', color: '#92400E', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}
+                                  title="generates or regenerates the reviewer↔reviewee pairings for this classroom"
+                                >
+                                  ⚏ pairings
+                                </button>
+                              )}
                               <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                               <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
                             </div>

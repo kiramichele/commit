@@ -24,6 +24,15 @@ interface CurriculumAssignment {
   html_file_path: string | null
   html_body?: string | null
   checkin_format?: string | null
+  source_curriculum_assignment_id?: string | null
+  pairing_strategy?: string | null
+}
+
+interface CurriculumAssignmentRow {
+  id: string
+  title: string
+  assignment_type: string
+  unit_id: string
 }
 
 const CHECKIN_FORMAT_OPTIONS = [
@@ -34,13 +43,20 @@ const CHECKIN_FORMAT_OPTIONS = [
 ]
 
 const TYPE_OPTIONS = [
-  { value: 'code',     label: 'Coding' },
-  { value: 'activity', label: 'Interactive activity' },
-  { value: 'checkin',  label: 'Check-in' },
-  { value: 'quiz',     label: 'Quiz' },
-  { value: 'project',  label: 'Project' },
+  { value: 'code',         label: 'Coding' },
+  { value: 'activity',     label: 'Interactive activity' },
+  { value: 'checkin',      label: 'Check-in' },
+  { value: 'quiz',         label: 'Quiz' },
+  { value: 'project',      label: 'Project' },
+  { value: 'code_review',  label: 'Code review' },
 ]
 const SCAFFOLD_LEVELS = ['typed_python', 'pseudocode', 'block_python', 'free_python']
+const PAIRING_OPTIONS = [
+  { value: 'random',          label: 'Randomly',                      desc: 'Default. Shuffle students, pair each with the next.' },
+  { value: 'similar_grade',   label: 'By grade (similar)',            desc: 'Pair students with the closest scores on the source assignment.' },
+  { value: 'opposite_grade',  label: 'By grade (opposite)',           desc: 'Pair top scorers with bottom scorers — peer teaching.' },
+  { value: 'manual',          label: 'Manually (teacher picks)',      desc: 'Teacher sets every pair by hand (UI coming — phase 2).' },
+]
 
 export default function CurriculumAssignmentEditor() {
   const { profile, loading: authLoading } = useAuth()
@@ -68,11 +84,15 @@ export default function CurriculumAssignmentEditor() {
   const [uploading, setUploading] = useState(false)
 
   const [checkinFormat, setCheckinFormat] = useState<string>('short_answer')
+  const [sourceCurriculumAssignmentId, setSourceCurriculumAssignmentId] = useState<string>('')
+  const [pairingStrategy, setPairingStrategy] = useState<string>('random')
+  const [availableSources, setAvailableSources] = useState<CurriculumAssignmentRow[]>([])
 
   const isCoding = assignmentType === 'code'
   const isActivity = assignmentType === 'activity'
   const isQuiz = assignmentType === 'quiz'
   const isCheckin = assignmentType === 'checkin'
+  const isCodeReview = assignmentType === 'code_review'
   // Check-ins with html or coding format need the same field surfaces as
   // activity / code types. Compute these once.
   const checkinIsHtml = isCheckin && checkinFormat === 'html'
@@ -123,6 +143,15 @@ export default function CurriculumAssignmentEditor() {
       setHint2(data.hint_2 || '')
       setHtmlBody(data.html_body || '')
       setCheckinFormat(data.checkin_format || 'short_answer')
+      setSourceCurriculumAssignmentId(data.source_curriculum_assignment_id || '')
+      setPairingStrategy(data.pairing_strategy || 'random')
+
+      // Fetch all curriculum assignments in this unit so the author can pick
+      // one as the code-review source.
+      try {
+        const all = await api.get<CurriculumAssignmentRow[]>(`/admin/curriculum/units/${data.unit_id}/assignments`)
+        setAvailableSources((all || []).filter(a => a.id !== data.id))
+      } catch {}
 
       // Fetch quiz questions if applicable
       if (data.assignment_type === 'quiz') {
@@ -213,6 +242,8 @@ export default function CurriculumAssignmentEditor() {
         hint_2: hint2 || null,
         html_body: showHtmlBody ? htmlBody : null,
         checkin_format: isCheckin ? checkinFormat : null,
+        source_curriculum_assignment_id: isCodeReview ? (sourceCurriculumAssignmentId || null) : null,
+        pairing_strategy: isCodeReview ? pairingStrategy : null,
       })
       alert('Saved')
     } catch (err: any) {
@@ -308,6 +339,51 @@ export default function CurriculumAssignmentEditor() {
               </div>
             </div>
           </div>
+
+          {/* CODE REVIEW SETTINGS */}
+          {isCodeReview && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>code review settings</h3>
+              <p style={{ margin: '0 0 16px', fontSize: '12px', color: '#888780' }}>
+                Students will review the code submissions from another classroom assignment.
+                Pairings are generated per-classroom when a teacher hits "generate pairings".
+              </p>
+
+              <label style={label}>source assignment (code submissions to review)</label>
+              <select
+                value={sourceCurriculumAssignmentId}
+                onChange={e => setSourceCurriculumAssignmentId(e.target.value)}
+                style={{ ...input, marginBottom: '14px' }}
+              >
+                <option value="">— pick a code/check-in assignment from this unit —</option>
+                {availableSources
+                  .filter(a => a.assignment_type === 'code' || a.assignment_type === 'checkin')
+                  .map(a => (
+                    <option key={a.id} value={a.id}>{a.title} ({a.assignment_type})</option>
+                  ))}
+              </select>
+
+              <label style={label}>pairing strategy</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '8px' }}>
+                {PAIRING_OPTIONS.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setPairingStrategy(opt.value)}
+                    style={{
+                      padding: '10px 14px', borderRadius: '10px', cursor: 'pointer', textAlign: 'left',
+                      border: pairingStrategy === opt.value ? '2px solid #1A56DB' : '2px solid rgba(14,45,110,0.1)',
+                      background: pairingStrategy === opt.value ? '#EBF1FD' : 'white',
+                      color: '#0E2D6E',
+                      fontFamily: "'DM Sans', sans-serif",
+                    }}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '2px' }}>{opt.label}</div>
+                    <div style={{ fontSize: '11px', color: '#888780', lineHeight: 1.5 }}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* CHECK-IN FORMAT PICKER */}
           {isCheckin && (

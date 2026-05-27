@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 
-type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project'
+type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project' | 'code_review'
 
 interface Assignment {
   id: string
@@ -84,6 +84,14 @@ export default function CurriculumAssignmentPage() {
   const [ratingResponse, setRatingResponse] = useState<number | null>(null)
   const [checkinHtml, setCheckinHtml] = useState<string | null>(null)
   const [code, setCode] = useState('')
+
+  // Code review state
+  const [partnerName, setPartnerName] = useState('')
+  const [partnerCode, setPartnerCode] = useState('')
+  const [hasPairing, setHasPairing] = useState(false)
+  const [overallReview, setOverallReview] = useState('')
+  const [reviewRating, setReviewRating] = useState<number | null>(null)
+  const [inlineComments, setInlineComments] = useState<Array<{ line: number; text: string }>>([])
   const [output, setOutput] = useState('')
   const [outputError, setOutputError] = useState(false)
   const [running, setRunning] = useState(false)
@@ -140,6 +148,24 @@ export default function CurriculumAssignmentPage() {
         setQuestions(qs || [])
       }
 
+      if (a.assignment_type === 'code_review') {
+        try {
+          const pairing = await api.get<{
+            pairing: { reviewee_id: string; reviewee: { display_name: string } }
+            reviewee_submission: { code: string } | null
+          } | null>(`/curriculum/code-review/${a.id}/my-pairing`)
+          if (pairing) {
+            setHasPairing(true)
+            setPartnerName(pairing.pairing.reviewee?.display_name || 'a peer')
+            setPartnerCode(pairing.reviewee_submission?.code || '')
+          } else {
+            setHasPairing(false)
+          }
+        } catch {
+          setHasPairing(false)
+        }
+      }
+
       // Restore prior submission
       try {
         const prior = await api.get<{ response_text: string | null; is_correct: boolean | null } | null>(
@@ -155,6 +181,11 @@ export default function CurriculumAssignmentPage() {
             else setTextResponse(parsed.text || '')
           }
           else if (a.assignment_type === 'project') setTextResponse(parsed.text || '')
+          else if (a.assignment_type === 'code_review') {
+            setOverallReview(parsed.overall_review || '')
+            setReviewRating(typeof parsed.rating === 'number' ? parsed.rating : null)
+            setInlineComments(Array.isArray(parsed.inline_comments) ? parsed.inline_comments : [])
+          }
           setSubmitted(true)
         }
       } catch {}
@@ -359,6 +390,147 @@ export default function CurriculumAssignmentPage() {
             <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading check-in...</div>
           )}
         </div>
+      ) : assignment.assignment_type === 'code_review' ? (
+        // ── CODE REVIEW ──
+        !hasPairing ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
+            <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', textAlign: 'center', maxWidth: '420px', border: '1px solid rgba(14,45,110,0.08)' }}>
+              <div style={{ fontSize: '2rem', marginBottom: '12px' }}>⏳</div>
+              <h2 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: '#0E2D6E' }}>no pairing yet</h2>
+              <p style={{ margin: 0, fontSize: '13px', color: '#888780', lineHeight: 1.6 }}>
+                your teacher hasn&apos;t generated pairings for this code review yet.
+                check back in a bit, or message your teacher.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1.2fr 1fr', minHeight: 'calc(100vh - 52px)', overflow: 'hidden' }}>
+            {/* PARTNER'S CODE (read-only with line numbers) */}
+            <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
+              <div style={{ padding: '10px 16px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>{partnerName}&apos;s submission</span>
+                <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>read-only</span>
+              </div>
+              <pre style={{ flex: 1, margin: 0, padding: '1rem 1.25rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', lineHeight: 1.7, color: '#EBF1FD', overflowY: 'auto', whiteSpace: 'pre' }}>
+                {(partnerCode || '(no submission yet)').split('\n').map((ln, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '14px' }}>
+                    <span style={{ color: 'rgba(255,255,255,0.25)', userSelect: 'none', minWidth: '26px', textAlign: 'right' }}>{i + 1}</span>
+                    <span>{ln || ' '}</span>
+                  </div>
+                ))}
+              </pre>
+            </div>
+
+            {/* REVIEW CONTROLS */}
+            <div style={{ background: 'white', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+              <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>your review</div>
+
+              <div style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {assignment.instructions && (
+                  <div style={{ padding: '10px 14px', background: '#EBF1FD', borderRadius: '8px', fontSize: '13px', color: '#0C447C', lineHeight: 1.6 }}>
+                    {assignment.instructions}
+                  </div>
+                )}
+
+                {/* OVERALL */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#0E2D6E', marginBottom: '6px' }}>overall feedback</label>
+                  <textarea
+                    value={overallReview}
+                    onChange={e => setOverallReview(e.target.value)}
+                    rows={5}
+                    placeholder="What did your peer do well? What could be improved?"
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', lineHeight: 1.6, outline: 'none', resize: 'vertical', boxSizing: 'border-box', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
+                  />
+                </div>
+
+                {/* RATING */}
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#0E2D6E', marginBottom: '6px' }}>rating (optional)</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {[1, 2, 3, 4, 5].map(n => {
+                      const active = reviewRating === n
+                      return (
+                        <button
+                          key={n}
+                          onClick={() => setReviewRating(reviewRating === n ? null : n)}
+                          style={{
+                            width: '40px', height: '36px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                            border: active ? '2px solid #1A56DB' : '1.5px solid rgba(14,45,110,0.12)',
+                            background: active ? '#EBF1FD' : 'white',
+                            color: active ? '#0C447C' : '#5F5E5A',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          {n}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* INLINE COMMENTS */}
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600, color: '#0E2D6E' }}>line-by-line comments ({inlineComments.length})</label>
+                    <button
+                      onClick={() => setInlineComments(cs => [...cs, { line: 1, text: '' }])}
+                      style={{ padding: '5px 12px', borderRadius: '7px', background: 'transparent', border: '1.5px solid rgba(14,45,110,0.15)', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                    >
+                      + add comment
+                    </button>
+                  </div>
+
+                  {inlineComments.length === 0 ? (
+                    <p style={{ margin: 0, fontSize: '12px', color: '#888780', padding: '8px 0' }}>(optional) pin a comment to a specific line</p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {inlineComments.map((c, i) => (
+                        <div key={i} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 28px', gap: '8px', alignItems: 'start' }}>
+                          <input
+                            type="number"
+                            min={1}
+                            value={c.line}
+                            onChange={e => setInlineComments(cs => cs.map((x, idx) => idx === i ? { ...x, line: parseInt(e.target.value, 10) || 1 } : x))}
+                            style={{ padding: '8px 10px', borderRadius: '6px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', outline: 'none', background: '#FAFAF8', fontFamily: "'DM Mono', monospace" }}
+                          />
+                          <textarea
+                            value={c.text}
+                            onChange={e => setInlineComments(cs => cs.map((x, idx) => idx === i ? { ...x, text: e.target.value } : x))}
+                            rows={2}
+                            placeholder="comment on this line..."
+                            style={{ padding: '8px 10px', borderRadius: '6px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', outline: 'none', resize: 'vertical', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif", lineHeight: 1.5 }}
+                          />
+                          <button
+                            onClick={() => setInlineComments(cs => cs.filter((_, idx) => idx !== i))}
+                            title="delete comment"
+                            style={{ height: '36px', borderRadius: '6px', background: 'transparent', border: '1.5px solid rgba(239,68,68,0.3)', color: '#991B1B', fontSize: '14px', cursor: 'pointer' }}
+                          >×</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* SUBMIT */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                  <button
+                    onClick={() => submit({
+                      overall_review: overallReview,
+                      rating: reviewRating,
+                      inline_comments: inlineComments.filter(c => c.text.trim()),
+                      partner_id: partnerName,
+                    })}
+                    disabled={saving || !overallReview.trim()}
+                    style={{ padding: '10px 22px', background: overallReview.trim() ? '#1A56DB' : '#D3D1C7', color: 'white', border: 'none', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: (saving || !overallReview.trim()) ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+                  >
+                    {saving ? 'submitting...' : submitted ? 'resubmit review' : 'submit review'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       ) : assignment.assignment_type === 'code' ? (
         // ── 3-PANE FOR CODING ──
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>

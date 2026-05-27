@@ -482,6 +482,246 @@ async def get_my_curriculum_assignment_submission(
     return response.data if response else None
 
 
+# ============================================================
+# CODE REVIEW
+# ============================================================
+# Code-review curriculum assignments don't have submissions in the
+# traditional sense — instead they have *pairings*. A pairing says
+# "student R reviews student E's submission to the source assignment".
+# Pairings are per-classroom because rosters differ.
+# ============================================================
+
+
+def _build_pairings_for_strategy(student_ids, grades_by_student, strategy):
+    """
+    Given a roster (list of profile_ids) and an optional grade map, return a
+    list of (reviewer_id, reviewee_id) pairs implementing the strategy.
+
+    - random: shuffle, then offset by 1 so no student reviews themselves
+    - similar_grade: sort by grade, pair adjacent (offset by 1)
+    - opposite_grade: sort by grade, top reviews bottom and vice versa
+    - manual: returns empty — teacher will set pairings explicitly
+    """
+    import random
+    if not student_ids or len(student_ids) < 2:
+        return []
+    ids = list(student_ids)
+    if strategy == "random":
+        random.shuffle(ids)
+    elif strategy in ("similar_grade", "opposite_grade"):
+        ids.sort(key=lambda s: grades_by_student.get(s, 0.0))
+        if strategy == "opposite_grade":
+            ids.reverse()  # high to low; pairing offset will tie top↔bottom-ish
+    elif strategy == "manual":
+        return []
+
+    # Pair each student with the NEXT one in the ordered list. Wrap around
+    # so the last student reviews the first. This guarantees nobody reviews
+    # themselves and everyone gets exactly one assignment.
+    pairs = []
+    n = len(ids)
+    for i in range(n):
+        reviewer = ids[i]
+        reviewee = ids[(i + 1) % n]
+        pairs.append((reviewer, reviewee))
+    return pairs
+
+
+@router.post("/code-review/{assignment_id}/classroom/{classroom_id}/generate-pairings")
+async def generate_pairings(
+    assignment_id: str,
+    classroom_id: str,
+    replace: bool = False,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """
+    Generates pairings for the given code-review assignment in the teacher's
+    classroom using the assignment's configured strategy. By default this is
+    additive (creates pairings only for students who don't have one yet);
+    pass ?replace=true to wipe existing pairings first.
+    """
+    # Teacher must own the classroom.
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not classroom or not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    # Pull the code-review assignment and its source.
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, assignment_type, pairing_strategy, source_curriculum_assignment_id")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not assignment or not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    if assignment.data.get("assignment_type") != "code_review":
+        raise HTTPException(status_code=400, detail="Assignment is not a code_review.")
+
+    strategy = assignment.data.get("pairing_strategy") or "random"
+
+    # Roster.
+    members = (
+        supabase_admin.table("classroom_members")
+        .select("student_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    student_ids = [m["student_id"] for m in members]
+    if len(student_ids) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 students in the classroom to pair.")
+
+    # If grade-based strategy, fetch each student's average score on the source assignment.
+    grades_by_student: dict = {}
+    if strategy in ("similar_grade", "opposite_grade") and assignment.data.get("source_curriculum_assignment_id"):
+        source_id = assignment.data["source_curriculum_assignment_id"]
+        rows = (
+            supabase_admin.table("exercise_responses")
+            .select("student_id, score")
+            .eq("lesson_id", source_id)
+            .eq("exercise_type", "curriculum_assignment")
+            .in_("student_id", student_ids)
+            .execute()
+        ).data or []
+        for r in rows:
+            if r.get("score") is not None:
+                grades_by_student[r["student_id"]] = float(r["score"])
+
+    if replace:
+        supabase_admin.table("code_review_pairings").delete().eq("code_review_assignment_id", assignment_id).eq("classroom_id", classroom_id).execute()
+
+    existing = (
+        supabase_admin.table("code_review_pairings")
+        .select("reviewer_id")
+        .eq("code_review_assignment_id", assignment_id)
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    existing_reviewers = {p["reviewer_id"] for p in existing}
+
+    pairs = _build_pairings_for_strategy(student_ids, grades_by_student, strategy)
+    new_rows = [
+        {
+            "code_review_assignment_id": assignment_id,
+            "classroom_id": classroom_id,
+            "reviewer_id": rv,
+            "reviewee_id": re,
+        }
+        for rv, re in pairs
+        if rv not in existing_reviewers
+    ]
+    if new_rows:
+        supabase_admin.table("code_review_pairings").insert(new_rows).execute()
+
+    return {"created": len(new_rows), "total_pairs": len(pairs), "strategy": strategy}
+
+
+@router.get("/code-review/{assignment_id}/classroom/{classroom_id}/pairings")
+async def list_pairings(
+    assignment_id: str,
+    classroom_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """All pairings for a code-review assignment in a classroom — teacher view."""
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not classroom or not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+    pairings = (
+        supabase_admin.table("code_review_pairings")
+        .select(
+            "*, "
+            "reviewer:profiles!code_review_pairings_reviewer_id_fkey(id, display_name), "
+            "reviewee:profiles!code_review_pairings_reviewee_id_fkey(id, display_name)"
+        )
+        .eq("code_review_assignment_id", assignment_id)
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    return pairings
+
+
+@router.get("/code-review/{assignment_id}/my-pairing")
+async def get_my_pairing(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Returns the current student's pairing for a code-review assignment along
+    with the reviewee's submission to the source assignment.
+
+    The student belongs to potentially many classrooms — we return the first
+    pairing found. (Classroom-aware fetching could be added later if students
+    routinely belong to multiple classrooms running the same review.)
+    """
+    pairing = (
+        supabase_admin.table("code_review_pairings")
+        .select(
+            "*, "
+            "reviewee:profiles!code_review_pairings_reviewee_id_fkey(id, display_name)"
+        )
+        .eq("code_review_assignment_id", assignment_id)
+        .eq("reviewer_id", user.profile_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not pairing:
+        return None
+    p = pairing[0]
+
+    # Look up the source assignment id so we can fetch the reviewee's submission.
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("source_curriculum_assignment_id")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    source_id = assignment.data.get("source_curriculum_assignment_id") if assignment and assignment.data else None
+
+    reviewee_submission = None
+    if source_id:
+        sub = (
+            supabase_admin.table("exercise_responses")
+            .select("response_text, score")
+            .eq("lesson_id", source_id)
+            .eq("exercise_type", "curriculum_assignment")
+            .eq("student_id", p["reviewee_id"])
+            .maybe_single()
+            .execute()
+        )
+        if sub and sub.data:
+            try:
+                import json
+                payload = json.loads(sub.data.get("response_text") or "{}")
+                reviewee_submission = {
+                    "code": payload.get("code") or payload.get("starter_code") or "",
+                    "raw": payload,
+                }
+            except Exception:
+                reviewee_submission = {"code": "", "raw": None}
+
+    return {
+        "pairing": p,
+        "source_assignment_id": source_id,
+        "reviewee_submission": reviewee_submission,
+    }
+
+
 # ── GRADEBOOK DATA (all curriculum assignment scores in a classroom) ──
 
 @router.get("/classroom/{classroom_id}/curriculum-grade-data")

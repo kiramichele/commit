@@ -483,6 +483,8 @@ class CurriculumAssignmentCreate(BaseModel):
     is_published: bool = False
     html_body: Optional[str] = None  # for activity-type and html check-ins — uploaded to storage
     checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
+    source_curriculum_assignment_id: Optional[str] = None  # for code_review type
+    pairing_strategy: Optional[str] = None  # 'random' | 'similar_grade' | 'opposite_grade' | 'manual'
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -502,9 +504,12 @@ class CurriculumAssignmentUpdate(BaseModel):
     html_body: Optional[str] = None  # set to "" to clear, None to leave unchanged
     unit_id: Optional[str] = None  # supports moving the assignment to another unit
     checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
+    source_curriculum_assignment_id: Optional[str] = None
+    pairing_strategy: Optional[str] = None
 
 
-_VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project"}
+_VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review"}
+_VALID_PAIRING_STRATEGIES = {"random", "similar_grade", "opposite_grade", "manual"}
 
 
 def _upload_assignment_html(assignment_id: str, body: str) -> str:
@@ -537,6 +542,8 @@ async def create_curriculum_assignment(
 ):
     if body.assignment_type not in _VALID_ASSIGNMENT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid assignment_type.")
+    if body.pairing_strategy and body.pairing_strategy not in _VALID_PAIRING_STRATEGIES:
+        raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
     unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
     if not unit or not unit.data:
         raise HTTPException(status_code=404, detail="Unit not found.")
@@ -582,6 +589,8 @@ async def update_curriculum_assignment(
 ):
     if body.assignment_type and body.assignment_type not in _VALID_ASSIGNMENT_TYPES:
         raise HTTPException(status_code=400, detail="Invalid assignment_type.")
+    if body.pairing_strategy and body.pairing_strategy not in _VALID_PAIRING_STRATEGIES:
+        raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
     raw = body.model_dump()
     html_body = raw.pop("html_body", None)
     updates = {k: v for k, v in raw.items() if v is not None}
