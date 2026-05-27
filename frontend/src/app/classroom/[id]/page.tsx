@@ -10,7 +10,38 @@ import GradeWeightSettings from '@/components/GradeWeightSettings'
 import { StandardsPicker } from '@/components/Standards'
 import InstructionsUpload from '@/components/InstructionsUpload'
 
-type Tab = 'students' | 'assignments' | 'help queue' | 'settings'
+type Tab = 'students' | 'assignments' | 'curriculum' | 'help queue' | 'settings'
+
+interface CurriculumLesson {
+  id: string
+  order_index: number
+  title: string
+  is_published: boolean
+}
+interface CurriculumProject {
+  id: string
+  order_index: number
+  title: string
+  description: string
+  estimated_minutes: number
+  is_published: boolean
+}
+interface CurriculumAssignmentRow {
+  id: string
+  order_index: number
+  title: string
+  assignment_type: string
+  is_published: boolean
+}
+interface CurriculumUnit {
+  id: string
+  order_index: number
+  title: string
+  is_published: boolean
+  lessons?: CurriculumLesson[]
+  projects?: CurriculumProject[]
+  curriculum_assignments?: CurriculumAssignmentRow[]
+}
 
 interface Classroom {
   id: string
@@ -92,6 +123,8 @@ export default function ClassroomPage() {
   const [classroom, setClassroom] = useState<Classroom | null>(null)
   const [students, setStudents] = useState<StudentProgress[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [curriculumUnits, setCurriculumUnits] = useState<CurriculumUnit[]>([])
+  const [curriculumLoading, setCurriculumLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const [copiedCode, setCopiedCode] = useState(false)
   const [showAddStudent, setShowAddStudent] = useState(false)
@@ -119,6 +152,17 @@ export default function ClassroomPage() {
     if (!profile || !classroomId) return
     fetchAll()
   }, [profile, classroomId])
+
+  // Lazy-fetch the curriculum the first time the teacher opens that tab.
+  useEffect(() => {
+    if (tab !== 'curriculum' || !profile) return
+    if (curriculumUnits.length > 0 || curriculumLoading) return
+    setCurriculumLoading(true)
+    api.get<CurriculumUnit[]>('/curriculum/units')
+      .then(data => setCurriculumUnits(data || []))
+      .catch(() => setCurriculumUnits([]))
+      .finally(() => setCurriculumLoading(false))
+  }, [tab, profile])
 
   const fetchAll = async () => {
     setDataLoading(true)
@@ -297,7 +341,7 @@ export default function ClassroomPage() {
 
         {/* TABS */}
         <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', background: 'white', padding: '4px', borderRadius: '10px', border: '1px solid rgba(14,45,110,0.08)', width: 'fit-content' }}>
-          {(['students', 'assignments', 'help queue', 'settings'] as Tab[]).map(t => (
+          {(['students', 'assignments', 'curriculum', 'help queue', 'settings'] as Tab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 20px', borderRadius: '7px', fontSize: '13px', fontWeight: 600, border: 'none', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", background: tab === t ? '#1A56DB' : 'transparent', color: tab === t ? 'white' : '#5F5E5A', transition: 'all 0.15s', position: 'relative' }}>
               {t}
               {t === 'help queue' && helpCount > 0 && (
@@ -412,6 +456,95 @@ export default function ClassroomPage() {
                   )
                 })}
               </div>
+            )}
+          </div>
+        )}
+
+        {/* ── CURRICULUM TAB ── */}
+        {tab === 'curriculum' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1rem 1.25rem' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>curriculum content</h3>
+              <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>
+                Lessons, projects, and assignments authored at the curriculum level — available to your students by default.
+                Click any item to preview what students will see.
+              </p>
+            </div>
+
+            {curriculumLoading ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: '#888780', fontSize: '14px', background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)' }}>loading...</div>
+            ) : curriculumUnits.length === 0 ? (
+              <div style={{ padding: '2.5rem', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)' }}>
+                <p style={{ color: '#888780', fontSize: '14px', margin: 0 }}>no published curriculum yet</p>
+              </div>
+            ) : (
+              curriculumUnits.map(unit => {
+                const lessons = (unit.lessons || []).filter(l => l.is_published).sort((a, b) => a.order_index - b.order_index)
+                const projects = (unit.projects || []).filter(p => p.is_published).sort((a, b) => a.order_index - b.order_index)
+                const curricAsst = (unit.curriculum_assignments || []).filter(a => a.is_published).sort((a, b) => a.order_index - b.order_index)
+                const total = lessons.length + projects.length + curricAsst.length
+                if (total === 0) return null
+                return (
+                  <div key={unit.id} style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
+                    <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unit.title}</span>
+                      <span style={{ fontSize: '11px', color: '#888780' }}>{total} item(s)</span>
+                    </div>
+
+                    {lessons.map((l, i) => (
+                      <div key={l.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EBF1FD', border: '1.5px solid #B6CCFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0C447C', flexShrink: 0 }}>{i + 1}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{l.title}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>lesson</span>
+                          </div>
+                        </div>
+                        <Link href={`/lesson/${l.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                      </div>
+                    ))}
+
+                    {projects.map(p => (
+                      <div key={p.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(254,243,199,0.25)' }}>
+                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#FEF3C7', border: '1.5px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#92400E', flexShrink: 0 }}>★</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{p.title}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
+                            <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
+                          </div>
+                          {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
+                        </div>
+                        <Link href={`/project/${p.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                      </div>
+                    ))}
+
+                    {curricAsst.map(a => {
+                      const typeColors: Record<string, { bg: string; color: string; label: string }> = {
+                        code:     { bg: '#EBF1FD', color: '#0C447C', label: 'coding' },
+                        activity: { bg: '#F3E8FF', color: '#6B21A8', label: 'activity' },
+                        checkin:  { bg: '#FEF3C7', color: '#92400E', label: 'check-in' },
+                        quiz:     { bg: '#FCE7F3', color: '#9D174D', label: 'quiz' },
+                        project:  { bg: '#FEF3C7', color: '#92400E', label: 'project' },
+                      }
+                      const tc = typeColors[a.assignment_type] || typeColors.code
+                      return (
+                        <div key={a.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: '#E0F2FE33' }}>
+                          <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>&Sigma;</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{a.title}</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>assignment</span>
+                              <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
+                            </div>
+                          </div>
+                          <span style={{ fontSize: '12px', color: '#888780', whiteSpace: 'nowrap' }}>student view coming soon</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })
             )}
           </div>
         )}
