@@ -115,7 +115,7 @@ async def get_my_classrooms(
     """Returns all classrooms the current student is a member of."""
     result = (
         supabase_admin.table("classroom_members")
-        .select("classroom_id, classrooms(id, name, description, join_code, sequential_unlock, archived)")
+        .select("classroom_id, classrooms(id, name, description, join_code, sequential_unlock, archived, grade_weights)")
         .eq("student_id", user.profile_id)
         .execute()
     )
