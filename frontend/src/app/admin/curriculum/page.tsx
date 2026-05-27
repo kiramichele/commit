@@ -60,7 +60,6 @@ export default function AdminCurriculumPage() {
   const [lessonsLoading, setLessonsLoading] = useState(false)
 
   const [newUnitTitle, setNewUnitTitle] = useState('')
-  const [newUnitOrder, setNewUnitOrder] = useState('')
   const [creatingUnit, setCreatingUnit] = useState(false)
 
   useEffect(() => {
@@ -112,12 +111,9 @@ export default function AdminCurriculumPage() {
     if (!selectedUnit) return
     const title = prompt('Project title?')
     if (!title?.trim()) return
-    const orderStr = prompt('Order number?', String((projects[projects.length - 1]?.order_index || 0) + 1))
-    if (!orderStr) return
     try {
       const created = await api.post<Project>(`/admin/curriculum/units/${selectedUnit.id}/projects`, {
         title,
-        order_index: parseInt(orderStr, 10),
         is_published: false,
       })
       setProjects(p => [...p, created].sort((a, b) => a.order_index - b.order_index))
@@ -158,12 +154,9 @@ export default function AdminCurriculumPage() {
     if (!selectedUnit) return
     const title = prompt('Assignment title?')
     if (!title?.trim()) return
-    const orderStr = prompt('Order number?', String((curriculumAssignments[curriculumAssignments.length - 1]?.order_index || 0) + 1))
-    if (!orderStr) return
     try {
       const created = await api.post<CurriculumAssignment>(`/admin/curriculum/units/${selectedUnit.id}/assignments`, {
         title,
-        order_index: parseInt(orderStr, 10),
         assignment_type: 'code',
         is_published: false,
       })
@@ -195,18 +188,16 @@ export default function AdminCurriculumPage() {
 
   const createUnit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newUnitTitle.trim() || !newUnitOrder) return
+    if (!newUnitTitle.trim()) return
     setCreatingUnit(true)
     try {
       const created = await api.post<Unit>('/admin/curriculum/units', {
         title: newUnitTitle,
-        order_index: parseInt(newUnitOrder, 10),
         description: '',
         is_published: false,
       })
       setUnits(u => [...u, created].sort((a, b) => a.order_index - b.order_index))
       setNewUnitTitle('')
-      setNewUnitOrder('')
       setSelectedUnit(created)
     } catch (err: any) {
       alert(err.message || 'Failed to create unit')
@@ -439,10 +430,7 @@ export default function AdminCurriculumPage() {
           )}
 
           <form onSubmit={createUnit} style={{ padding: '1rem 1.25rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <input type="number" value={newUnitOrder} onChange={e => setNewUnitOrder(e.target.value)} placeholder="#" required style={{ ...inputStyle, width: '60px' }} />
-              <input value={newUnitTitle} onChange={e => setNewUnitTitle(e.target.value)} placeholder="new unit title" required style={{ ...inputStyle, flex: 1 }} />
-            </div>
+            <input value={newUnitTitle} onChange={e => setNewUnitTitle(e.target.value)} placeholder="new unit title" required style={inputStyle} />
             <button type="submit" disabled={creatingUnit} style={btn(true)}>{creatingUnit ? 'creating...' : '+ add unit'}</button>
           </form>
         </div>

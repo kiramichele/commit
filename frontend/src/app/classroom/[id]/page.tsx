@@ -92,7 +92,6 @@ interface NewAssignment {
   starter_code: string
   assignment_type: string
   curriculum_unit_id: string
-  curriculum_order: string
 }
 
 const ASSIGNMENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
@@ -142,7 +141,7 @@ export default function ClassroomPage() {
   const [newAssignment, setNewAssignment] = useState<NewAssignment>({
     title: '', instructions: '', due_date: '', min_commits: 3,
     scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code',
-    curriculum_unit_id: '', curriculum_order: '',
+    curriculum_unit_id: '',
   })
   const [standardsTags, setStandardsTags] = useState<string[]>([])
   const [hintsEnabled, setHintsEnabled] = useState(true)
@@ -265,12 +264,12 @@ export default function ClassroomPage() {
         hint_1: hint1 || null,
         hint_2: hint2 || null,
         curriculum_unit_id: newAssignment.curriculum_unit_id || null,
-        curriculum_order: newAssignment.curriculum_unit_id && newAssignment.curriculum_order
-          ? parseInt(newAssignment.curriculum_order, 10) || null
-          : null,
+        // Append to the end of the unit by default; teachers reorder with
+        // the up/down arrows in the curriculum tab.
+        curriculum_order: newAssignment.curriculum_unit_id ? Math.floor(Date.now() / 1000) : null,
       })
       setShowAddAssignment(false)
-      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '', curriculum_order: '' })
+      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '' })
       setStandardsTags([])
       setHintsEnabled(true)
       setHint1('')
@@ -794,33 +793,18 @@ export default function ClassroomPage() {
                 <label style={labelStyle}>due date <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <input type="datetime-local" value={newAssignment.due_date} onChange={e => setNewAssignment(s => ({ ...s, due_date: e.target.value }))} style={inputStyle} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '1rem' }}>
-                <div>
-                  <label style={labelStyle}>add to curriculum unit <span style={{ color: '#888780', fontWeight: 400 }}>(optional — only your classroom)</span></label>
-                  <select
-                    value={newAssignment.curriculum_unit_id}
-                    onChange={e => setNewAssignment(s => ({ ...s, curriculum_unit_id: e.target.value }))}
-                    style={{ ...inputStyle, cursor: 'pointer' }}
-                  >
-                    <option value="">— not in curriculum —</option>
-                    {curriculumUnits.map(u => (
-                      <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
-                    ))}
-                  </select>
-                </div>
-                {newAssignment.curriculum_unit_id && (
-                  <div>
-                    <label style={labelStyle}>position</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={newAssignment.curriculum_order}
-                      onChange={e => setNewAssignment(s => ({ ...s, curriculum_order: e.target.value }))}
-                      placeholder="1"
-                      style={inputStyle}
-                    />
-                  </div>
-                )}
+              <div>
+                <label style={labelStyle}>add to curriculum unit <span style={{ color: '#888780', fontWeight: 400 }}>(optional — only your classroom; use the up/down arrows in the curriculum tab to reorder later)</span></label>
+                <select
+                  value={newAssignment.curriculum_unit_id}
+                  onChange={e => setNewAssignment(s => ({ ...s, curriculum_unit_id: e.target.value }))}
+                  style={{ ...inputStyle, cursor: 'pointer' }}
+                >
+                  <option value="">— not in curriculum —</option>
+                  {curriculumUnits.map(u => (
+                    <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
+                  ))}
+                </select>
               </div>
               {newAssignment.assignment_type === 'code' && (
                 <div>

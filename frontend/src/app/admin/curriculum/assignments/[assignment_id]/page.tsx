@@ -67,7 +67,6 @@ export default function CurriculumAssignmentEditor() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
-  const [orderIndex, setOrderIndex] = useState(1)
   const [title, setTitle] = useState('')
   const [assignmentType, setAssignmentType] = useState('code')
   const [scaffoldLevel, setScaffoldLevel] = useState('typed_python')
@@ -132,7 +131,6 @@ export default function CurriculumAssignmentEditor() {
     try {
       const data = await api.get<CurriculumAssignment>(`/admin/curriculum/assignments/${params.assignment_id}`)
       setAssignment(data)
-      setOrderIndex(data.order_index)
       setTitle(data.title)
       setAssignmentType(data.assignment_type)
       setScaffoldLevel(data.scaffold_level)
@@ -230,8 +228,9 @@ export default function CurriculumAssignmentEditor() {
     setSaving(true)
     try {
       const standardsList = standardsText.split(',').map(s => s.trim()).filter(Boolean)
+      // order_index intentionally omitted — reordering happens via the up/
+      // down arrows in the curriculum admin list.
       await api.patch(`/admin/curriculum/assignments/${params.assignment_id}`, {
-        order_index: orderIndex,
         title,
         assignment_type: assignmentType,
         scaffold_level: scaffoldLevel,
@@ -300,11 +299,7 @@ export default function CurriculumAssignmentEditor() {
 
           {/* META */}
           <div style={card}>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 180px', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <label style={label}>order</label>
-                <input type="number" value={orderIndex} onChange={e => setOrderIndex(parseInt(e.target.value, 10) || 0)} style={input} />
-              </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 180px', gap: '12px', marginBottom: '12px' }}>
               <div>
                 <label style={label}>title</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} style={input} />

@@ -37,7 +37,6 @@ export default function LessonEditorPage() {
   const [uploading, setUploading] = useState(false)
   const [unitId, setUnitId] = useState<string>(unitIdForNew || '')
 
-  const [orderIndex, setOrderIndex] = useState(1)
   const [title, setTitle] = useState('')
   const [standardsText, setStandardsText] = useState('')
   const [isPublished, setIsPublished] = useState(false)
@@ -58,7 +57,6 @@ export default function LessonEditorPage() {
     try {
       const data = await api.get<LessonResponse>(`/admin/curriculum/lessons/${params.lesson_id}`)
       setUnitId(data.unit_id)
-      setOrderIndex(data.order_index)
       setTitle(data.title)
       setStandardsText((data.standards_tags || []).join(', '))
       setIsPublished(data.is_published)
@@ -105,11 +103,11 @@ export default function LessonEditorPage() {
         html_body: htmlBody,
         activity_body: null,
       }
-      const payload = {
-        order_index: orderIndex,
+      // We deliberately don't send order_index — the up/down arrows in the
+      // curriculum list are the only way to change it, and the backend
+      // auto-assigns on create.
+      const payload: Record<string, unknown> = {
         title,
-        // scaffold_level kept at typed_python for legacy DB compatibility; lessons
-        // don't expose a scaffold picker since they're reading-only.
         scaffold_level: 'typed_python',
         standards_tags: standardsList.length ? standardsList : null,
         is_published: isPublished,
@@ -172,15 +170,9 @@ export default function LessonEditorPage() {
 
           {/* META */}
           <div style={card}>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <label style={label}>order</label>
-                <input type="number" value={orderIndex} onChange={e => setOrderIndex(parseInt(e.target.value, 10) || 0)} style={input} />
-              </div>
-              <div>
-                <label style={label}>title</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
-              </div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={label}>title</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: '12px' }}>
               <div>

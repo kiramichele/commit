@@ -20,12 +20,26 @@ router = APIRouter()
 BUCKET = "lesson-content"
 
 
+def _next_order_for(table: str, scope_col: Optional[str], scope_val: Optional[str]) -> int:
+    """Returns max(order_index) + 1 within the given scope (e.g. lessons in a unit)."""
+    q = supabase_admin.table(table).select("order_index")
+    if scope_col and scope_val:
+        q = q.eq(scope_col, scope_val)
+    rows = q.execute().data or []
+    max_idx = 0
+    for r in rows:
+        v = r.get("order_index")
+        if isinstance(v, int) and v > max_idx:
+            max_idx = v
+    return max_idx + 1
+
+
 # ============================================================
 # SCHEMAS
 # ============================================================
 
 class UnitCreate(BaseModel):
-    order_index: int
+    order_index: Optional[int] = None  # auto-assigns to max+1 when None
     title: str
     description: Optional[str] = ""
     is_published: bool = False
@@ -57,7 +71,7 @@ class LessonContent(BaseModel):
 
 
 class LessonCreate(BaseModel):
-    order_index: int
+    order_index: Optional[int] = None  # auto-assigns to max+1 when None
     title: str
     scaffold_level: str = "typed_python"
     standards_tags: Optional[List[str]] = None
@@ -146,7 +160,10 @@ async def list_units(user: CurrentUser = Depends(require_admin)):
 
 @router.post("/units", status_code=201)
 async def create_unit(body: UnitCreate, user: CurrentUser = Depends(require_admin)):
-    response = supabase_admin.table("units").insert(body.model_dump()).execute()
+    row = body.model_dump()
+    if row.get("order_index") is None:
+        row["order_index"] = _next_order_for("units", None, None)
+    response = supabase_admin.table("units").insert(row).execute()
     return response.data[0]
 
 
@@ -233,7 +250,7 @@ async def create_lesson(unit_id: str, body: LessonCreate, user: CurrentUser = De
 
     lesson_row = {
         "unit_id": unit_id,
-        "order_index": body.order_index,
+        "order_index": body.order_index if body.order_index is not None else _next_order_for("lessons", "unit_id", unit_id),
         "title": body.title,
         "scaffold_level": body.scaffold_level,
         "standards_tags": body.standards_tags,
@@ -291,7 +308,7 @@ async def delete_lesson(lesson_id: str, user: CurrentUser = Depends(require_admi
 # ============================================================
 
 class ProjectCreate(BaseModel):
-    order_index: int
+    order_index: Optional[int] = None  # auto-assigns to max+1 when None
     title: str
     description: Optional[str] = ""
     estimated_minutes: int = 60
@@ -369,6 +386,8 @@ async def create_project(unit_id: str, body: ProjectCreate, user: CurrentUser = 
     if not unit or not unit.data:
         raise HTTPException(status_code=404, detail="Unit not found.")
     row = {**body.model_dump(), "unit_id": unit_id}
+    if row.get("order_index") is None:
+        row["order_index"] = _next_order_for("projects", "unit_id", unit_id)
     result = supabase_admin.table("projects").insert(row).execute()
     return result.data[0]
 
@@ -468,7 +487,7 @@ async def delete_step(step_id: str, user: CurrentUser = Depends(require_admin)):
 # ============================================================
 
 class CurriculumAssignmentCreate(BaseModel):
-    order_index: int
+    order_index: Optional[int] = None  # auto-assigns to max+1 when None
     title: str
     instructions: Optional[str] = ""
     starter_code: Optional[str] = ""
@@ -551,6 +570,8 @@ async def create_curriculum_assignment(
     raw = body.model_dump()
     html_body = raw.pop("html_body", None)
     row = {**raw, "unit_id": unit_id}
+    if row.get("order_index") is None:
+        row["order_index"] = _next_order_for("curriculum_assignments", "unit_id", unit_id)
     result = supabase_admin.table("curriculum_assignments").insert(row).execute()
     assignment_id = result.data[0]["id"]
 
