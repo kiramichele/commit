@@ -396,7 +396,18 @@ export default function AdminCurriculumPage() {
           <span style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
           <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '14px' }}>curriculum</span>
         </div>
-        <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>{profile.email}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <a
+            href="/admin/curriculum/preview"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ padding: '6px 14px', borderRadius: '7px', background: 'rgba(255,255,255,0.12)', color: 'white', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', border: '1px solid rgba(255,255,255,0.2)' }}
+            title="opens a student-style preview of the entire published curriculum in a new tab"
+          >
+            👁 view as student
+          </a>
+          <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px' }}>{profile.email}</span>
+        </div>
       </div>
 
       <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem', display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.5rem', alignItems: 'start' }}>

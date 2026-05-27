@@ -124,12 +124,14 @@ export default function CurriculumAssignmentPage() {
         } catch {}
       }
 
-      // Check-in with HTML prompt: fetch and render the body above the response field.
+      // Check-in with HTML prompt: fetch the body, inject the Commit SDK so
+      // the activity HTML can submit responses from its own forms, and render
+      // it just like an activity (no separate textarea below).
       if (a.assignment_type === 'checkin' && a.checkin_format === 'html' && a.html_file_path) {
         try {
           const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
           const html = await fetch(url).then(r => r.text())
-          setCheckinHtml(html)
+          setCheckinHtml(html + COMMIT_SDK_SCRIPT)
         } catch {}
       }
 
@@ -212,7 +214,12 @@ export default function CurriculumAssignmentPage() {
   }, [params.assignment_id])
 
   useEffect(() => {
-    if (assignment?.assignment_type !== 'activity') return
+    // The Commit SDK handler powers both activity assignments and HTML
+    // check-ins — both inject the SDK into an iframe and submit responses
+    // through window.postMessage.
+    const isSdkIframe = assignment?.assignment_type === 'activity'
+      || (assignment?.assignment_type === 'checkin' && assignment?.checkin_format === 'html')
+    if (!isSdkIframe) return
     window.addEventListener('message', handleActivityMessage)
     return () => window.removeEventListener('message', handleActivityMessage)
   }, [assignment, handleActivityMessage])
@@ -344,22 +351,13 @@ export default function CurriculumAssignmentPage() {
           </div>
         </div>
       ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'html' ? (
-        // ── CHECK-IN: html prompt + text response ──
-        <div style={{ flex: 1, maxWidth: '860px', margin: '0 auto', padding: '2rem', width: '100%', boxSizing: 'border-box' }}>
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden', marginBottom: '1rem' }}>
-            {checkinHtml ? (
-              <iframe srcDoc={checkinHtml} style={{ width: '100%', minHeight: '420px', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={assignment.title} />
-            ) : (
-              <div style={{ padding: '1.5rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>loading prompt...</div>
-            )}
-          </div>
-          <div style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
-            <div style={{ padding: '0.75rem 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>your response</div>
-            <textarea value={textResponse} onChange={e => setTextResponse(e.target.value)} rows={6} placeholder="Write your response..." style={{ width: '100%', padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'vertical', fontSize: '14px', fontFamily: "'DM Sans', sans-serif", lineHeight: 1.7, color: '#333', boxSizing: 'border-box' }} />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0.75rem 1.25rem', background: '#F8F7F5', borderTop: '1px solid rgba(14,45,110,0.06)' }}>
-              <button onClick={() => submit({ text: textResponse })} disabled={saving} style={{ padding: '9px 20px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'submitting...' : submitted ? 'resubmit' : 'submit'}</button>
-            </div>
-          </div>
+        // ── CHECK-IN: html with embedded form inputs (Commit SDK powers it) ──
+        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+          {checkinHtml ? (
+            <iframe srcDoc={checkinHtml} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
+          ) : (
+            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading check-in...</div>
+          )}
         </div>
       ) : assignment.assignment_type === 'code' ? (
         // ── 3-PANE FOR CODING ──

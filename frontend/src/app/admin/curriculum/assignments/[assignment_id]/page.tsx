@@ -30,7 +30,7 @@ const CHECKIN_FORMAT_OPTIONS = [
   { value: 'short_answer', label: 'Short answer', desc: 'Plain prompt → textarea response' },
   { value: 'rating',       label: '1–5 rating',   desc: 'Plain prompt → 1–5 scale response' },
   { value: 'coding',       label: 'Coding',       desc: 'Plain prompt → code snippet response' },
-  { value: 'html',         label: 'HTML prompt',  desc: 'Rich HTML body + short text response' },
+  { value: 'html',         label: 'HTML form',    desc: 'Full HTML page with embedded inputs (uses Commit.submit SDK)' },
 ]
 
 const TYPE_OPTIONS = [
@@ -432,9 +432,7 @@ export default function CurriculumAssignmentEditor() {
                 </label>
               </div>
               <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
-                {isActivity
-                  ? <>Renders like a lesson page; students read it and answer embedded questions. Use the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your submit button (see lesson editor for the activity template).</>
-                  : <>Renders the HTML above a single text response field. Use this when your prompt needs rich formatting (lists, code blocks, images) but the student just writes a short reflection.</>}
+                Renders as a standalone HTML page; students answer the embedded form inputs and submit using the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your own submit button. See the lesson editor for an activity template that demonstrates the full SDK (submit, getPriorResponses, status events).
               </p>
               <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Title</h1>&#10;<p>Body HTML...</p>" style={textareaStyle} />
             </div>

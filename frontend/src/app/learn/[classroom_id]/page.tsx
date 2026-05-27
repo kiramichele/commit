@@ -47,6 +47,7 @@ interface UnitWithProjects {
   order_index: number
   is_published: boolean
   projects?: Array<{ id: string; order_index: number; title: string; description: string; estimated_minutes: number; is_published: boolean }>
+  curriculum_assignments?: Array<{ id: string; order_index: number; title: string; assignment_type: string; is_published: boolean }>
 }
 
 interface Classroom {
@@ -68,6 +69,7 @@ export default function StudentClassroomPage() {
   const [lessons, setLessons] = useState<UnlockedLesson[]>([])
   const [completedLessonIds, setCompletedLessonIds] = useState<Set<string>>(new Set())
   const [projectsByUnitTitle, setProjectsByUnitTitle] = useState<Record<string, UnitWithProjects['projects']>>({})
+  const [curriculumAssignmentsByUnitTitle, setCurriculumAssignmentsByUnitTitle] = useState<Record<string, UnitWithProjects['curriculum_assignments']>>({})
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
@@ -95,14 +97,18 @@ export default function StudentClassroomPage() {
       setAssignments(assignmentsData || [])
       setLessons(lessonsData || [])
 
-      // Build a unitTitle → published projects map so we can render projects
-      // alongside lessons in the same per-unit blocks.
+      // Build unitTitle → projects + unitTitle → curriculum assignments maps
+      // so we can render them alongside lessons in the same per-unit blocks.
       const projectsMap: Record<string, UnitWithProjects['projects']> = {}
+      const curricAsstMap: Record<string, UnitWithProjects['curriculum_assignments']> = {}
       for (const u of unitsData || []) {
         const published = (u.projects || []).filter(p => p.is_published).sort((a, b) => a.order_index - b.order_index)
         if (published.length) projectsMap[u.title] = published
+        const publishedAsst = (u.curriculum_assignments || []).filter(a => a.is_published).sort((a, b) => a.order_index - b.order_index)
+        if (publishedAsst.length) curricAsstMap[u.title] = publishedAsst
       }
       setProjectsByUnitTitle(projectsMap)
+      setCurriculumAssignmentsByUnitTitle(curricAsstMap)
 
       const completionsData = await api.get<{ lesson_id: string }[]>(
         `/curriculum/classroom/${classroomId}/completions`
@@ -295,6 +301,24 @@ export default function StudentClassroomPage() {
                             <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
                           </div>
                           <Link href={`/project/${p.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                            open →
+                          </Link>
+                        </div>
+                      ))}
+
+                      {/* CURRICULUM ASSIGNMENTS in this unit */}
+                      {(curriculumAssignmentsByUnitTitle[unitTitle] || []).map(a => (
+                        <div key={a.id} style={{ padding: '1rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', background: 'rgba(224,242,254,0.3)' }}>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '2px solid #BAE6FD', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{ color: '#075985', fontSize: '11px', fontWeight: 700 }}>&Sigma;</span>
+                          </div>
+                          <div style={{ flex: 1, minWidth: '200px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{a.title}</span>
+                              <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{a.assignment_type}</span>
+                            </div>
+                          </div>
+                          <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                             open →
                           </Link>
                         </div>

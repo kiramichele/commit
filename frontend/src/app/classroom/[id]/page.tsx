@@ -508,12 +508,23 @@ export default function ClassroomPage() {
         {/* ── CURRICULUM TAB ── */}
         {tab === 'curriculum' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1rem 1.25rem' }}>
-              <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>curriculum content</h3>
-              <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>
-                Lessons, projects, and assignments authored at the curriculum level — available to your students by default.
-                Click any item to preview what students will see.
-              </p>
+            <div style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>curriculum content</h3>
+                <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>
+                  Lessons, projects, and assignments authored at the curriculum level — available to your students by default.
+                  Click any item to preview what students will see.
+                </p>
+              </div>
+              <a
+                href={`/learn/${classroomId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ padding: '8px 16px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap', border: '1.5px solid rgba(26,86,219,0.2)' }}
+                title="opens the student-facing classroom view in a new tab"
+              >
+                👁 view as student
+              </a>
             </div>
 
             {curriculumLoading ? (

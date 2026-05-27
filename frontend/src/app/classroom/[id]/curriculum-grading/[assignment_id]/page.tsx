@@ -365,9 +365,29 @@ export default function CurriculumGradingPage() {
                           <span style={{ color: '#888780', fontStyle: 'italic', fontSize: '14px' }}>no code</span>
                         )
                       ) : (
-                        <div style={{ padding: '12px 16px', background: '#FAFAF8', borderRadius: '8px', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: '60px' }}>
-                          {parsed.answers._text || parsed.answers._code || <span style={{ color: '#888780', fontStyle: 'italic' }}>no response</span>}
-                        </div>
+                        (() => {
+                          // HTML check-ins and activity assignments submit arbitrary
+                          // key/value pairs via the Commit SDK. Show each one.
+                          const reserved = new Set(['_text', '_code', '_rating'])
+                          const extraKeys = Object.keys(parsed.answers).filter(k => !reserved.has(k))
+                          if (extraKeys.length > 0) {
+                            return (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {extraKeys.map(k => (
+                                  <div key={k} style={{ padding: '10px 14px', background: '#FAFAF8', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.06)' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#888780', marginBottom: '4px', letterSpacing: '0.02em', fontFamily: "'DM Mono', monospace" }}>{k}</div>
+                                    <div style={{ fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{parsed.answers[k] || <span style={{ color: '#888780', fontStyle: 'italic' }}>—</span>}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          }
+                          return (
+                            <div style={{ padding: '12px 16px', background: '#FAFAF8', borderRadius: '8px', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap', minHeight: '60px' }}>
+                              {parsed.answers._text || parsed.answers._code || <span style={{ color: '#888780', fontStyle: 'italic' }}>no response</span>}
+                            </div>
+                          )
+                        })()
                       )}
                     </div>
                   </div>
