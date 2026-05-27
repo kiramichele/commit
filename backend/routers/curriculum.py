@@ -314,6 +314,159 @@ async def lock_lesson(
 
 
 # ============================================================
+# CURRICULUM ASSIGNMENTS (student-facing reads + responses)
+# ============================================================
+
+class CurriculumAssignmentSubmission(BaseModel):
+    response_data: dict  # arbitrary JSON — meaning depends on assignment_type
+
+
+@router.get("/curriculum-assignments/{assignment_id}")
+async def get_curriculum_assignment(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns a published curriculum assignment with its unit info."""
+    response = (
+        supabase_admin.table("curriculum_assignments")
+        .select("*, units(id, title, order_index)")
+        .eq("id", assignment_id)
+        .eq("is_published", True)
+        .maybe_single()
+        .execute()
+    )
+    if not response or not response.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    return response.data
+
+
+@router.get("/curriculum-assignments/{assignment_id}/html-url")
+async def get_curriculum_assignment_html_url(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Signed URL for the activity HTML body (activity-type only)."""
+    row = (
+        supabase_admin.table("curriculum_assignments")
+        .select("html_file_path")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not row or not row.data or not row.data.get("html_file_path"):
+        raise HTTPException(status_code=404, detail="No HTML for this assignment.")
+    try:
+        signed = supabase_admin.storage.from_(STORAGE_BUCKET).create_signed_url(
+            row.data["html_file_path"], 60 * 60
+        )
+        return {"url": signed.get("signedURL") or signed.get("signedUrl")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not generate URL: {str(e)}")
+
+
+@router.get("/curriculum-assignments/{assignment_id}/questions")
+async def get_curriculum_assignment_questions(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns quiz questions for a quiz-type assignment. Hides correct_answer from students."""
+    response = (
+        supabase_admin.table("quiz_questions")
+        .select("id, order_index, question_type, question_text, code_block, choice_a, choice_b, choice_c, choice_d")
+        .eq("curriculum_assignment_id", assignment_id)
+        .order("order_index")
+        .execute()
+    )
+    return response.data or []
+
+
+@router.post("/curriculum-assignments/{assignment_id}/submit")
+async def submit_curriculum_assignment(
+    assignment_id: str,
+    body: CurriculumAssignmentSubmission,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Records a student's submission to a curriculum assignment.
+    Auto-grades multiple-choice quiz answers against correct_answer;
+    leaves constructed/activity/check-in responses unscored for now.
+    Stored alongside other exercise_responses with exercise_type='curriculum_assignment'.
+    """
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, assignment_type")
+        .eq("id", assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not assignment or not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+
+    payload = body.response_data or {}
+    score: Optional[float] = None
+
+    # Auto-grade quizzes: payload is {questionId: 'a' | 'b' | 'c' | 'd'}.
+    if assignment.data.get("assignment_type") == "quiz":
+        questions = (
+            supabase_admin.table("quiz_questions")
+            .select("id, question_type, correct_answer")
+            .eq("curriculum_assignment_id", assignment_id)
+            .execute()
+        ).data or []
+        gradable = [q for q in questions if q["question_type"] == "multiple_choice" and q.get("correct_answer")]
+        if gradable:
+            correct = sum(
+                1 for q in gradable
+                if (payload.get(q["id"]) or "").lower() == q["correct_answer"]
+            )
+            score = round(100 * correct / len(gradable), 1)
+
+    existing = (
+        supabase_admin.table("exercise_responses")
+        .select("id")
+        .eq("student_id", user.profile_id)
+        .eq("lesson_id", assignment_id)
+        .eq("exercise_index", 0)
+        .maybe_single()
+        .execute()
+    )
+
+    import json
+    row = {
+        "student_id": user.profile_id,
+        "lesson_id": assignment_id,  # reuse lesson_id column to point at the curriculum assignment
+        "exercise_index": 0,
+        "exercise_type": "curriculum_assignment",
+        "response_text": json.dumps(payload),
+        "is_correct": (score is not None and score == 100) if score is not None else None,
+    }
+    if existing and existing.data:
+        supabase_admin.table("exercise_responses").update(row).eq("id", existing.data["id"]).execute()
+    else:
+        supabase_admin.table("exercise_responses").insert(row).execute()
+
+    return {"submitted": True, "score": score}
+
+
+@router.get("/curriculum-assignments/{assignment_id}/my-submission")
+async def get_my_curriculum_assignment_submission(
+    assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the current student's saved submission for this curriculum assignment, if any."""
+    response = (
+        supabase_admin.table("exercise_responses")
+        .select("*")
+        .eq("student_id", user.profile_id)
+        .eq("lesson_id", assignment_id)
+        .eq("exercise_type", "curriculum_assignment")
+        .maybe_single()
+        .execute()
+    )
+    return response.data if response else None
+
+
+# ============================================================
 # PROJECTS (student-facing reads)
 # ============================================================
 

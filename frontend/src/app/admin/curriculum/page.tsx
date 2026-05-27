@@ -249,35 +249,7 @@ export default function AdminCurriculumPage() {
     }
   }
 
-  // ── REORDER + MOVE HELPERS ────────────────────────────────
-  // Swap two items by position and renumber the whole list to be sequential.
-  // This fixes any pre-existing ties or gaps in order_index.
-  const swapByIndex = async <T extends { id: string; order_index: number }>(
-    list: T[],
-    setList: React.Dispatch<React.SetStateAction<T[]>>,
-    i: number,
-    j: number,
-    endpoint: (id: string) => string,
-  ) => {
-    if (i < 0 || j < 0 || i >= list.length || j >= list.length) return
-    const reordered = [...list]
-    ;[reordered[i], reordered[j]] = [reordered[j], reordered[i]]
-    const renumbered = reordered.map((item, idx) => ({ ...item, order_index: idx + 1 }))
-    setList(renumbered)
-    try {
-      // PATCH only items whose order_index actually changed.
-      const original = new Map(list.map(x => [x.id, x.order_index]))
-      await Promise.all(
-        renumbered
-          .filter(item => original.get(item.id) !== item.order_index)
-          .map(item => api.patch(endpoint(item.id), { order_index: item.order_index }))
-      )
-    } catch (err: any) {
-      alert(err.message || 'Failed to reorder')
-      setList(list)  // revert
-    }
-  }
-
+  // ── MOVE HELPER ───────────────────────────────────────────
   // Move an item (lesson/project/assignment) to a different unit, appending
   // to the end of the destination list.
   const moveToUnit = async (
@@ -309,12 +281,62 @@ export default function AdminCurriculumPage() {
     }
   }
 
-  const moveLesson = (i: number, dir: -1 | 1) =>
-    swapByIndex(lessons, setLessons, i, i + dir, id => `/admin/curriculum/lessons/${id}`)
-  const moveProject = (i: number, dir: -1 | 1) =>
-    swapByIndex(projects, setProjects, i, i + dir, id => `/admin/curriculum/projects/${id}`)
-  const moveCurriculumAssignment = (i: number, dir: -1 | 1) =>
-    swapByIndex(curriculumAssignments, setCurriculumAssignments, i, i + dir, id => `/admin/curriculum/assignments/${id}`)
+  // ── MERGED ORDERED LIST ────────────────────────────────────
+  // Lessons, projects, and curriculum assignments live in separate tables but
+  // we want them to appear in a single ordered list within a unit so teachers
+  // can interleave them (lesson 1, lesson 2, activity 1, lesson 3, ...).
+  type MergedItem =
+    | { kind: 'lesson'; data: Lesson; order_index: number; id: string }
+    | { kind: 'project'; data: Project; order_index: number; id: string }
+    | { kind: 'assignment'; data: CurriculumAssignment; order_index: number; id: string }
+
+  const mergedItems: MergedItem[] = [
+    ...lessons.map(l => ({ kind: 'lesson' as const, data: l, order_index: l.order_index, id: l.id })),
+    ...projects.map(p => ({ kind: 'project' as const, data: p, order_index: p.order_index, id: p.id })),
+    ...curriculumAssignments.map(a => ({ kind: 'assignment' as const, data: a, order_index: a.order_index, id: a.id })),
+  ].sort((a, b) => {
+    if (a.order_index !== b.order_index) return a.order_index - b.order_index
+    // Stable tie-break by kind so unmigrated data stays predictable.
+    const rank = { lesson: 0, project: 1, assignment: 2 }
+    return rank[a.kind] - rank[b.kind]
+  })
+
+  const endpointFor = (kind: MergedItem['kind'], id: string) =>
+    kind === 'lesson' ? `/admin/curriculum/lessons/${id}`
+    : kind === 'project' ? `/admin/curriculum/projects/${id}`
+    : `/admin/curriculum/assignments/${id}`
+
+  // Swap two items in the merged list by position and renumber everyone.
+  // After this runs, all items in the unit share a sequential order_index space.
+  const moveMerged = async (i: number, dir: -1 | 1) => {
+    const j = i + dir
+    if (j < 0 || j >= mergedItems.length) return
+    const reordered = [...mergedItems]
+    ;[reordered[i], reordered[j]] = [reordered[j], reordered[i]]
+    const newOrderById = new Map<string, number>()
+    reordered.forEach((item, idx) => newOrderById.set(item.id, idx + 1))
+
+    // Optimistic local update across all three lists.
+    setLessons(prev => prev.map(l => ({ ...l, order_index: newOrderById.get(l.id) ?? l.order_index })).sort((a, b) => a.order_index - b.order_index))
+    setProjects(prev => prev.map(p => ({ ...p, order_index: newOrderById.get(p.id) ?? p.order_index })).sort((a, b) => a.order_index - b.order_index))
+    setCurriculumAssignments(prev => prev.map(a => ({ ...a, order_index: newOrderById.get(a.id) ?? a.order_index })).sort((a, b) => a.order_index - b.order_index))
+
+    try {
+      // PATCH only items whose order_index actually changed.
+      const patches = mergedItems
+        .filter(item => newOrderById.get(item.id) !== item.order_index)
+        .map(item => api.patch(endpointFor(item.kind, item.id), { order_index: newOrderById.get(item.id)! }))
+      await Promise.all(patches)
+    } catch (err: any) {
+      alert(err.message || 'Failed to reorder')
+      // Refetch to recover from partial server state.
+      if (selectedUnit) {
+        fetchLessons(selectedUnit.id)
+        fetchProjects(selectedUnit.id)
+        fetchCurriculumAssignments(selectedUnit.id)
+      }
+    }
+  }
 
   const deleteLesson = async (lesson: Lesson) => {
     if (!confirm(`Delete "${lesson.title}"? This is permanent.`)) return
@@ -434,18 +456,95 @@ export default function AdminCurriculumPage() {
                 </div>
               </div>
 
-              {/* CURRICULUM ASSIGNMENTS SECTION */}
-              {curriculumAssignments.length > 0 && (
-                <div style={{ background: '#FAFAF8', padding: '0.5rem 0' }}>
-                  <div style={{ padding: '6px 1.25rem', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>
-                    assignments
-                  </div>
-                  {curriculumAssignments.map((a, i) => (
-                    <div key={a.id} style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
-                        <button onClick={() => moveCurriculumAssignment(i, -1)} disabled={i === 0} style={arrowBtn(i === 0)}>↑</button>
-                        <button onClick={() => moveCurriculumAssignment(i, 1)} disabled={i === curriculumAssignments.length - 1} style={arrowBtn(i === curriculumAssignments.length - 1)}>↓</button>
+              {/* MERGED ORDERED LIST — lessons, projects, and curriculum
+                  assignments interleaved by order_index */}
+              {lessonsLoading ? (
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#888780', fontSize: '13px' }}>loading...</div>
+              ) : mergedItems.length === 0 ? (
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '13px' }}>nothing here yet — click "+ new lesson", "+ new project", or "+ new assignment" above</div>
+              ) : (
+                mergedItems.map((item, i) => {
+                  const isLast = i === mergedItems.length - 1
+                  const moveSelect = (
+                    <select
+                      value=""
+                      onChange={e => { if (e.target.value) moveToUnit(item.id, e.target.value, endpointFor(item.kind, item.id), item.kind === 'lesson' ? fetchLessons : item.kind === 'project' ? fetchProjects : fetchCurriculumAssignments) }}
+                      style={{ ...btn(false), padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
+                      title="move to another unit"
+                    >
+                      <option value="">move to…</option>
+                      {units.filter(u => u.id !== selectedUnit.id).map(u => (
+                        <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
+                      ))}
+                    </select>
+                  )
+
+                  const arrows = (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
+                      <button onClick={() => moveMerged(i, -1)} disabled={i === 0} style={arrowBtn(i === 0)}>↑</button>
+                      <button onClick={() => moveMerged(i, 1)} disabled={isLast} style={arrowBtn(isLast)}>↓</button>
+                    </div>
+                  )
+
+                  const rowStyle: React.CSSProperties = {
+                    padding: '0.85rem 1.25rem',
+                    borderBottom: '1px solid rgba(14,45,110,0.05)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px',
+                  }
+
+                  if (item.kind === 'lesson') {
+                    const l = item.data
+                    return (
+                      <div key={`lesson-${l.id}`} style={rowStyle}>
+                        {arrows}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {l.title}
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>lesson</span>
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: l.is_published ? '#DCFCE7' : '#FEF9C3', color: l.is_published ? '#166534' : '#854D0E' }}>{l.is_published ? 'live' : 'draft'}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {moveSelect}
+                          <button onClick={() => toggleLessonPublish(l)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{l.is_published ? 'unpublish' : 'publish'}</button>
+                          <Link href={`/admin/curriculum/lessons/${l.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
+                          <button onClick={() => deleteLesson(l)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
+                        </div>
                       </div>
+                    )
+                  }
+
+                  if (item.kind === 'project') {
+                    const p = item.data
+                    return (
+                      <div key={`project-${p.id}`} style={{ ...rowStyle, background: 'rgba(254,243,199,0.18)' }}>
+                        {arrows}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            {p.title}
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C' }}>{p.project_steps?.length || 0} step(s)</span>
+                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: p.is_published ? '#DCFCE7' : '#FEF9C3', color: p.is_published ? '#166534' : '#854D0E' }}>{p.is_published ? 'live' : 'draft'}</span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {moveSelect}
+                          <button onClick={() => toggleProjectPublish(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{p.is_published ? 'unpublish' : 'publish'}</button>
+                          <Link href={`/admin/curriculum/projects/${p.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
+                          <button onClick={() => deleteProject(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // assignment
+                  const a = item.data
+                  return (
+                    <div key={`assignment-${a.id}`} style={{ ...rowStyle, background: 'rgba(224,242,254,0.25)' }}>
+                      {arrows}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                           {a.title}
@@ -455,103 +554,14 @@ export default function AdminCurriculumPage() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <select
-                          value=""
-                          onChange={e => { if (e.target.value) moveToUnit(a.id, e.target.value, `/admin/curriculum/assignments/${a.id}`, fetchCurriculumAssignments) }}
-                          style={{ ...btn(false), padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
-                          title="move to another unit"
-                        >
-                          <option value="">move to…</option>
-                          {units.filter(u => u.id !== selectedUnit.id).map(u => (
-                            <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
-                          ))}
-                        </select>
+                        {moveSelect}
                         <button onClick={() => toggleCurriculumAssignmentPublish(a)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{a.is_published ? 'unpublish' : 'publish'}</button>
                         <Link href={`/admin/curriculum/assignments/${a.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
                         <button onClick={() => deleteCurriculumAssignment(a)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* PROJECTS SECTION */}
-              {projects.length > 0 && (
-                <div style={{ background: '#FAFAF8', padding: '0.5rem 0' }}>
-                  <div style={{ padding: '6px 1.25rem', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>
-                    projects
-                  </div>
-                  {projects.map((p, i) => (
-                    <div key={p.id} style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
-                        <button onClick={() => moveProject(i, -1)} disabled={i === 0} style={arrowBtn(i === 0)}>↑</button>
-                        <button onClick={() => moveProject(i, 1)} disabled={i === projects.length - 1} style={arrowBtn(i === projects.length - 1)}>↓</button>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                          {p.title}
-                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
-                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C' }}>{p.project_steps?.length || 0} step(s)</span>
-                          <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: p.is_published ? '#DCFCE7' : '#FEF9C3', color: p.is_published ? '#166534' : '#854D0E' }}>{p.is_published ? 'live' : 'draft'}</span>
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                        <select
-                          value=""
-                          onChange={e => { if (e.target.value) moveToUnit(p.id, e.target.value, `/admin/curriculum/projects/${p.id}`, fetchProjects) }}
-                          style={{ ...btn(false), padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
-                          title="move to another unit"
-                        >
-                          <option value="">move to…</option>
-                          {units.filter(u => u.id !== selectedUnit.id).map(u => (
-                            <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
-                          ))}
-                        </select>
-                        <button onClick={() => toggleProjectPublish(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{p.is_published ? 'unpublish' : 'publish'}</button>
-                        <Link href={`/admin/curriculum/projects/${p.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
-                        <button onClick={() => deleteProject(p)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {lessonsLoading ? (
-                <div style={{ padding: '2rem', textAlign: 'center', color: '#888780', fontSize: '13px' }}>loading...</div>
-              ) : lessons.length === 0 ? (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '13px' }}>no lessons yet — click "+ new lesson" to add one</div>
-              ) : (
-                lessons.map((l, i) => (
-                  <div key={l.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
-                      <button onClick={() => moveLesson(i, -1)} disabled={i === 0} style={arrowBtn(i === 0)}>↑</button>
-                      <button onClick={() => moveLesson(i, 1)} disabled={i === lessons.length - 1} style={arrowBtn(i === lessons.length - 1)}>↓</button>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        {l.title}
-                        <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{lessonType(l)}</span>
-                        <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: l.is_published ? '#DCFCE7' : '#FEF9C3', color: l.is_published ? '#166534' : '#854D0E' }}>{l.is_published ? 'live' : 'draft'}</span>
-                      </div>
-                    </div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <select
-                        value=""
-                        onChange={e => { if (e.target.value) moveToUnit(l.id, e.target.value, `/admin/curriculum/lessons/${l.id}`, fetchLessons) }}
-                        style={{ ...btn(false), padding: '5px 8px', fontSize: '12px', cursor: 'pointer' }}
-                        title="move to another unit"
-                      >
-                        <option value="">move to…</option>
-                        {units.filter(u => u.id !== selectedUnit.id).map(u => (
-                          <option key={u.id} value={u.id}>unit {u.order_index}: {u.title}</option>
-                        ))}
-                      </select>
-                      <button onClick={() => toggleLessonPublish(l)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}>{l.is_published ? 'unpublish' : 'publish'}</button>
-                      <Link href={`/admin/curriculum/lessons/${l.id}`} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', textDecoration: 'none' }}>edit</Link>
-                      <button onClick={() => deleteLesson(l)} style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>delete</button>
-                    </div>
-                  </div>
-                ))
+                  )
+                })
               )}
             </>
           ) : (

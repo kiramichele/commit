@@ -479,58 +479,75 @@ export default function ClassroomPage() {
               </div>
             ) : (
               curriculumUnits.map(unit => {
-                const lessons = (unit.lessons || []).filter(l => l.is_published).sort((a, b) => a.order_index - b.order_index)
-                const projects = (unit.projects || []).filter(p => p.is_published).sort((a, b) => a.order_index - b.order_index)
-                const curricAsst = (unit.curriculum_assignments || []).filter(a => a.is_published).sort((a, b) => a.order_index - b.order_index)
-                const total = lessons.length + projects.length + curricAsst.length
-                if (total === 0) return null
+                type MergedRow =
+                  | { kind: 'lesson'; data: CurriculumLesson; order_index: number; id: string }
+                  | { kind: 'project'; data: CurriculumProject; order_index: number; id: string }
+                  | { kind: 'assignment'; data: CurriculumAssignmentRow; order_index: number; id: string }
+                const merged: MergedRow[] = [
+                  ...(unit.lessons || []).filter(l => l.is_published).map(l => ({ kind: 'lesson' as const, data: l, order_index: l.order_index, id: l.id })),
+                  ...(unit.projects || []).filter(p => p.is_published).map(p => ({ kind: 'project' as const, data: p, order_index: p.order_index, id: p.id })),
+                  ...(unit.curriculum_assignments || []).filter(a => a.is_published).map(a => ({ kind: 'assignment' as const, data: a, order_index: a.order_index, id: a.id })),
+                ].sort((a, b) => {
+                  if (a.order_index !== b.order_index) return a.order_index - b.order_index
+                  const rank = { lesson: 0, project: 1, assignment: 2 }
+                  return rank[a.kind] - rank[b.kind]
+                })
+                if (merged.length === 0) return null
+
+                const typeColors: Record<string, { bg: string; color: string; label: string }> = {
+                  code:     { bg: '#EBF1FD', color: '#0C447C', label: 'coding' },
+                  activity: { bg: '#F3E8FF', color: '#6B21A8', label: 'activity' },
+                  checkin:  { bg: '#FEF3C7', color: '#92400E', label: 'check-in' },
+                  quiz:     { bg: '#FCE7F3', color: '#9D174D', label: 'quiz' },
+                  project:  { bg: '#FEF3C7', color: '#92400E', label: 'project' },
+                }
+
                 return (
                   <div key={unit.id} style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
                     <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                       <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unit.title}</span>
-                      <span style={{ fontSize: '11px', color: '#888780' }}>{total} item(s)</span>
+                      <span style={{ fontSize: '11px', color: '#888780' }}>{merged.length} item(s)</span>
                     </div>
 
-                    {lessons.map((l, i) => (
-                      <div key={l.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EBF1FD', border: '1.5px solid #B6CCFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0C447C', flexShrink: 0 }}>{i + 1}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{l.title}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>lesson</span>
+                    {merged.map((item, i) => {
+                      const stepNum = i + 1
+                      if (item.kind === 'lesson') {
+                        const l = item.data
+                        return (
+                          <div key={`lesson-${l.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#EBF1FD', border: '1.5px solid #B6CCFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#0C447C', flexShrink: 0 }}>{stepNum}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{l.title}</span>
+                                <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>lesson</span>
+                              </div>
+                            </div>
+                            <Link href={`/lesson/${l.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                           </div>
-                        </div>
-                        <Link href={`/lesson/${l.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
-                      </div>
-                    ))}
-
-                    {projects.map(p => (
-                      <div key={p.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(254,243,199,0.25)' }}>
-                        <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#FEF3C7', border: '1.5px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#92400E', flexShrink: 0 }}>★</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{p.title}</span>
-                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
-                            <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
-                          </div>
-                          {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
-                        </div>
-                        <Link href={`/project/${p.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
-                      </div>
-                    ))}
-
-                    {curricAsst.map(a => {
-                      const typeColors: Record<string, { bg: string; color: string; label: string }> = {
-                        code:     { bg: '#EBF1FD', color: '#0C447C', label: 'coding' },
-                        activity: { bg: '#F3E8FF', color: '#6B21A8', label: 'activity' },
-                        checkin:  { bg: '#FEF3C7', color: '#92400E', label: 'check-in' },
-                        quiz:     { bg: '#FCE7F3', color: '#9D174D', label: 'quiz' },
-                        project:  { bg: '#FEF3C7', color: '#92400E', label: 'project' },
+                        )
                       }
+                      if (item.kind === 'project') {
+                        const p = item.data
+                        return (
+                          <div key={`project-${p.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(254,243,199,0.25)' }}>
+                            <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#FEF3C7', border: '1.5px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#92400E', flexShrink: 0 }}>{stepNum}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{p.title}</span>
+                                <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
+                                <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
+                              </div>
+                              {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
+                            </div>
+                            <Link href={`/project/${p.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                          </div>
+                        )
+                      }
+                      const a = item.data
                       const tc = typeColors[a.assignment_type] || typeColors.code
                       return (
-                        <div key={a.id} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: '#E0F2FE33' }}>
-                          <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>&Sigma;</span>
+                        <div key={`assignment-${a.id}`} style={{ padding: '0.85rem 1.25rem', borderBottom: '1px solid rgba(14,45,110,0.05)', display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(224,242,254,0.25)' }}>
+                          <span style={{ width: '22px', height: '22px', borderRadius: '50%', background: '#E0F2FE', border: '1.5px solid #BAE6FD', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700, color: '#075985', flexShrink: 0 }}>{stepNum}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{a.title}</span>
@@ -538,7 +555,7 @@ export default function ClassroomPage() {
                               <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color }}>{tc.label}</span>
                             </div>
                           </div>
-                          <span style={{ fontSize: '12px', color: '#888780', whiteSpace: 'nowrap' }}>student view coming soon</span>
+                          <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                         </div>
                       )
                     })}
