@@ -97,7 +97,11 @@ export default function CurriculumAssignmentEditor() {
   // activity / code types. Compute these once.
   const checkinIsHtml = isCheckin && checkinFormat === 'html'
   const checkinIsCoding = isCheckin && checkinFormat === 'coding'
-  const showHtmlBody = isActivity || checkinIsHtml
+  // HTML body is used for:
+  //   - activity-type   → the full activity page
+  //   - checkin (html)  → full activity-style page
+  //   - code-type       → instructions HTML rendered in the left pane next to the editor
+  const showHtmlBody = isActivity || checkinIsHtml || isCoding
   const showStarterCode = isCoding || checkinIsCoding
 
   const [quizQuestions, setQuizQuestions] = useState<Array<{
@@ -501,14 +505,20 @@ export default function CurriculumAssignmentEditor() {
           {showHtmlBody && (
             <div style={card}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                <label style={{ ...label, marginBottom: 0 }}>{isActivity ? 'activity html body' : 'check-in html prompt'}</label>
+                <label style={{ ...label, marginBottom: 0 }}>
+                  {isActivity ? 'activity html body'
+                    : isCoding ? 'instructions html (optional)'
+                    : 'check-in html prompt'}
+                </label>
                 <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
                   {uploading ? 'reading...' : '+ upload .html'}
                   <input type="file" accept=".html" onChange={handleFileUpload} style={{ display: 'none' }} />
                 </label>
               </div>
               <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
-                Renders as a standalone HTML page; students answer the embedded form inputs and submit using the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your own submit button. See the lesson editor for an activity template that demonstrates the full SDK (submit, getPriorResponses, status events).
+                {isCoding
+                  ? <>Optional. When set, this HTML renders in the left pane next to the IDE + console, replacing the plain-text instructions field. Use it when your directions need rich formatting (lists, images, code blocks, links).</>
+                  : <>Renders as a standalone HTML page; students answer the embedded form inputs and submit using the <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> SDK from your own submit button. See the lesson editor for an activity template that demonstrates the full SDK (submit, getPriorResponses, status events).</>}
               </p>
               <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Title</h1>&#10;<p>Body HTML...</p>" style={textareaStyle} />
             </div>

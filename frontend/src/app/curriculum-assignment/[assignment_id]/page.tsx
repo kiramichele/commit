@@ -83,6 +83,7 @@ export default function CurriculumAssignmentPage() {
   const [textResponse, setTextResponse] = useState('')
   const [ratingResponse, setRatingResponse] = useState<number | null>(null)
   const [checkinHtml, setCheckinHtml] = useState<string | null>(null)
+  const [codeInstructionsHtml, setCodeInstructionsHtml] = useState<string | null>(null)
   const [code, setCode] = useState('')
 
   // Code review state
@@ -118,6 +119,15 @@ export default function CurriculumAssignmentPage() {
 
       if (a.assignment_type === 'code') {
         setCode(a.starter_code || '')
+        // If the author uploaded an HTML instructions body, fetch it so we
+        // can render it in the left pane next to the editor.
+        if (a.html_file_path) {
+          try {
+            const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
+            const html = await fetch(url).then(r => r.text())
+            setCodeInstructionsHtml(html)
+          } catch {}
+        }
       }
 
       if (a.assignment_type === 'checkin' && a.checkin_format === 'coding') {
@@ -536,7 +546,11 @@ export default function CurriculumAssignmentPage() {
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>
           <div style={{ borderRight: '1px solid rgba(14,45,110,0.08)', background: 'white', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 16px', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>problem</div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{assignment.instructions || 'no instructions provided'}</div>
+            {codeInstructionsHtml ? (
+              <iframe srcDoc={codeInstructionsHtml} style={{ flex: 1, width: '100%', border: 'none' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={assignment.title} />
+            ) : (
+              <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{assignment.instructions || 'no instructions provided'}</div>
+            )}
           </div>
           <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
