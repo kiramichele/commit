@@ -250,7 +250,8 @@ export default function AdminCurriculumPage() {
   }
 
   // ── REORDER + MOVE HELPERS ────────────────────────────────
-  // Swap order_index of two items in any of the per-unit lists.
+  // Swap two items by position and renumber the whole list to be sequential.
+  // This fixes any pre-existing ties or gaps in order_index.
   const swapByIndex = async <T extends { id: string; order_index: number }>(
     list: T[],
     setList: React.Dispatch<React.SetStateAction<T[]>>,
@@ -259,18 +260,18 @@ export default function AdminCurriculumPage() {
     endpoint: (id: string) => string,
   ) => {
     if (i < 0 || j < 0 || i >= list.length || j >= list.length) return
-    const a = list[i]
-    const b = list[j]
-    const copy = [...list]
-    copy[i] = { ...b, order_index: a.order_index }
-    copy[j] = { ...a, order_index: b.order_index }
-    copy.sort((x, y) => x.order_index - y.order_index)
-    setList(copy)
+    const reordered = [...list]
+    ;[reordered[i], reordered[j]] = [reordered[j], reordered[i]]
+    const renumbered = reordered.map((item, idx) => ({ ...item, order_index: idx + 1 }))
+    setList(renumbered)
     try {
-      await Promise.all([
-        api.patch(endpoint(a.id), { order_index: b.order_index }),
-        api.patch(endpoint(b.id), { order_index: a.order_index }),
-      ])
+      // PATCH only items whose order_index actually changed.
+      const original = new Map(list.map(x => [x.id, x.order_index]))
+      await Promise.all(
+        renumbered
+          .filter(item => original.get(item.id) !== item.order_index)
+          .map(item => api.patch(endpoint(item.id), { order_index: item.order_index }))
+      )
     } catch (err: any) {
       alert(err.message || 'Failed to reorder')
       setList(list)  // revert
@@ -350,13 +351,14 @@ export default function AdminCurriculumPage() {
     fontFamily: "'DM Sans', sans-serif",
   })
   const arrowBtn = (disabled: boolean): React.CSSProperties => ({
-    width: '24px', height: '20px', padding: 0, borderRadius: '4px',
-    border: '1px solid rgba(14,45,110,0.12)',
-    background: disabled ? 'transparent' : 'white',
-    color: disabled ? '#D3D1C7' : '#5F5E5A',
-    fontSize: '11px', fontWeight: 700,
-    cursor: disabled ? 'default' : 'pointer',
+    width: '26px', height: '22px', padding: 0, borderRadius: '5px',
+    border: disabled ? '1px solid rgba(14,45,110,0.08)' : '1.5px solid #1A56DB',
+    background: disabled ? 'transparent' : '#EBF1FD',
+    color: disabled ? '#D3D1C7' : '#1A56DB',
+    fontSize: '13px', fontWeight: 700,
+    cursor: disabled ? 'not-allowed' : 'pointer',
     lineHeight: 1,
+    transition: 'all 0.1s',
   })
 
   return (

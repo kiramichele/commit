@@ -5,26 +5,13 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 
-type LessonType = 'reading' | 'coding' | 'activity'
-
-interface ExerciseItem {
-  type: string
-  instructions: string
-  starter_code: string
-}
-
+// Lessons are reading-only — they have a title, metadata, and an HTML body.
+// Anything interactive (coding, quizzes, activities, etc.) belongs as a
+// curriculum_assignment, not a lesson.
 interface LessonContent {
   estimated_minutes: number
-  has_coding_exercise: boolean
-  coding_instructions: string
-  coding_starter_code: string
-  example_code: string
-  example_explanation: string
-  exercises: ExerciseItem[] | null
   html_body: string | null
-  activity_body: string | null
   html_file_path?: string | null
-  activity_file_path?: string | null
 }
 
 interface LessonResponse {
@@ -32,88 +19,10 @@ interface LessonResponse {
   unit_id: string
   order_index: number
   title: string
-  scaffold_level: string
   standards_tags: string[] | null
   is_published: boolean
   lesson_content: LessonContent
 }
-
-const SCAFFOLD_LEVELS = ['typed_python', 'pseudocode', 'block_python', 'free_python']
-
-// Starter template that demonstrates the Commit SDK contract.
-// Activities call `Commit.submit(responses)` from their own submit button.
-const ACTIVITY_TEMPLATE = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Activity</title>
-  <style>
-    body { font-family: 'DM Sans', system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1.5rem; color: #0E2D6E; line-height: 1.6; }
-    h1 { font-size: 1.5rem; margin: 0 0 0.5rem; }
-    p { color: #5F5E5A; }
-    label { display: block; font-weight: 600; margin: 1.25rem 0 0.5rem; font-size: 14px; }
-    textarea, input[type=text] { width: 100%; padding: 10px 12px; border: 1.5px solid rgba(14,45,110,0.15); border-radius: 8px; font-family: inherit; font-size: 14px; box-sizing: border-box; }
-    textarea { resize: vertical; min-height: 90px; }
-    button { background: #1A56DB; color: white; border: none; padding: 11px 22px; border-radius: 8px; font-weight: 600; font-size: 15px; cursor: pointer; margin-top: 1.5rem; }
-    button:disabled { opacity: 0.5; cursor: not-allowed; }
-    #status { margin-top: 0.75rem; font-size: 13px; min-height: 1.2em; }
-  </style>
-</head>
-<body>
-  <h1>Activity title</h1>
-  <p>Brief intro for the student.</p>
-
-  <label for="q1">Question 1 — open-ended</label>
-  <textarea id="q1" rows="3"></textarea>
-
-  <label for="q2">Question 2 — short answer</label>
-  <input type="text" id="q2" />
-
-  <button id="submitBtn">submit</button>
-  <div id="status"></div>
-
-  <script>
-    var btn = document.getElementById('submitBtn');
-    var status = document.getElementById('status');
-
-    // Optional: prefill prior responses when the student revisits.
-    Commit.onReady(function() {
-      Commit.getPriorResponses().then(function(prior) {
-        if (!prior) return;
-        if (prior.q1) document.getElementById('q1').value = prior.q1;
-        if (prior.q2) document.getElementById('q2').value = prior.q2;
-      });
-    });
-
-    Commit.on('submitting', function() {
-      btn.disabled = true;
-      status.textContent = 'saving...';
-      status.style.color = '#888780';
-    });
-
-    Commit.on('submitted', function() {
-      btn.disabled = false;
-      status.textContent = '✓ saved';
-      status.style.color = '#166534';
-    });
-
-    Commit.on('error', function(err) {
-      btn.disabled = false;
-      status.textContent = (err && err.message) || 'something went wrong, try again';
-      status.style.color = '#991B1B';
-    });
-
-    btn.addEventListener('click', function() {
-      Commit.submit({
-        q1: document.getElementById('q1').value,
-        q2: document.getElementById('q2').value
-      });
-    });
-  </script>
-</body>
-</html>
-`
 
 export default function LessonEditorPage() {
   const { profile, loading: authLoading } = useAuth()
@@ -130,19 +39,10 @@ export default function LessonEditorPage() {
 
   const [orderIndex, setOrderIndex] = useState(1)
   const [title, setTitle] = useState('')
-  const [scaffoldLevel, setScaffoldLevel] = useState('typed_python')
   const [standardsText, setStandardsText] = useState('')
   const [isPublished, setIsPublished] = useState(false)
-
-  const [lessonType, setLessonType] = useState<LessonType>('reading')
   const [estimatedMinutes, setEstimatedMinutes] = useState(20)
   const [htmlBody, setHtmlBody] = useState('')
-  const [activityBody, setActivityBody] = useState('')
-  const [codingInstructions, setCodingInstructions] = useState('')
-  const [codingStarterCode, setCodingStarterCode] = useState('')
-  const [exampleCode, setExampleCode] = useState('')
-  const [exampleExplanation, setExampleExplanation] = useState('')
-  const [exercises, setExercises] = useState<ExerciseItem[]>([])
 
   useEffect(() => {
     if (authLoading) return
@@ -160,23 +60,11 @@ export default function LessonEditorPage() {
       setUnitId(data.unit_id)
       setOrderIndex(data.order_index)
       setTitle(data.title)
-      setScaffoldLevel(data.scaffold_level)
       setStandardsText((data.standards_tags || []).join(', '))
       setIsPublished(data.is_published)
-
       const c = data.lesson_content || ({} as LessonContent)
       setEstimatedMinutes(c.estimated_minutes || 20)
       setHtmlBody(c.html_body || '')
-      setActivityBody(c.activity_body || '')
-      setCodingInstructions(c.coding_instructions || '')
-      setCodingStarterCode(c.coding_starter_code || '')
-      setExampleCode(c.example_code || '')
-      setExampleExplanation(c.example_explanation || '')
-      setExercises(c.exercises || [])
-
-      if (c.has_coding_exercise || (c.exercises && c.exercises.length > 0)) setLessonType('coding')
-      else if (c.activity_file_path || c.activity_body) setLessonType('activity')
-      else setLessonType('reading')
     } catch (err: any) {
       alert(err.message || 'Failed to load lesson')
     } finally {
@@ -184,30 +72,17 @@ export default function LessonEditorPage() {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'lesson' | 'activity') => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setUploading(true)
     try {
       const text = await file.text()
-      if (target === 'lesson') setHtmlBody(text)
-      else setActivityBody(text)
+      setHtmlBody(text)
     } finally {
       setUploading(false)
       e.target.value = ''
     }
-  }
-
-  const addExercise = () => setExercises(ex => [...ex, { type: 'coding', instructions: '', starter_code: '' }])
-  const updateExercise = (i: number, patch: Partial<ExerciseItem>) =>
-    setExercises(ex => ex.map((e, idx) => idx === i ? { ...e, ...patch } : e))
-  const removeExercise = (i: number) => setExercises(ex => ex.filter((_, idx) => idx !== i))
-  const moveExercise = (i: number, dir: -1 | 1) => {
-    const j = i + dir
-    if (j < 0 || j >= exercises.length) return
-    const copy = [...exercises]
-    ;[copy[i], copy[j]] = [copy[j], copy[i]]
-    setExercises(copy)
   }
 
   const handleSave = async () => {
@@ -216,28 +91,30 @@ export default function LessonEditorPage() {
     setSaving(true)
     try {
       const standardsList = standardsText.split(',').map(s => s.trim()).filter(Boolean)
-
-      const content: any = {
+      // Reading-only lessons. We explicitly null out all the
+      // legacy coding/activity fields so the underlying lesson_content
+      // row matches the reading-only contract.
+      const content = {
         estimated_minutes: estimatedMinutes,
-        has_coding_exercise: lessonType === 'coding',
-        coding_instructions: lessonType === 'coding' ? codingInstructions : '',
-        coding_starter_code: lessonType === 'coding' ? codingStarterCode : '',
-        example_code: lessonType === 'coding' ? exampleCode : '',
-        example_explanation: lessonType === 'coding' ? exampleExplanation : '',
-        exercises: lessonType === 'coding' ? exercises : null,
-        html_body: lessonType === 'activity' ? null : htmlBody,
-        activity_body: lessonType === 'activity' ? activityBody : null,
+        has_coding_exercise: false,
+        coding_instructions: '',
+        coding_starter_code: '',
+        example_code: '',
+        example_explanation: '',
+        exercises: null,
+        html_body: htmlBody,
+        activity_body: null,
       }
-
       const payload = {
         order_index: orderIndex,
         title,
-        scaffold_level: scaffoldLevel,
+        // scaffold_level kept at typed_python for legacy DB compatibility; lessons
+        // don't expose a scaffold picker since they're reading-only.
+        scaffold_level: 'typed_python',
         standards_tags: standardsList.length ? standardsList : null,
         is_published: isPublished,
         content,
       }
-
       if (isNew) {
         const created = await api.post<LessonResponse>(`/admin/curriculum/units/${unitId}/lessons`, payload)
         router.push(`/admin/curriculum/lessons/${created.id}`)
@@ -295,7 +172,7 @@ export default function LessonEditorPage() {
 
           {/* META */}
           <div style={card}>
-            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr 200px', gap: '12px', marginBottom: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '12px', marginBottom: '12px' }}>
               <div>
                 <label style={label}>order</label>
                 <input type="number" value={orderIndex} onChange={e => setOrderIndex(parseInt(e.target.value, 10) || 0)} style={input} />
@@ -303,12 +180,6 @@ export default function LessonEditorPage() {
               <div>
                 <label style={label}>title</label>
                 <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
-              </div>
-              <div>
-                <label style={label}>scaffold</label>
-                <select value={scaffoldLevel} onChange={e => setScaffoldLevel(e.target.value)} style={input}>
-                  {SCAFFOLD_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: '12px' }}>
@@ -329,113 +200,20 @@ export default function LessonEditorPage() {
             </div>
           </div>
 
-          {/* TYPE PICKER */}
+          {/* HTML BODY */}
           <div style={card}>
-            <label style={label}>lesson type</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {(['reading', 'coding', 'activity'] as LessonType[]).map(t => (
-                <button key={t} onClick={() => setLessonType(t)} style={{
-                  padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
-                  border: lessonType === t ? '2px solid #1A56DB' : '2px solid rgba(14,45,110,0.1)',
-                  background: lessonType === t ? '#EBF1FD' : 'white',
-                  color: lessonType === t ? '#0C447C' : '#5F5E5A',
-                  fontFamily: "'DM Sans', sans-serif", flex: 1,
-                }}>
-                  {t === 'reading' && '📖 reading'}
-                  {t === 'coding' && '💻 coding'}
-                  {t === 'activity' && '🎯 activity'}
-                </button>
-              ))}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ ...label, marginBottom: 0 }}>lesson html body</label>
+              <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
+                {uploading ? 'reading...' : '+ upload .html'}
+                <input type="file" accept=".html" onChange={handleFileUpload} style={{ display: 'none' }} />
+              </label>
             </div>
-            <p style={{ margin: '10px 0 0', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
-              {lessonType === 'reading' && 'Static HTML lesson page. No interactive coding or full-screen activity.'}
-              {lessonType === 'coding' && 'Lesson with hands-on coding exercises rendered in the practice tab.'}
-              {lessonType === 'activity' && 'Full-screen interactive activity. The activity HTML renders standalone in the activity viewer.'}
+            <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
+              Lessons are reading-only. For coding tasks, interactive activities, quizzes, or check-ins, create a <strong>curriculum assignment</strong> instead.
             </p>
+            <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={16} placeholder="<h1>Lesson title</h1>&#10;<p>Lesson body HTML here...</p>" style={textareaStyle} />
           </div>
-
-          {/* HTML BODY (reading + coding) */}
-          {lessonType !== 'activity' && (
-            <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <label style={{ ...label, marginBottom: 0 }}>lesson html body</label>
-                <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
-                  {uploading ? 'reading...' : '+ upload .html'}
-                  <input type="file" accept=".html" onChange={e => handleFileUpload(e, 'lesson')} style={{ display: 'none' }} />
-                </label>
-              </div>
-              <textarea value={htmlBody} onChange={e => setHtmlBody(e.target.value)} rows={14} placeholder="<h1>Lesson title</h1>&#10;<p>Lesson body HTML here...</p>" style={textareaStyle} />
-            </div>
-          )}
-
-          {/* ACTIVITY BODY */}
-          {lessonType === 'activity' && (
-            <div style={card}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-                <label style={{ ...label, marginBottom: 0 }}>activity html (full-screen)</label>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (activityBody.trim() && !confirm('Replace current activity HTML with the template?')) return
-                      setActivityBody(ACTIVITY_TEMPLATE)
-                    }}
-                    style={{ ...btn(false), padding: '5px 10px', fontSize: '12px' }}
-                    title="Load a starter HTML that uses the Commit SDK (Commit.submit, Commit.getPriorResponses, etc.)"
-                  >
-                    ↶ load template
-                  </button>
-                  <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
-                    {uploading ? 'reading...' : '+ upload .html'}
-                    <input type="file" accept=".html" onChange={e => handleFileUpload(e, 'activity')} style={{ display: 'none' }} />
-                  </label>
-                </div>
-              </div>
-              <p style={{ margin: '0 0 8px', fontSize: '12px', color: '#888780', lineHeight: 1.5 }}>
-                Activities can talk to Commit via <code style={{ background: '#EBF1FD', padding: '1px 5px', borderRadius: '4px', fontFamily: "'DM Mono', monospace" }}>Commit.submit(responses)</code> — call it from your own submit button.
-                See the template for the full API (submit, getPriorResponses, status events).
-              </p>
-              <textarea value={activityBody} onChange={e => setActivityBody(e.target.value)} rows={20} placeholder="<!DOCTYPE html>&#10;<html>...</html>" style={textareaStyle} />
-            </div>
-          )}
-
-          {/* CODING-SPECIFIC FIELDS */}
-          {lessonType === 'coding' && (
-            <>
-              <div style={card}>
-                <label style={label}>example code (shown above exercises)</label>
-                <textarea value={exampleCode} onChange={e => setExampleCode(e.target.value)} rows={6} placeholder="# optional worked example" style={textareaStyle} />
-                <label style={{ ...label, marginTop: '12px' }}>example explanation</label>
-                <textarea value={exampleExplanation} onChange={e => setExampleExplanation(e.target.value)} rows={3} placeholder="brief prose explaining the example" style={{ ...textareaStyle, fontFamily: "'DM Sans', sans-serif", fontSize: '13px' }} />
-              </div>
-
-              <div style={card}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <h3 style={{ margin: 0, fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>exercises ({exercises.length})</h3>
-                  <button onClick={addExercise} style={btn(true)}>+ add exercise</button>
-                </div>
-
-                {exercises.length === 0 ? (
-                  <p style={{ color: '#888780', fontSize: '13px', textAlign: 'center', padding: '1rem' }}>no exercises yet</p>
-                ) : exercises.map((ex, i) => (
-                  <div key={i} style={{ border: '1px solid rgba(14,45,110,0.08)', borderRadius: '10px', padding: '1rem', marginBottom: '12px', background: '#FAFAF8' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#0E2D6E' }}>exercise {i + 1}</span>
-                      <div style={{ display: 'flex', gap: '4px' }}>
-                        <button onClick={() => moveExercise(i, -1)} disabled={i === 0} style={{ ...btn(false), padding: '3px 8px', fontSize: '11px' }}>↑</button>
-                        <button onClick={() => moveExercise(i, 1)} disabled={i === exercises.length - 1} style={{ ...btn(false), padding: '3px 8px', fontSize: '11px' }}>↓</button>
-                        <button onClick={() => removeExercise(i)} style={{ ...btn(false), padding: '3px 10px', fontSize: '11px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B' }}>remove</button>
-                      </div>
-                    </div>
-                    <label style={{ ...label, fontSize: '11px' }}>instructions</label>
-                    <textarea value={ex.instructions} onChange={e => updateExercise(i, { instructions: e.target.value })} rows={4} style={{ ...textareaStyle, fontFamily: "'DM Sans', sans-serif", fontSize: '13px', background: 'white', marginBottom: '10px' }} />
-                    <label style={{ ...label, fontSize: '11px' }}>starter code</label>
-                    <textarea value={ex.starter_code} onChange={e => updateExercise(i, { starter_code: e.target.value })} rows={6} style={{ ...textareaStyle, background: 'white' }} />
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
 
           {/* SAVE BAR */}
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
