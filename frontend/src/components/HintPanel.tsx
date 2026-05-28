@@ -9,6 +9,11 @@ interface Props {
   hint1UnlockedAt: string | null
   hint2UnlockedAt: string | null
   onHintUsed?: () => void
+  /** Optional — when set, each hint gets a 'find in lesson' button below it. */
+  onFindInLesson?: (hint: string) => void
+  /** Optional — when set, each hint gets a 'find in docs' button below it.
+   *  The hint text itself is forwarded as the search term. */
+  onFindInDocs?: (hint: string) => void
 }
 
 interface HintResponse {
@@ -24,7 +29,36 @@ export default function HintPanel({
   hint1UnlockedAt,
   hint2UnlockedAt,
   onHintUsed,
+  onFindInLesson,
+  onFindInDocs,
 }: Props) {
+
+  // Small action row rendered under each unlocked hint — lets the student
+  // jump straight to the relevant lesson section or python docs entry.
+  const renderHintActions = (text: string) => {
+    if (!onFindInLesson && !onFindInDocs) return null
+    return (
+      <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+        {onFindInLesson && (
+          <button
+            onClick={() => onFindInLesson(text)}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '5px', fontSize: '11px', fontWeight: 600, color: '#854D0E', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+          >
+            📄 find in lesson
+          </button>
+        )}
+        {onFindInDocs && (
+          <button
+            onClick={() => onFindInDocs(text)}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', background: 'rgba(26,86,219,0.1)', border: '1px solid rgba(26,86,219,0.3)', borderRadius: '5px', fontSize: '11px', fontWeight: 600, color: '#1A56DB', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}
+          >
+            📚 find in docs
+          </button>
+        )}
+      </div>
+    )
+  }
+
   const [hint1, setHint1] = useState<string | null>(null)
   const [hint2, setHint2] = useState<string | null>(null)
   const [loading, setLoading] = useState<1 | 2 | null>(null)
@@ -104,8 +138,11 @@ export default function HintPanel({
             </div>
             {hint1 || hint1Used ? (
               hint1 ? (
-                <div style={{ fontSize: '13px', color: '#5F5E5A', lineHeight: 1.7, padding: '10px 12px', background: '#FEF9C3', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
-                  {hint1}
+                <div>
+                  <div style={{ fontSize: '13px', color: '#5F5E5A', lineHeight: 1.7, padding: '10px 12px', background: '#FEF9C3', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                    {hint1}
+                  </div>
+                  {renderHintActions(hint1)}
                 </div>
               ) : (
                 <button
@@ -135,8 +172,11 @@ export default function HintPanel({
               </div>
               {hint2 || hint2Used ? (
                 hint2 ? (
-                  <div style={{ fontSize: '13px', color: '#5F5E5A', lineHeight: 1.7, padding: '10px 12px', background: '#FEF9C3', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    {hint2}
+                  <div>
+                    <div style={{ fontSize: '13px', color: '#5F5E5A', lineHeight: 1.7, padding: '10px 12px', background: '#FEF9C3', borderRadius: '6px', border: '1px solid rgba(245,158,11,0.2)' }}>
+                      {hint2}
+                    </div>
+                    {renderHintActions(hint2)}
                   </div>
                 ) : (
                   <button

@@ -391,6 +391,16 @@ export default function AssignmentEditorPage() {
                   .then(data => setSubmission(data.submission))
                   .catch(() => {})
               }}
+              onFindInLesson={handleFindInLesson}
+              onFindInDocs={(hint) => {
+                // If we have a linked lesson, jump to that docs tab; otherwise
+                // fall back to the standalone /docs page.
+                if (assignment?.lesson_id) {
+                  handleFindInDocs(hint)
+                } else {
+                  window.open(`/docs?search=${encodeURIComponent(hint)}`, '_blank')
+                }
+              }}
             />
           )}
         </div>

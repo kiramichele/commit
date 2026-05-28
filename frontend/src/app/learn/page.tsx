@@ -218,6 +218,7 @@ export default function LearnPage() {
           <span style={{ fontSize: '13px', color: '#5F5E5A' }}>hey, {profile.display_name?.split(' ')[0]} 👋</span>
           <Link href={`/learn/${selectedClassroom}`} style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>lessons</Link>
           <Link href="/grades" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>my grades</Link>
+          <Link href="/docs" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>📚 python docs</Link>
           <Link href="/settings" style={{ fontSize: '12px', color: '#888780', textDecoration: 'none' }}>settings</Link>
         </div>
       </nav>

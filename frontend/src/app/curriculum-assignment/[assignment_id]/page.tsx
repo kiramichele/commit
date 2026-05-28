@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import ErrorPanel from '@/components/ErrorPanel'
 
 type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project' | 'code_review'
 
@@ -95,6 +96,7 @@ export default function CurriculumAssignmentPage() {
   const [inlineComments, setInlineComments] = useState<Array<{ line: number; text: string }>>([])
   const [output, setOutput] = useState('')
   const [outputError, setOutputError] = useState(false)
+  const [stderr, setStderr] = useState('')
   const [running, setRunning] = useState(false)
 
   const [saving, setSaving] = useState(false)
@@ -359,18 +361,27 @@ export default function CurriculumAssignmentPage() {
     setRunning(true)
     setOutput('')
     setOutputError(false)
+    setStderr('')
     try {
       const result = await api.post<{ output: string; stderr: string }>('/code/run', { code })
       if (result.stderr && !result.output) {
-        setOutput(result.stderr); setOutputError(true)
+        setOutput(result.stderr); setOutputError(true); setStderr(result.stderr)
       } else {
         setOutput(result.output || '(no output)')
+        if (result.stderr) setStderr(result.stderr)
       }
     } catch (e: any) {
-      setOutput(e.message || 'Execution failed'); setOutputError(true)
+      setOutput(e.message || 'Execution failed'); setOutputError(true); setStderr(e.message || '')
     } finally {
       setRunning(false)
     }
+  }
+
+  // Open the Python docs — prefer the lesson docs tab if this assignment is
+  // linked to a lesson, otherwise the standalone /docs page.
+  const openDocs = (search?: string) => {
+    const q = search ? `?search=${encodeURIComponent(search)}` : ''
+    window.open(`/docs${q}`, '_blank')
   }
 
   const handleTab = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -717,10 +728,22 @@ export default function CurriculumAssignmentPage() {
 
           {/* CONSOLE PANE */}
           <div style={{ background: '#111113', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '10px 16px', background: '#1C1C1E', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>console</div>
+            <div style={{ padding: '10px 16px', background: '#1C1C1E', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>console</span>
+              <button onClick={() => openDocs()} style={{ padding: '4px 10px', background: 'transparent', color: '#93C5FD', border: '1px solid rgba(147,197,253,0.3)', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }} title="open python docs in a new tab">📚 docs</button>
+            </div>
             <pre style={{ flex: 1, margin: 0, padding: '1rem 1.25rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}>
               {output || <span style={{ color: 'rgba(255,255,255,0.25)' }}>run your code to see output here</span>}
             </pre>
+            {stderr && outputError && (
+              <ErrorPanel
+                stderr={stderr}
+                scaffoldLevel={(assignment as { scaffold_level?: string }).scaffold_level as 'typed_python' || 'typed_python'}
+                onFindInDocs={(docsKey) => openDocs(docsKey)}
+                onFindInLesson={() => openDocs()}
+                showLessonLink={false}
+              />
+            )}
           </div>
         </div>
       ) : assignment.assignment_type === 'activity' ? (
