@@ -515,14 +515,15 @@ export default function CurriculumAssignmentPage() {
         </div>
       ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'html' ? (
         // ── CHECK-IN: html with embedded form inputs (Commit SDK powers it) ──
-        // Explicit height makes the iframe fill the viewport — the outer
-        // container uses minHeight not height, so flex:1 here doesn't get a
-        // definite parent to expand into otherwise.
-        <div style={{ flex: 1, height: 'calc(100vh - 52px)', minHeight: 'calc(100vh - 52px)', overflow: 'hidden', position: 'relative' }}>
+        // Set the iframe height directly in viewport units — relying on
+        // flex:1 and parent height: 100% can collapse to 0 when the outer
+        // page uses minHeight (not height) and the iframe parent isn't itself
+        // anchored to a definite size.
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {checkinHtml ? (
-            <iframe srcDoc={checkinHtml} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
+            <iframe srcDoc={checkinHtml} style={{ width: '100%', height: 'calc(100vh - 52px)', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
           ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading check-in...</div>
+            <div style={{ height: 'calc(100vh - 52px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading check-in...</div>
           )}
         </div>
       ) : assignment.assignment_type === 'code_review' ? (
@@ -797,11 +798,11 @@ export default function CurriculumAssignmentPage() {
         </div>
       ) : assignment.assignment_type === 'activity' ? (
         // ── ACTIVITY (iframe with Commit SDK) ──
-        <div style={{ flex: 1, height: 'calc(100vh - 52px)', minHeight: 'calc(100vh - 52px)', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           {activityHtml ? (
-            <iframe srcDoc={activityHtml} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
+            <iframe srcDoc={activityHtml} style={{ width: '100%', height: 'calc(100vh - 52px)', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
           ) : (
-            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading activity...</div>
+            <div style={{ height: 'calc(100vh - 52px)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888780' }}>loading activity...</div>
           )}
         </div>
       ) : assignment.assignment_type === 'quiz' ? (
