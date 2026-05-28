@@ -419,7 +419,7 @@ export default function ClassroomPage() {
                 {students.map((s, i) => (
                   <div key={s.student_id} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px 80px 100px 110px', gap: '1rem', padding: '12px 1.25rem', alignItems: 'center', borderBottom: i < students.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none', background: s.open_help_request ? 'rgba(254,249,195,0.4)' : 'transparent' }}>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{s.student_name}</div>
+                      <Link href={`/student/${s.student_id}`} style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E', textDecoration: 'none' }}>{s.student_name}</Link>
                       {s.assignments_total > 0 && (
                         <div style={{ marginTop: '4px', height: '4px', background: '#EBF1FD', borderRadius: '99px', overflow: 'hidden', width: '120px' }}>
                           <div style={{ height: '100%', width: `${(s.assignments_submitted / s.assignments_total) * 100}%`, background: '#1A56DB', borderRadius: '99px' }} />

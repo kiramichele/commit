@@ -192,9 +192,16 @@ export default function StudentClassroomPage() {
         </Link>
         <span style={{ color: '#D3D1C7' }}>/</span>
         <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{classroom?.name}</span>
-        <Link href="/settings" style={{ fontSize: '12px', color: '#888780', textDecoration: 'none', marginLeft: 'auto' }}>
-          settings
-        </Link>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '14px', alignItems: 'center' }}>
+          {profile && (
+            <Link href={`/student/${profile.profile_id}`} style={{ fontSize: '12px', color: '#888780', textDecoration: 'none' }}>
+              my profile
+            </Link>
+          )}
+          <Link href="/settings" style={{ fontSize: '12px', color: '#888780', textDecoration: 'none' }}>
+            settings
+          </Link>
+        </div>
       </nav>
 
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem' }}>

@@ -9,7 +9,7 @@ import os
 
 load_dotenv()
 
-from routers import auth, classrooms, assignments, submissions, commits, playground, admin, admin_curriculum, help_requests, curriculum, exercise_responses
+from routers import auth, classrooms, assignments, submissions, commits, playground, admin, admin_curriculum, help_requests, curriculum, exercise_responses, students
 
 app = FastAPI(
     title="Commit Platform API",
@@ -43,6 +43,7 @@ app.include_router(admin_curriculum.router, prefix="/admin/curriculum", tags=["a
 app.include_router(help_requests.router,  prefix="/help",         tags=["help"])
 app.include_router(curriculum.router,     prefix="/curriculum",   tags=["curriculum"])
 app.include_router(exercise_responses.router, prefix="/exercises", tags=["exercises"])
+app.include_router(students.router,       prefix="/students",     tags=["students"])
 
 
 @app.get("/")

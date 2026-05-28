@@ -386,8 +386,10 @@ export default function GradebookPage() {
                 {filteredStudents.map((student, si) => (
                   <tr key={student.student_id} style={{ borderBottom: si < filteredStudents.length - 1 ? '1px solid rgba(14,45,110,0.05)' : 'none' }}>
                     {/* STUDENT NAME */}
-                    <td style={{ padding: '10px 1.25rem', fontSize: '13px', fontWeight: 500, color: '#0E2D6E', position: 'sticky', left: 0, background: 'white', zIndex: 5, borderRight: '1px solid rgba(14,45,110,0.06)' }}>
-                      {student.student_name}
+                    <td style={{ padding: '10px 1.25rem', fontSize: '13px', fontWeight: 500, position: 'sticky', left: 0, background: 'white', zIndex: 5, borderRight: '1px solid rgba(14,45,110,0.06)' }}>
+                      <Link href={`/student/${student.student_id}`} style={{ color: '#0E2D6E', textDecoration: 'none' }}>
+                        {student.student_name}
+                      </Link>
                     </td>
 
                     {/* GRADE CELLS */}
