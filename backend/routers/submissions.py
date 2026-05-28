@@ -260,6 +260,92 @@ async def grade_submission(
 # SUBMISSIONS
 # ============================================================
 
+@router.post("/curriculum-open")
+async def open_curriculum_submission(
+    curriculum_assignment_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """
+    Gets or creates a submission for a curriculum coding assignment so the
+    student can use the same baby-git commit + run + submit flow as on
+    classroom assignments. We bypass the get_or_create_submission stored
+    proc here since it's scoped to assignments, and instead do a small
+    upsert directly against the submissions table.
+    """
+    # Verify the curriculum assignment exists, is coding-type, and is published.
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, title, instructions, starter_code, min_commits, scaffold_level, hints_enabled, hint_1, hint_2, assignment_type, is_published, html_file_path")
+        .eq("id", curriculum_assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not assignment or not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    a = assignment.data
+    if not a.get("is_published"):
+        raise HTTPException(status_code=404, detail="Assignment not published.")
+    if a.get("assignment_type") not in ("code", "code_review"):
+        # We only support the commit flow on code / code_review assignments.
+        raise HTTPException(status_code=400, detail="Assignment is not a coding assignment.")
+
+    # Look up an existing submission for this student.
+    existing = (
+        supabase_admin.table("submissions")
+        .select("*")
+        .eq("student_id", user.profile_id)
+        .eq("curriculum_assignment_id", curriculum_assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if existing and existing.data:
+        sub = existing.data
+        if not sub.get("first_opened_at"):
+            supabase_admin.table("submissions").update({
+                "first_opened_at": datetime.now(timezone.utc).isoformat()
+            }).eq("id", sub["id"]).execute()
+    else:
+        result = (
+            supabase_admin.table("submissions")
+            .insert({
+                "student_id": user.profile_id,
+                "curriculum_assignment_id": curriculum_assignment_id,
+                "final_code": a.get("starter_code") or "",
+                "first_opened_at": datetime.now(timezone.utc).isoformat(),
+            })
+            .execute()
+        )
+        sub = result.data[0] if result.data else None
+        if not sub:
+            raise HTTPException(status_code=500, detail="Could not create submission.")
+
+    commits = (
+        supabase_admin.table("code_commits")
+        .select("id, message, line_count, committed_at")
+        .eq("submission_id", sub["id"])
+        .order("committed_at", desc=False)
+        .execute()
+    )
+
+    return {
+        "submission": sub,
+        "commits": commits.data or [],
+        "assignment": {
+            "id": a["id"],
+            "title": a["title"],
+            "instructions": a.get("instructions") or "",
+            "min_commits": a.get("min_commits") or 1,
+            "scaffold_level": a.get("scaffold_level") or "typed_python",
+            "due_date": None,  # curriculum-level — teachers can layer dues later
+            "starter_code": a.get("starter_code") or "",
+            "hints_enabled": bool(a.get("hints_enabled")),
+            "hint_1": a.get("hint_1"),
+            "hint_2": a.get("hint_2"),
+            "html_file_path": a.get("html_file_path"),
+        },
+    }
+
+
 @router.post("/open")
 async def open_submission(
     assignment_id: str,
@@ -322,17 +408,46 @@ async def commit_code(
     if len(body.message.strip()) < 3:
         raise HTTPException(status_code=400, detail="Commit message must be at least 3 characters.")
 
-    result = supabase_admin.rpc(
-        "commit_code",
-        {
-            "p_submission_id": body.submission_id,
-            "p_student_id": user.profile_id,
-            "p_code": body.code,
-            "p_message": body.message,
-        }
-    ).execute()
+    # The legacy commit_code stored proc may join on the assignments table,
+    # so for curriculum-scoped submissions we do the insert in Python.
+    sub = (
+        supabase_admin.table("submissions")
+        .select("id, student_id, curriculum_assignment_id")
+        .eq("id", body.submission_id)
+        .single()
+        .execute()
+    )
+    if not sub.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    if sub.data["student_id"] != user.profile_id:
+        raise HTTPException(status_code=403, detail="Not your submission.")
 
-    commit_id = result.data
+    if sub.data.get("curriculum_assignment_id"):
+        line_count = len(body.code.split("\n"))
+        ins = (
+            supabase_admin.table("code_commits")
+            .insert({
+                "submission_id": body.submission_id,
+                "code_snapshot": body.code,
+                "message": body.message.strip(),
+                "line_count": line_count,
+            })
+            .execute()
+        )
+        commit_id = ins.data[0]["id"] if ins.data else None
+        # Update the submission's working code.
+        supabase_admin.table("submissions").update({"final_code": body.code}).eq("id", body.submission_id).execute()
+    else:
+        result = supabase_admin.rpc(
+            "commit_code",
+            {
+                "p_submission_id": body.submission_id,
+                "p_student_id": user.profile_id,
+                "p_code": body.code,
+                "p_message": body.message,
+            }
+        ).execute()
+        commit_id = result.data
 
     commit = (
         supabase_admin.table("code_commits")
@@ -364,16 +479,81 @@ async def submit_assignment(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Marks a submission as submitted. Validates min_commits. Flags fast submits."""
-    try:
-        supabase_admin.rpc(
-            "submit_assignment",
-            {
-                "p_submission_id": body.submission_id,
-                "p_student_id": user.profile_id,
-            }
-        ).execute()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # Curriculum-scoped submissions bypass the legacy submit_assignment stored
+    # procedure (which joins on assignments). We validate min_commits and
+    # mark submitted in Python, and also mirror the final code into
+    # exercise_responses so the curriculum gradebook + grading UI picks it up.
+    existing_sub = (
+        supabase_admin.table("submissions")
+        .select("id, student_id, curriculum_assignment_id, final_code, submitted_at")
+        .eq("id", body.submission_id)
+        .single()
+        .execute()
+    )
+    if not existing_sub.data:
+        raise HTTPException(status_code=404, detail="Submission not found.")
+    if existing_sub.data["student_id"] != user.profile_id:
+        raise HTTPException(status_code=403, detail="Not your submission.")
+
+    if existing_sub.data.get("curriculum_assignment_id"):
+        # Validate min_commits.
+        curric_id = existing_sub.data["curriculum_assignment_id"]
+        curric = (
+            supabase_admin.table("curriculum_assignments")
+            .select("min_commits")
+            .eq("id", curric_id)
+            .single()
+            .execute()
+        )
+        min_commits = (curric.data or {}).get("min_commits") or 1
+        commits_count = (
+            supabase_admin.table("code_commits")
+            .select("id", count="exact")
+            .eq("submission_id", body.submission_id)
+            .execute()
+        )
+        if (commits_count.count or 0) < min_commits:
+            raise HTTPException(status_code=400, detail=f"Need at least {min_commits} commit(s) before submitting.")
+        supabase_admin.table("submissions").update({
+            "submitted_at": datetime.now(timezone.utc).isoformat()
+        }).eq("id", body.submission_id).execute()
+
+        # Mirror into exercise_responses for the curriculum grade flow.
+        import json
+        final_code = existing_sub.data.get("final_code") or ""
+        payload = {"code": final_code}
+        prior = (
+            supabase_admin.table("exercise_responses")
+            .select("id")
+            .eq("student_id", user.profile_id)
+            .eq("lesson_id", curric_id)
+            .eq("exercise_type", "curriculum_assignment")
+            .maybe_single()
+            .execute()
+        )
+        row = {
+            "student_id": user.profile_id,
+            "lesson_id": curric_id,
+            "exercise_index": 0,
+            "exercise_type": "curriculum_assignment",
+            "response_text": json.dumps(payload),
+        }
+        if prior and prior.data:
+            supabase_admin.table("exercise_responses").update(row).eq("id", prior.data["id"]).execute()
+        else:
+            supabase_admin.table("exercise_responses").insert(row).execute()
+    else:
+        # Classroom assignment — legacy path.
+        try:
+            supabase_admin.rpc(
+                "submit_assignment",
+                {
+                    "p_submission_id": body.submission_id,
+                    "p_student_id": user.profile_id,
+                }
+            ).execute()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
     # Fetch the submission to check timing
     submission = (

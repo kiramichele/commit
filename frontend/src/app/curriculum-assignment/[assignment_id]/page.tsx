@@ -101,6 +101,21 @@ export default function CurriculumAssignmentPage() {
   const [savedScore, setSavedScore] = useState<number | null>(null)
   const [submitted, setSubmitted] = useState(false)
 
+  // Commit flow state — used for code-type curriculum assignments so they
+  // get the same baby-git timeline as classroom assignments.
+  interface Commit { id: string; message: string; line_count: number; committed_at: string }
+  const [submissionId, setSubmissionId] = useState<string | null>(null)
+  const [minCommits, setMinCommits] = useState<number>(1)
+  const [commits, setCommits] = useState<Commit[]>([])
+  const [commitMsg, setCommitMsg] = useState('')
+  const [committing, setCommitting] = useState(false)
+  const [showCommitPanel, setShowCommitPanel] = useState(false)
+  const [selectedCommit, setSelectedCommit] = useState<string | null>(null)
+  const [viewingCode, setViewingCode] = useState<string | null>(null)
+  const [viewingMsg, setViewingMsg] = useState<string | null>(null)
+  const [flashCommit, setFlashCommit] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+
   useEffect(() => {
     if (loading) return
     if (!profile) router.push('/login')
@@ -118,15 +133,30 @@ export default function CurriculumAssignmentPage() {
       setAssignment(a)
 
       if (a.assignment_type === 'code') {
-        setCode(a.starter_code || '')
-        // If the author uploaded an HTML instructions body, fetch it so we
-        // can render it in the left pane next to the editor.
-        if (a.html_file_path) {
-          try {
-            const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
-            const html = await fetch(url).then(r => r.text())
-            setCodeInstructionsHtml(html)
-          } catch {}
+        // Open a curriculum-scoped submission so the student gets the same
+        // commit + run + submit flow as on classroom assignments.
+        try {
+          const opened = await api.post<{
+            submission: { id: string; final_code: string; submitted_at: string | null; grade: number | null }
+            commits: Commit[]
+            assignment: { id: string; min_commits: number; starter_code: string; html_file_path: string | null }
+          }>(`/code/curriculum-open?curriculum_assignment_id=${a.id}`, {})
+          setSubmissionId(opened.submission.id)
+          setCommits(opened.commits || [])
+          setMinCommits(opened.assignment.min_commits || 1)
+          setCode(opened.submission.final_code || opened.assignment.starter_code || '')
+          if (opened.submission.submitted_at) setSubmitted(true)
+          if (opened.submission.grade != null) setSavedScore(opened.submission.grade)
+          if (opened.assignment.html_file_path) {
+            try {
+              const { url } = await api.get<{ url: string }>(`/curriculum/curriculum-assignments/${a.id}/html-url`)
+              const html = await fetch(url).then(r => r.text())
+              setCodeInstructionsHtml(html)
+            } catch {}
+          }
+        } catch {
+          // Fall back to read-only starter code if open fails
+          setCode(a.starter_code || '')
         }
       }
 
@@ -264,6 +294,66 @@ export default function CurriculumAssignmentPage() {
     window.addEventListener('message', handleActivityMessage)
     return () => window.removeEventListener('message', handleActivityMessage)
   }, [assignment, handleActivityMessage])
+
+  const handleCommit = async () => {
+    if (!submissionId || commitMsg.trim().length < 3) return
+    setCommitting(true)
+    try {
+      const result = await api.post<{ commit: Commit; all_commits: Commit[] }>(
+        '/code/commit',
+        { submission_id: submissionId, code, message: commitMsg.trim() }
+      )
+      setCommits(result.all_commits)
+      setCommitMsg('')
+      setShowCommitPanel(false)
+      setFlashCommit(true)
+      setTimeout(() => setFlashCommit(false), 1000)
+    } catch (e: any) {
+      setSubmitError(e.message || 'Could not commit.')
+    } finally {
+      setCommitting(false)
+    }
+  }
+
+  const handleCodeSubmit = async () => {
+    if (!submissionId) return
+    if (commits.length < minCommits) {
+      setSubmitError(`You need at least ${minCommits} commit${minCommits !== 1 ? 's' : ''} before submitting. You have ${commits.length}.`)
+      return
+    }
+    setSaving(true)
+    setSubmitError('')
+    try {
+      await api.post('/code/submit', { submission_id: submissionId })
+      setSubmitted(true)
+    } catch (e: any) {
+      setSubmitError(e.message || 'Could not submit.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const viewCommit = async (c: Commit) => {
+    if (selectedCommit === c.id) {
+      setSelectedCommit(null); setViewingCode(null); setViewingMsg(null); return
+    }
+    if (!submissionId) return
+    setSelectedCommit(c.id)
+    setViewingMsg(c.message)
+    try {
+      const data = await api.get<{ code_snapshot: string }>(
+        `/code/${submissionId}/commits/${c.id}/code`
+      )
+      setViewingCode(data.code_snapshot)
+    } catch {}
+  }
+
+  const restoreCommit = () => {
+    if (viewingCode) {
+      setCode(viewingCode)
+      setSelectedCommit(null); setViewingCode(null); setViewingMsg(null)
+    }
+  }
 
   const handleRun = async () => {
     setRunning(true)
@@ -542,8 +632,9 @@ export default function CurriculumAssignmentPage() {
           </div>
         )
       ) : assignment.assignment_type === 'code' ? (
-        // ── 3-PANE FOR CODING ──
+        // ── 3-PANE FOR CODING (with baby-git commit flow) ──
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>
+          {/* PROBLEM PANE */}
           <div style={{ borderRight: '1px solid rgba(14,45,110,0.08)', background: 'white', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 16px', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>problem</div>
             {codeInstructionsHtml ? (
@@ -552,16 +643,79 @@ export default function CurriculumAssignmentPage() {
               <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', fontSize: '14px', color: '#0E2D6E', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{assignment.instructions || 'no instructions provided'}</div>
             )}
           </div>
+
+          {/* EDITOR PANE */}
           <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>editor · python</span>
-              <div style={{ display: 'flex', gap: '6px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)', gap: '8px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>editor · python</span>
+                <span style={{ fontSize: '11px', color: commits.length >= minCommits ? '#22C55E' : '#F59E0B', fontWeight: 600 }}>
+                  {commits.length}/{minCommits} commits {flashCommit && '✓'}
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button onClick={handleRun} disabled={running} style={{ padding: '5px 14px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{running ? '◌ running...' : '▶ run'}</button>
-                <button onClick={() => submit({ code })} disabled={saving} style={{ padding: '5px 14px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'saving...' : submitted ? 'resubmit' : 'submit'}</button>
+                <button onClick={() => setShowCommitPanel(p => !p)} disabled={!submissionId} style={{ padding: '5px 14px', background: showCommitPanel ? '#7C3AED' : 'transparent', color: '#A78BFA', border: '1.5px solid #7C3AED', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: submissionId ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif" }}>● commit</button>
+                <button onClick={handleCodeSubmit} disabled={saving || !submissionId || commits.length < minCommits || submitted} style={{ padding: '5px 14px', background: submitted ? '#166534' : commits.length >= minCommits ? '#1A56DB' : 'rgba(26,86,219,0.3)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: (saving || !submissionId || commits.length < minCommits || submitted) ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'submitting...' : submitted ? '✓ submitted' : 'submit'}</button>
               </div>
             </div>
-            <textarea value={code} onChange={e => setCode(e.target.value)} onKeyDown={handleTab} spellCheck={false} style={{ flex: 1, background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+
+            {/* COMMIT PANEL */}
+            {showCommitPanel && (
+              <div style={{ padding: '12px 14px', background: '#1F1F21', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', gap: '8px' }}>
+                <input
+                  value={commitMsg}
+                  onChange={e => setCommitMsg(e.target.value)}
+                  placeholder="what did you change? (3+ chars)"
+                  autoFocus
+                  style={{ flex: 1, padding: '7px 12px', background: '#1C1C1E', color: '#EBF1FD', border: '1.5px solid rgba(255,255,255,0.12)', borderRadius: '6px', fontSize: '13px', outline: 'none', fontFamily: "'DM Sans', sans-serif" }}
+                />
+                <button onClick={handleCommit} disabled={committing || commitMsg.trim().length < 3} style={{ padding: '7px 14px', background: '#7C3AED', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: (committing || commitMsg.trim().length < 3) ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{committing ? '...' : 'commit'}</button>
+              </div>
+            )}
+
+            {/* COMMIT TIMELINE (collapsible) */}
+            {commits.length > 0 && (
+              <div style={{ padding: '8px 14px', background: '#1F1F21', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '160px', overflowY: 'auto' }}>
+                {commits.slice().reverse().map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => viewCommit(c)}
+                    style={{ textAlign: 'left', padding: '6px 8px', background: selectedCommit === c.id ? '#7C3AED' : 'transparent', color: selectedCommit === c.id ? 'white' : 'rgba(255,255,255,0.7)', border: 'none', borderRadius: '5px', fontSize: '12px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", display: 'flex', alignItems: 'center', gap: '8px' }}
+                  >
+                    <span style={{ color: '#A78BFA', fontFamily: "'DM Mono', monospace", fontSize: '10px' }}>{new Date(c.committed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+                    <span>{c.message}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>{c.line_count} lines</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* SNAPSHOT PREVIEW */}
+            {viewingCode && (
+              <div style={{ padding: '8px 14px', background: '#1F1F21', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ fontSize: '11px', color: '#A78BFA', fontWeight: 600 }}>viewing: "{viewingMsg}"</span>
+                <button onClick={restoreCommit} style={{ marginLeft: 'auto', padding: '4px 10px', background: '#7C3AED', color: 'white', border: 'none', borderRadius: '5px', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}>↺ restore this version</button>
+              </div>
+            )}
+
+            <textarea
+              value={viewingCode ?? code}
+              onChange={e => setCode(e.target.value)}
+              onKeyDown={handleTab}
+              readOnly={!!viewingCode}
+              spellCheck={false}
+              style={{ flex: 1, background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+            />
+
+            {submitError && (
+              <div style={{ padding: '8px 14px', background: '#FEE2E2', color: '#991B1B', fontSize: '12px', fontWeight: 500 }}>
+                {submitError}
+              </div>
+            )}
           </div>
+
+          {/* CONSOLE PANE */}
           <div style={{ background: '#111113', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 16px', background: '#1C1C1E', borderBottom: '1px solid rgba(255,255,255,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>console</div>
             <pre style={{ flex: 1, margin: 0, padding: '1rem 1.25rem', fontFamily: "'DM Mono', monospace", fontSize: '13px', color: outputError ? '#F09595' : '#22C55E', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowY: 'auto' }}>
