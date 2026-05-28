@@ -20,6 +20,7 @@ export default function ActivityResponsesPage() {
   const classroomId = params.classroom_id as string
 
   const [lesson, setLesson] = useState<Lesson | null>(null)
+  const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
     if (loading) return
@@ -29,9 +30,11 @@ export default function ActivityResponsesPage() {
 
   useEffect(() => {
     if (!profile || !lessonId) return
+    setDataLoading(true)
     api.get<Lesson>(`/curriculum/lessons/${lessonId}`)
       .then(setLesson)
       .catch(() => null)
+      .finally(() => setDataLoading(false))
   }, [profile, lessonId])
 
   if (loading || !profile) return (
@@ -61,16 +64,25 @@ export default function ActivityResponsesPage() {
       </nav>
 
       <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem', height: 'calc(100vh - 56px)', boxSizing: 'border-box' }}>
-        <div style={{ marginBottom: '1.5rem' }}>
-          <h1 style={{ margin: '0 0 4px', fontSize: '1.25rem', fontWeight: 700, color: '#0E2D6E' }}>
-            {lesson?.title} — student responses
-          </h1>
-          <p style={{ margin: 0, fontSize: '13px', color: '#888780' }}>
-            {lesson?.units?.title} · activity responses
-          </p>
-        </div>
-
-        <ActivityAllResponses lessonId={lessonId} />
+        {dataLoading || !lesson ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', padding: '4rem' }}>
+            <div style={{ width: '28px', height: '28px', border: '2px solid #EBF1FD', borderTopColor: '#1A56DB', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <p style={{ fontSize: '13px', color: '#888780', margin: 0 }}>loading responses...</p>
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        ) : (
+          <>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h1 style={{ margin: '0 0 4px', fontSize: '1.25rem', fontWeight: 700, color: '#0E2D6E' }}>
+                {lesson?.title} — student responses
+              </h1>
+              <p style={{ margin: 0, fontSize: '13px', color: '#888780' }}>
+                {lesson?.units?.title} · activity responses
+              </p>
+            </div>
+            <ActivityAllResponses lessonId={lessonId} />
+          </>
+        )}
       </div>
     </div>
   )

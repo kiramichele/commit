@@ -200,7 +200,13 @@ export default function DiffPage() {
 
         {/* RIGHT — DIFF VIEW */}
         <div style={{ background: '#1C1C1E', overflowY: 'auto' }}>
-          {!selectedA || !selectedB ? (
+          {dataLoading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', height: '100%' }}>
+              <div style={{ width: '28px', height: '28px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#1A56DB', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: 0 }}>loading commits...</p>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+            </div>
+          ) : !selectedA || !selectedB ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '1rem', padding: '3rem' }}>
               <div style={{ fontSize: '2rem', opacity: 0.3 }}>◎</div>
               <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px', textAlign: 'center', margin: 0 }}>
@@ -208,8 +214,10 @@ export default function DiffPage() {
               </p>
             </div>
           ) : loadingCode ? (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-              <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '14px' }}>loading diff...</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '12px', height: '100%' }}>
+              <div style={{ width: '28px', height: '28px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#1A56DB', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '13px', margin: 0 }}>loading diff...</p>
+              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           ) : codeA !== null && codeB !== null ? (
             <DiffViewer
