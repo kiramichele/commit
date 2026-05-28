@@ -515,7 +515,10 @@ export default function CurriculumAssignmentPage() {
         </div>
       ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'html' ? (
         // ── CHECK-IN: html with embedded form inputs (Commit SDK powers it) ──
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        // Explicit height makes the iframe fill the viewport — the outer
+        // container uses minHeight not height, so flex:1 here doesn't get a
+        // definite parent to expand into otherwise.
+        <div style={{ flex: 1, height: 'calc(100vh - 52px)', minHeight: 'calc(100vh - 52px)', overflow: 'hidden', position: 'relative' }}>
           {checkinHtml ? (
             <iframe srcDoc={checkinHtml} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
           ) : (
@@ -794,7 +797,7 @@ export default function CurriculumAssignmentPage() {
         </div>
       ) : assignment.assignment_type === 'activity' ? (
         // ── ACTIVITY (iframe with Commit SDK) ──
-        <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+        <div style={{ flex: 1, height: 'calc(100vh - 52px)', minHeight: 'calc(100vh - 52px)', overflow: 'hidden', position: 'relative' }}>
           {activityHtml ? (
             <iframe srcDoc={activityHtml} style={{ width: '100%', height: '100%', border: 'none', display: 'block' }} sandbox="allow-scripts allow-same-origin allow-forms" title={assignment.title} />
           ) : (
