@@ -685,9 +685,19 @@ async def get_hint(
         raise HTTPException(status_code=404, detail="Submission not found.")
 
     sub = submission.data
-    assignment = sub.get("assignments", {})
-    if assignment is None:
-        assignment = {}
+    assignment = sub.get("assignments") or {}
+
+    # Curriculum-scoped submissions don't have an assignments row — pull the
+    # equivalent fields from curriculum_assignments instead.
+    if not assignment and sub.get("curriculum_assignment_id"):
+        c = (
+            supabase_admin.table("curriculum_assignments")
+            .select("title, instructions, scaffold_level, hint_1, hint_2, hints_enabled, starter_code")
+            .eq("id", sub["curriculum_assignment_id"])
+            .maybe_single()
+            .execute()
+        )
+        assignment = (c.data if c else None) or {}
 
     teacher_hint = (assignment.get(f"hint_{level}") or "").strip()
 

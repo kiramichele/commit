@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
 import ErrorPanel from '@/components/ErrorPanel'
+import HintPanel from '@/components/HintPanel'
 
 type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project' | 'code_review'
 
@@ -118,6 +119,14 @@ export default function CurriculumAssignmentPage() {
   const [flashCommit, setFlashCommit] = useState(false)
   const [submitError, setSubmitError] = useState('')
 
+  // Hint flow state — mirrors what the classroom assignment editor tracks so
+  // HintPanel's gating logic (need 2+ runs with edits between them) works.
+  const [hintsEnabled, setHintsEnabled] = useState(true)
+  const [hint1UnlockedAt, setHint1UnlockedAt] = useState<string | null>(null)
+  const [hint2UnlockedAt, setHint2UnlockedAt] = useState<string | null>(null)
+  const [runCount, setRunCount] = useState(0)
+  const [hasEditedSinceRun, setHasEditedSinceRun] = useState(false)
+
   useEffect(() => {
     if (loading) return
     if (!profile) router.push('/login')
@@ -139,14 +148,19 @@ export default function CurriculumAssignmentPage() {
         // commit + run + submit flow as on classroom assignments.
         try {
           const opened = await api.post<{
-            submission: { id: string; final_code: string; submitted_at: string | null; grade: number | null }
+            submission: { id: string; final_code: string; submitted_at: string | null; grade: number | null; run_count?: number; has_edited_since_last_run?: boolean; hint_1_unlocked_at?: string | null; hint_2_unlocked_at?: string | null }
             commits: Commit[]
-            assignment: { id: string; min_commits: number; starter_code: string; html_file_path: string | null }
+            assignment: { id: string; min_commits: number; starter_code: string; html_file_path: string | null; hints_enabled?: boolean }
           }>(`/code/curriculum-open?curriculum_assignment_id=${a.id}`, {})
           setSubmissionId(opened.submission.id)
           setCommits(opened.commits || [])
           setMinCommits(opened.assignment.min_commits || 1)
+          setHintsEnabled(opened.assignment.hints_enabled !== false)
           setCode(opened.submission.final_code || opened.assignment.starter_code || '')
+          setRunCount(opened.submission.run_count || 0)
+          setHasEditedSinceRun(opened.submission.has_edited_since_last_run || false)
+          setHint1UnlockedAt(opened.submission.hint_1_unlocked_at || null)
+          setHint2UnlockedAt(opened.submission.hint_2_unlocked_at || null)
           if (opened.submission.submitted_at) setSubmitted(true)
           if (opened.submission.grade != null) setSavedScore(opened.submission.grade)
           if (opened.assignment.html_file_path) {
@@ -374,6 +388,13 @@ export default function CurriculumAssignmentPage() {
       setOutput(e.message || 'Execution failed'); setOutputError(true); setStderr(e.message || '')
     } finally {
       setRunning(false)
+      // Track the run so hint gating works (need 2+ runs WITH an edit between).
+      if (submissionId) {
+        api.post<{ run_count: number }>('/code/track-run', {
+          submission_id: submissionId,
+          code_changed: hasEditedSinceRun,
+        }).then(r => { setRunCount(r.run_count); setHasEditedSinceRun(false) }).catch(() => {})
+      }
     }
   }
 
@@ -712,7 +733,7 @@ export default function CurriculumAssignmentPage() {
 
             <textarea
               value={viewingCode ?? code}
-              onChange={e => setCode(e.target.value)}
+              onChange={e => { setCode(e.target.value); setHasEditedSinceRun(true) }}
               onKeyDown={handleTab}
               readOnly={!!viewingCode}
               spellCheck={false}
@@ -743,6 +764,31 @@ export default function CurriculumAssignmentPage() {
                 onFindInLesson={() => openDocs()}
                 showLessonLink={false}
               />
+            )}
+            {submissionId && hintsEnabled && (
+              <div style={{ padding: '10px 14px', background: '#0E2D6E', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                <HintPanel
+                  submissionId={submissionId}
+                  runCount={runCount}
+                  hasEditedSinceRun={hasEditedSinceRun}
+                  hint1UnlockedAt={hint1UnlockedAt}
+                  hint2UnlockedAt={hint2UnlockedAt}
+                  onHintUsed={() => {
+                    // Re-open to refresh hint_*_unlocked_at after a hint is used.
+                    if (!assignment) return
+                    api.post<{ submission: { hint_1_unlocked_at?: string | null; hint_2_unlocked_at?: string | null } }>(
+                      `/code/curriculum-open?curriculum_assignment_id=${assignment.id}`, {}
+                    )
+                      .then(d => {
+                        setHint1UnlockedAt(d.submission.hint_1_unlocked_at || null)
+                        setHint2UnlockedAt(d.submission.hint_2_unlocked_at || null)
+                      })
+                      .catch(() => {})
+                  }}
+                  onFindInDocs={(hint) => openDocs(hint)}
+                  onFindInLesson={(hint) => openDocs(hint)}
+                />
+              </div>
             )}
           </div>
         </div>
