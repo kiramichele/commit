@@ -219,6 +219,7 @@ export default function LearnPage() {
           <Link href={`/learn/${selectedClassroom}`} style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>lessons</Link>
           <Link href="/grades" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>my grades</Link>
           <Link href="/docs" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>📚 python docs</Link>
+          <Link href="/search" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>🔍 search</Link>
           <Link href="/settings" style={{ fontSize: '12px', color: '#888780', textDecoration: 'none' }}>settings</Link>
         </div>
       </nav>

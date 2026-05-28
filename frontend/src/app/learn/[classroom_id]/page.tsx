@@ -196,6 +196,9 @@ export default function StudentClassroomPage() {
           <Link href="/docs" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>
             📚 docs
           </Link>
+          <Link href="/search" style={{ fontSize: '12px', color: '#1A56DB', fontWeight: 600, textDecoration: 'none' }}>
+            🔍 search
+          </Link>
           {profile && (
             <Link href={`/student/${profile.profile_id}`} style={{ fontSize: '12px', color: '#888780', textDecoration: 'none' }}>
               my profile

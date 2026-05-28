@@ -46,6 +46,118 @@ type Tab = 'lesson' | 'activity' | 'example' | 'practice' | 'docs'
 
 // Python docs moved to /lib/pythonDocs.ts; rendered by PythonDocsBrowser.
 
+interface Annotation {
+  id: string
+  lesson_id: string
+  kind: 'highlight' | 'note'
+  selected_text: string | null
+  quote_before: string | null
+  quote_after: string | null
+  note_text: string | null
+  linked_annotation_id: string | null
+  created_at: string
+}
+
+// Annotation SDK injected into the lesson reading iframe. Watches for
+// selection, shows a floating toolbar, paints existing highlights, and
+// posts every interaction up to the parent via window.postMessage.
+//
+// Protocol (iframe → parent):
+//   COMMIT_HIGHLIGHT       { selected_text, quote_before, quote_after }
+//   COMMIT_HIGHLIGHT_NOTE  { selected_text, quote_before, quote_after }
+//   COMMIT_HIGHLIGHT_CLICK { id }
+//
+// Protocol (parent → iframe):
+//   COMMIT_ANNOTATIONS { highlights: [{ id, selected_text, has_note }] }
+const ANNOTATION_SDK = `<script>
+(function(){
+  if(window.self===window.top)return;
+  var saved = [];
+  function paint(){
+    document.querySelectorAll('mark[data-commit-hl]').forEach(function(m){
+      var p=m.parentNode; while(m.firstChild){ p.insertBefore(m.firstChild,m); } p.removeChild(m);
+    });
+    saved.forEach(function(h){
+      if(!h.selected_text) return;
+      var t=h.selected_text;
+      var walker=document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null);
+      var node;
+      while(node=walker.nextNode()){
+        if(node.parentNode && (node.parentNode.tagName==='SCRIPT'||node.parentNode.tagName==='STYLE')) continue;
+        var idx=node.textContent.indexOf(t);
+        if(idx>=0){
+          var range=document.createRange();
+          range.setStart(node, idx);
+          range.setEnd(node, idx+t.length);
+          var mark=document.createElement('mark');
+          mark.setAttribute('data-commit-hl', h.id);
+          mark.style.background='#FEF08A';
+          mark.style.borderBottom = h.has_note ? '2px solid #F59E0B' : 'none';
+          mark.style.padding='0';
+          mark.style.cursor='pointer';
+          try { range.surroundContents(mark); } catch(e) {}
+          break;
+        }
+      }
+    });
+    document.querySelectorAll('mark[data-commit-hl]').forEach(function(m){
+      m.addEventListener('click', function(){
+        window.parent.postMessage({type:'COMMIT_HIGHLIGHT_CLICK', id: m.getAttribute('data-commit-hl')},'*');
+      });
+    });
+  }
+  window.addEventListener('message', function(e){
+    if(!e.data || e.data.type !== 'COMMIT_ANNOTATIONS') return;
+    saved = e.data.highlights || [];
+    paint();
+  });
+  var bar=null;
+  function hideBar(){ if(bar){ bar.remove(); bar=null; } }
+  function showBar(rect){
+    hideBar();
+    bar=document.createElement('div');
+    bar.style.cssText='position:fixed;z-index:99999;display:flex;gap:4px;padding:4px;background:#0E2D6E;color:white;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.25);font-family:sans-serif;font-size:12px;';
+    bar.style.top=(rect.bottom+8)+'px';
+    bar.style.left=Math.max(8, rect.left)+'px';
+    var b1=document.createElement('button');
+    b1.textContent='🖍 highlight';
+    b1.style.cssText='border:none;background:transparent;color:white;cursor:pointer;padding:4px 10px;font-size:12px;font-weight:600;';
+    var b2=document.createElement('button');
+    b2.textContent='+ note';
+    b2.style.cssText='border:none;background:#1A56DB;color:white;cursor:pointer;padding:4px 10px;border-radius:5px;font-size:12px;font-weight:600;';
+    bar.appendChild(b1); bar.appendChild(b2);
+    document.body.appendChild(bar);
+    var sel=window.getSelection();
+    if(!sel||sel.isCollapsed){ hideBar(); return; }
+    var text=sel.toString();
+    var range=sel.getRangeAt(0);
+    var before=(range.startContainer.textContent||'').slice(Math.max(0,range.startOffset-40), range.startOffset);
+    var after=(range.endContainer.textContent||'').slice(range.endOffset, range.endOffset+40);
+    b1.addEventListener('click', function(){
+      window.parent.postMessage({type:'COMMIT_HIGHLIGHT', selected_text:text, quote_before:before, quote_after:after},'*');
+      hideBar(); sel.removeAllRanges();
+    });
+    b2.addEventListener('click', function(){
+      window.parent.postMessage({type:'COMMIT_HIGHLIGHT_NOTE', selected_text:text, quote_before:before, quote_after:after},'*');
+      hideBar(); sel.removeAllRanges();
+    });
+  }
+  document.addEventListener('mouseup', function(){
+    setTimeout(function(){
+      var sel=window.getSelection();
+      if(!sel||sel.isCollapsed||sel.toString().trim().length<2){ hideBar(); return; }
+      var r=sel.getRangeAt(0).getBoundingClientRect();
+      if(r.width===0&&r.height===0){ hideBar(); return; }
+      showBar(r);
+    }, 10);
+  });
+  document.addEventListener('mousedown', function(e){
+    if(bar && !bar.contains(e.target)) hideBar();
+  });
+  window.parent.postMessage({type:'COMMIT_ANNOTATION_READY'},'*');
+})();
+<\/script>`
+
 export default function LessonPage() {
   const { profile, loading } = useAuth()
   const router = useRouter()
@@ -58,6 +170,13 @@ export default function LessonPage() {
   const [lesson, setLesson] = useState<Lesson | null>(null)
   const [lessonUrl, setLessonUrl] = useState<string | null>(null)
   const [lessonHtml, setLessonHtml] = useState<string | null>(null)
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
+  const [showAnnotations, setShowAnnotations] = useState(false)
+  const [pendingNoteFor, setPendingNoteFor] = useState<{ selected_text: string; quote_before: string; quote_after: string } | null>(null)
+  const [pendingNoteText, setPendingNoteText] = useState('')
+  const [newGeneralNote, setNewGeneralNote] = useState('')
+  const [showNewGeneralNote, setShowNewGeneralNote] = useState(false)
+  const iframeRef = useRef<HTMLIFrameElement | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('lesson')
   const [code, setCode] = useState('')
@@ -123,6 +242,131 @@ export default function LessonPage() {
     }
   }, [searchParams])
 
+  const fetchAnnotations = async () => {
+    try {
+      const data = await api.get<Annotation[]>(`/annotations/lesson/${lessonId}`)
+      setAnnotations(data || [])
+    } catch {}
+  }
+
+  // Build the payload the iframe expects so existing highlights repaint.
+  const annotationsForIframe = () => {
+    const noteByLink: Record<string, boolean> = {}
+    annotations.forEach(a => {
+      if (a.kind === 'note' && a.linked_annotation_id) noteByLink[a.linked_annotation_id] = true
+    })
+    return annotations
+      .filter(a => a.kind === 'highlight')
+      .map(a => ({ id: a.id, selected_text: a.selected_text, has_note: !!noteByLink[a.id] }))
+  }
+
+  const postAnnotationsToIframe = () => {
+    const win = iframeRef.current?.contentWindow
+    if (!win) return
+    win.postMessage({ type: 'COMMIT_ANNOTATIONS', highlights: annotationsForIframe() }, '*')
+  }
+
+  // Re-send annotations whenever they change.
+  useEffect(() => {
+    postAnnotationsToIframe()
+  }, [annotations])
+
+  // Listen for messages from the SDK in the iframe.
+  useEffect(() => {
+    if (!profile) return
+    const handler = async (e: MessageEvent) => {
+      const d = e.data
+      if (!d || !d.type) return
+      if (d.type === 'COMMIT_ANNOTATION_READY') {
+        postAnnotationsToIframe()
+        return
+      }
+      if (d.type === 'COMMIT_HIGHLIGHT') {
+        try {
+          const created = await api.post<Annotation>('/annotations/', {
+            lesson_id: lessonId,
+            kind: 'highlight',
+            selected_text: d.selected_text,
+            quote_before: d.quote_before,
+            quote_after: d.quote_after,
+          })
+          setAnnotations(prev => [...prev, created])
+          setShowAnnotations(true)
+        } catch {}
+        return
+      }
+      if (d.type === 'COMMIT_HIGHLIGHT_NOTE') {
+        setPendingNoteFor({
+          selected_text: d.selected_text,
+          quote_before: d.quote_before,
+          quote_after: d.quote_after,
+        })
+        setPendingNoteText('')
+        setShowAnnotations(true)
+        return
+      }
+      if (d.type === 'COMMIT_HIGHLIGHT_CLICK') {
+        setShowAnnotations(true)
+        // Scroll the sidebar entry into view.
+        setTimeout(() => {
+          const el = document.querySelector(`[data-annotation-id="${d.id}"]`)
+          el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }, 50)
+      }
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  }, [profile, lessonId, annotations])
+
+  const saveLinkedNote = async () => {
+    if (!pendingNoteFor) return
+    try {
+      // Step 1 — create the highlight.
+      const hl = await api.post<Annotation>('/annotations/', {
+        lesson_id: lessonId,
+        kind: 'highlight',
+        selected_text: pendingNoteFor.selected_text,
+        quote_before: pendingNoteFor.quote_before,
+        quote_after: pendingNoteFor.quote_after,
+      })
+      // Step 2 — create the note linked to it.
+      const note = await api.post<Annotation>('/annotations/', {
+        lesson_id: lessonId,
+        kind: 'note',
+        note_text: pendingNoteText.trim() || '(no text)',
+        linked_annotation_id: hl.id,
+      })
+      setAnnotations(prev => [...prev, hl, note])
+      setPendingNoteFor(null)
+      setPendingNoteText('')
+    } catch (err: any) {
+      alert(err.message || 'Could not save note')
+    }
+  }
+
+  const saveGeneralNote = async () => {
+    if (!newGeneralNote.trim()) return
+    try {
+      const note = await api.post<Annotation>('/annotations/', {
+        lesson_id: lessonId,
+        kind: 'note',
+        note_text: newGeneralNote.trim(),
+      })
+      setAnnotations(prev => [...prev, note])
+      setNewGeneralNote('')
+      setShowNewGeneralNote(false)
+    } catch (err: any) {
+      alert(err.message || 'Could not save note')
+    }
+  }
+
+  const deleteAnnotation = async (id: string) => {
+    try {
+      await api.delete(`/annotations/${id}`)
+      setAnnotations(prev => prev.filter(a => a.id !== id))
+    } catch {}
+  }
+
   const fetchLesson = async () => {
     setDataLoading(true)
     try {
@@ -132,6 +376,7 @@ export default function LessonPage() {
       ])
       setLesson(lessonData)
       setCode(lessonData.lesson_content?.coding_starter_code || '')
+      fetchAnnotations()
 
       // Pre-fill per-exercise code from each exercise's starter_code
       const starters: Record<number, string> = {}
@@ -274,12 +519,103 @@ export default function LessonPage() {
                   <button onClick={() => setLessonHint(null)} style={{ background: 'none', border: 'none', color: '#854D0E', cursor: 'pointer', fontSize: '16px' }}>×</button>
                 </div>
               )}
-              {lessonHtml ? (
-                <iframe srcDoc={lessonHtml} style={{ width: '100%', height: '100%', border: 'none', minHeight: 'calc(100vh - 104px)' }} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" title={lesson?.title} />
-              ) : (
-                <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
-                  {lessonUrl ? 'loading lesson...' : 'no lesson content uploaded yet'}
-                </div>
+              <div style={{ flex: 1, display: 'grid', gridTemplateColumns: showAnnotations ? '1fr 300px' : '1fr', minHeight: 'calc(100vh - 104px)' }}>
+                {lessonHtml ? (
+                  <iframe
+                    ref={iframeRef}
+                    srcDoc={lessonHtml + (profile?.role === 'student' ? ANNOTATION_SDK : '')}
+                    onLoad={postAnnotationsToIframe}
+                    style={{ width: '100%', height: '100%', border: 'none', minHeight: 'calc(100vh - 104px)' }}
+                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                    title={lesson?.title}
+                  />
+                ) : (
+                  <div style={{ padding: '3rem', textAlign: 'center', color: '#888780', fontSize: '14px' }}>
+                    {lessonUrl ? 'loading lesson...' : 'no lesson content uploaded yet'}
+                  </div>
+                )}
+
+                {/* ANNOTATION SIDEBAR */}
+                {showAnnotations && profile?.role === 'student' && (
+                  <div style={{ background: 'white', borderLeft: '1px solid rgba(14,45,110,0.08)', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', letterSpacing: '0.05em', textTransform: 'uppercase' }}>my notes ({annotations.length})</span>
+                      <button onClick={() => setShowAnnotations(false)} style={{ background: 'none', border: 'none', color: '#888780', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}>×</button>
+                    </div>
+
+                    {/* Pending highlight + note input */}
+                    {pendingNoteFor && (
+                      <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(14,45,110,0.06)', background: '#FEF9C3' }}>
+                        <div style={{ fontSize: '11px', color: '#854D0E', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '6px' }}>new highlight + note</div>
+                        <div style={{ fontSize: '12px', color: '#854D0E', fontStyle: 'italic', marginBottom: '8px', maxHeight: '60px', overflow: 'hidden' }}>"{pendingNoteFor.selected_text}"</div>
+                        <textarea autoFocus value={pendingNoteText} onChange={e => setPendingNoteText(e.target.value)} rows={3} placeholder="what's your thought?" style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1.5px solid rgba(245,158,11,0.3)', fontSize: '12px', outline: 'none', resize: 'vertical', fontFamily: "'DM Sans', sans-serif", boxSizing: 'border-box' }} />
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                          <button onClick={() => { setPendingNoteFor(null); setPendingNoteText('') }} style={{ flex: 1, padding: '5px', borderRadius: '5px', background: 'transparent', border: '1.5px solid rgba(14,45,110,0.15)', fontSize: '11px', fontWeight: 600, color: '#5F5E5A', cursor: 'pointer' }}>cancel</button>
+                          <button onClick={saveLinkedNote} style={{ flex: 1, padding: '5px', borderRadius: '5px', background: '#1A56DB', border: 'none', fontSize: '11px', fontWeight: 600, color: 'white', cursor: 'pointer' }}>save</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* New general note */}
+                    <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
+                      {showNewGeneralNote ? (
+                        <>
+                          <textarea autoFocus value={newGeneralNote} onChange={e => setNewGeneralNote(e.target.value)} rows={3} placeholder="general note about this lesson..." style={{ width: '100%', padding: '6px 8px', borderRadius: '6px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '12px', outline: 'none', resize: 'vertical', fontFamily: "'DM Sans', sans-serif", boxSizing: 'border-box', background: '#FAFAF8' }} />
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '6px' }}>
+                            <button onClick={() => { setShowNewGeneralNote(false); setNewGeneralNote('') }} style={{ flex: 1, padding: '5px', borderRadius: '5px', background: 'transparent', border: '1.5px solid rgba(14,45,110,0.15)', fontSize: '11px', fontWeight: 600, color: '#5F5E5A', cursor: 'pointer' }}>cancel</button>
+                            <button onClick={saveGeneralNote} disabled={!newGeneralNote.trim()} style={{ flex: 1, padding: '5px', borderRadius: '5px', background: newGeneralNote.trim() ? '#1A56DB' : '#D3D1C7', border: 'none', fontSize: '11px', fontWeight: 600, color: 'white', cursor: newGeneralNote.trim() ? 'pointer' : 'not-allowed' }}>save</button>
+                          </div>
+                        </>
+                      ) : (
+                        <button onClick={() => setShowNewGeneralNote(true)} style={{ width: '100%', padding: '7px', borderRadius: '6px', background: '#EBF1FD', border: '1.5px dashed rgba(26,86,219,0.3)', fontSize: '12px', fontWeight: 600, color: '#1A56DB', cursor: 'pointer' }}>+ general note</button>
+                      )}
+                    </div>
+
+                    {/* Annotation list */}
+                    {annotations.length === 0 ? (
+                      <div style={{ padding: '2rem', textAlign: 'center', color: '#888780', fontSize: '12px', lineHeight: 1.6 }}>
+                        select text in the lesson to highlight or add a note.
+                      </div>
+                    ) : (
+                      annotations.map(a => {
+                        const linkedNote = a.kind === 'highlight'
+                          ? annotations.find(x => x.linked_annotation_id === a.id)
+                          : null
+                        if (a.kind === 'note' && a.linked_annotation_id) return null  // shown under its highlight
+                        return (
+                          <div key={a.id} data-annotation-id={a.id} style={{ padding: '10px 16px', borderBottom: '1px solid rgba(14,45,110,0.05)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '10px', fontWeight: 700, color: a.kind === 'highlight' ? '#854D0E' : '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                {a.kind === 'highlight' ? '🖍 highlight' : '📝 note'}
+                              </span>
+                              <button onClick={() => deleteAnnotation(a.id)} style={{ background: 'none', border: 'none', color: '#888780', cursor: 'pointer', fontSize: '14px', padding: 0, lineHeight: 1 }}>×</button>
+                            </div>
+                            {a.selected_text && (
+                              <div style={{ fontSize: '12px', color: '#854D0E', fontStyle: 'italic', background: '#FEF08A', padding: '4px 6px', borderRadius: '4px', marginBottom: '4px' }}>"{a.selected_text}"</div>
+                            )}
+                            {a.note_text && (
+                              <div style={{ fontSize: '12px', color: '#0E2D6E', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{a.note_text}</div>
+                            )}
+                            {linkedNote?.note_text && (
+                              <div style={{ marginTop: '6px', padding: '6px 8px', background: '#EBF1FD', borderRadius: '4px', fontSize: '12px', color: '#0E2D6E', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 600, color: '#0C447C', marginBottom: '2px' }}>📝 NOTE</div>
+                                {linkedNote.note_text}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+              {profile?.role === 'student' && lesson && lessonHtml && (
+                <button
+                  onClick={() => setShowAnnotations(s => !s)}
+                  style={{ position: 'fixed', bottom: '70px', right: '20px', zIndex: 100, padding: '10px 16px', background: '#0E2D6E', color: 'white', border: 'none', borderRadius: '10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", boxShadow: '0 4px 16px rgba(14,45,110,0.25)', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  📝 my notes ({annotations.length})
+                </button>
               )}
               {profile?.role === 'student' && lesson && (
                 <LessonCompleteButton lessonId={lesson.id} lessonTitle={lesson.title} />
