@@ -32,7 +32,7 @@ interface CurriculumAssignment {
   default_comparison?: string | null
 }
 
-type Comparison = 'exact' | 'strip_trailing_whitespace' | 'case_insensitive'
+type Comparison = 'exact' | 'strip_trailing_whitespace' | 'case_insensitive' | 'contains'
 
 interface TestCase {
   id: string
@@ -48,6 +48,7 @@ const COMPARISON_OPTIONS: Array<{ value: Comparison; label: string }> = [
   { value: 'strip_trailing_whitespace', label: 'strip trailing whitespace' },
   { value: 'exact',                     label: 'exact match' },
   { value: 'case_insensitive',          label: 'case-insensitive' },
+  { value: 'contains',                  label: 'contains (substring)' },
 ]
 
 interface CurriculumAssignmentRow {
@@ -340,7 +341,7 @@ export default function CurriculumAssignmentEditor() {
         return
       }
       const comparison = tc.comparison
-      if (comparison && !['exact', 'strip_trailing_whitespace', 'case_insensitive'].includes(comparison)) {
+      if (comparison && !['exact', 'strip_trailing_whitespace', 'case_insensitive', 'contains'].includes(comparison)) {
         setImportError(`test_cases[${i}].comparison invalid: "${comparison}".`)
         return
       }
@@ -355,7 +356,7 @@ export default function CurriculumAssignmentEditor() {
       })
     }
     if (parsed.default_comparison) {
-      if (!['exact', 'strip_trailing_whitespace', 'case_insensitive'].includes(parsed.default_comparison)) {
+      if (!['exact', 'strip_trailing_whitespace', 'case_insensitive', 'contains'].includes(parsed.default_comparison)) {
         setImportError(`default_comparison invalid: "${parsed.default_comparison}".`)
         return
       }

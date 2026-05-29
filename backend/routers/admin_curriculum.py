@@ -537,7 +537,7 @@ class CurriculumAssignmentUpdate(BaseModel):
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review", "discussion"}
 _VALID_PAIRING_STRATEGIES = {"random", "similar_grade", "opposite_grade", "manual"}
-_VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive"}
+_VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive", "contains"}
 
 
 def _validate_test_cases(raw):

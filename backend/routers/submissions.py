@@ -58,7 +58,7 @@ class RunTests(BaseModel):
     code: str
 
 
-VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive"}
+VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive", "contains"}
 
 
 def _compare_outputs(actual: str, expected: str, mode: str) -> bool:
@@ -70,6 +70,13 @@ def _compare_outputs(actual: str, expected: str, mode: str) -> bool:
         return actual == expected
     if mode == "case_insensitive":
         return actual.lower() == expected.lower()
+    if mode == "contains":
+        # Substring match — passes when expected appears anywhere inside
+        # actual. We strip trailing whitespace + outer empty lines on
+        # the expected side so authors don't have to worry about
+        # trailing newlines from print().
+        needle = "\n".join(ln.rstrip() for ln in expected.splitlines()).strip()
+        return needle in actual if needle else True
     # strip_trailing_whitespace: line-by-line, strip trailing ws.
     a_lines = [ln.rstrip() for ln in actual.splitlines()]
     e_lines = [ln.rstrip() for ln in expected.splitlines()]
