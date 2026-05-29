@@ -594,7 +594,6 @@ export default function ClassroomPage() {
                               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                                 <span style={{ fontSize: '14px', fontWeight: 500, color: '#0E2D6E' }}>{p.title}</span>
                                 <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
-                                <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
                               </div>
                               {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
                             </div>

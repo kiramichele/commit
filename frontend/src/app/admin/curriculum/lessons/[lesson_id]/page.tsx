@@ -40,7 +40,6 @@ export default function LessonEditorPage() {
   const [title, setTitle] = useState('')
   const [standardsText, setStandardsText] = useState('')
   const [isPublished, setIsPublished] = useState(false)
-  const [estimatedMinutes, setEstimatedMinutes] = useState(20)
   const [htmlBody, setHtmlBody] = useState('')
 
   useEffect(() => {
@@ -61,7 +60,6 @@ export default function LessonEditorPage() {
       setStandardsText((data.standards_tags || []).join(', '))
       setIsPublished(data.is_published)
       const c = data.lesson_content || ({} as LessonContent)
-      setEstimatedMinutes(c.estimated_minutes || 20)
       setHtmlBody(c.html_body || '')
     } catch (err: any) {
       alert(err.message || 'Failed to load lesson')
@@ -93,7 +91,6 @@ export default function LessonEditorPage() {
       // legacy coding/activity fields so the underlying lesson_content
       // row matches the reading-only contract.
       const content = {
-        estimated_minutes: estimatedMinutes,
         has_coding_exercise: false,
         coding_instructions: '',
         coding_starter_code: '',
@@ -174,14 +171,10 @@ export default function LessonEditorPage() {
               <label style={label}>title</label>
               <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 120px', gap: '12px' }}>
               <div>
                 <label style={label}>standards (comma-separated)</label>
                 <input value={standardsText} onChange={e => setStandardsText(e.target.value)} placeholder="CRD-1.A, IOC-1.A" style={input} />
-              </div>
-              <div>
-                <label style={label}>est. minutes</label>
-                <input type="number" value={estimatedMinutes} onChange={e => setEstimatedMinutes(parseInt(e.target.value, 10) || 0)} style={input} />
               </div>
               <div>
                 <label style={label}>published</label>

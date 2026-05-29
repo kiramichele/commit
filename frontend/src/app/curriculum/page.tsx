@@ -309,9 +309,6 @@ export default function CurriculumPage() {
                                   <span style={{ fontWeight: 500, fontSize: '14px', color: '#0E2D6E' }}>{lesson.title}</span>
                                 </div>
                                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                  {lesson.lesson_content?.estimated_minutes && (
-                                    <span style={{ fontSize: '11px', color: '#888780' }}>~{lesson.lesson_content.estimated_minutes} min</span>
-                                  )}
                                   {SCAFFOLD_LABELS[lesson.scaffold_level] && (
                                     <span style={{ fontSize: '11px', color: '#888780' }}>{SCAFFOLD_LABELS[lesson.scaffold_level]}</span>
                                   )}

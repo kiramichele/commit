@@ -104,7 +104,7 @@ export default function ProjectListingPage() {
               <p style={{ margin: '0 0 12px', fontSize: '14px', color: '#5F5E5A', lineHeight: 1.6 }}>{project.description}</p>
             )}
             <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>
-              {project.project_steps.length} step(s) · ~{project.estimated_minutes} min total
+              {project.project_steps.length} step(s)
             </p>
           </div>
 

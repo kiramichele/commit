@@ -50,7 +50,6 @@ export default function ProjectEditorPage() {
   // Local editable meta
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [estimatedMinutes, setEstimatedMinutes] = useState(60)
   const [standardsText, setStandardsText] = useState('')
   const [isPublished, setIsPublished] = useState(false)
 
@@ -69,7 +68,6 @@ export default function ProjectEditorPage() {
       setProject(data)
       setTitle(data.title)
       setDescription(data.description || '')
-      setEstimatedMinutes(data.estimated_minutes || 60)
       setStandardsText((data.standards_tags || []).join(', '))
       setIsPublished(data.is_published)
     } catch (err: any) {
@@ -88,7 +86,6 @@ export default function ProjectEditorPage() {
       await api.patch(`/admin/curriculum/projects/${params.project_id}`, {
         title,
         description,
-        estimated_minutes: estimatedMinutes,
         standards_tags: standardsList.length ? standardsList : null,
         is_published: isPublished,
       })
@@ -195,15 +192,9 @@ export default function ProjectEditorPage() {
           {/* META */}
           <div style={card}>
             <h2 style={{ margin: '0 0 1rem', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>project details</h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <label style={label}>title</label>
-                <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
-              </div>
-              <div>
-                <label style={label}>est. minutes</label>
-                <input type="number" value={estimatedMinutes} onChange={e => setEstimatedMinutes(parseInt(e.target.value, 10) || 0)} style={input} />
-              </div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={label}>title</label>
+              <input value={title} onChange={e => setTitle(e.target.value)} style={input} />
             </div>
             <div style={{ marginBottom: '12px' }}>
               <label style={label}>description</label>

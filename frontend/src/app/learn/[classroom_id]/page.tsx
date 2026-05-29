@@ -310,8 +310,7 @@ export default function StudentClassroomPage() {
                               <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{p.title}</span>
                               <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>project</span>
                             </div>
-                            {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginBottom: '2px' }}>{p.description}</div>}
-                            <span style={{ fontSize: '11px', color: '#888780' }}>~{p.estimated_minutes} min</span>
+                            {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A' }}>{p.description}</div>}
                           </div>
                           <Link href={`/project/${p.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                             open →
@@ -355,14 +354,11 @@ export default function StudentClassroomPage() {
                                 <div style={{ fontWeight: 500, fontSize: '14px', color: isDone ? '#888780' : '#0E2D6E', marginBottom: '4px' }}>
                                   {lesson.title}
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                  {lesson.lesson_content?.estimated_minutes && (
-                                    <span style={{ fontSize: '11px', color: '#888780' }}>~{lesson.lesson_content.estimated_minutes} min</span>
-                                  )}
-                                  {isDone && (
+                                {isDone && (
+                                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>completed ✓</span>
-                                  )}
-                                </div>
+                                  </div>
+                                )}
                                 {(lesson as any).standards_tags?.length > 0 && (
                                   <StandardsBadgeList tags={(lesson as any).standards_tags} max={2} />
                                 )}

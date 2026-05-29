@@ -486,9 +486,6 @@ export default function LessonPage() {
         {(lesson as any)?.standards_tags?.length > 0 && (
           <StandardsBadgeList tags={(lesson as any).standards_tags} max={5} />
         )}
-        {lesson?.lesson_content?.estimated_minutes && (
-          <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#888780' }}>~{lesson.lesson_content.estimated_minutes} min</span>
-        )}
       </nav>
 
       {/* TABS */}
