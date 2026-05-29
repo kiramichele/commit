@@ -45,6 +45,26 @@ interface AssignmentCard {
   isNewGrade: boolean
 }
 
+// Cards backing the lesson / curriculum-assignment / project rows on
+// the kanban. They share the column model but render differently.
+interface TodoExtraCard {
+  kind: 'lesson' | 'curriculum_assignment' | 'project'
+  id: string
+  title: string
+  typeLabel: string
+  typeColor: { bg: string; color: string }
+  column: 'todo' | 'inprogress' | 'submitted' | 'graded'
+  href: string
+  grade: number | null
+  unitTitle: string | null
+}
+
+interface CurricStatus {
+  submitted: boolean
+  score: number | null
+  grade: number | null
+}
+
 const GRADED_SHOWN_DEFAULT = 3
 
 const getDueStatus = (dueDate: string | null) => {
@@ -75,6 +95,7 @@ export default function LearnPage() {
   const [classrooms, setClassrooms] = useState<Classroom[]>([])
   const [selectedClassroom, setSelectedClassroom] = useState<string>('')
   const [cards, setCards] = useState<AssignmentCard[]>([])
+  const [extraCards, setExtraCards] = useState<TodoExtraCard[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [gradedExpanded, setGradedExpanded] = useState(false)
 
@@ -110,53 +131,166 @@ export default function LearnPage() {
   const fetchAssignments = async () => {
     setDataLoading(true)
     try {
-      const assignments = await api.get<Assignment[]>(
-        `/assignments/?classroom_id=${selectedClassroom}`
-      )
-      if (!assignments?.length) { setCards([]); setDataLoading(false); return }
+      // Parallel fetch: assignments, the student's todo lists,
+      // the curriculum (for titles), completions, and per-curric status.
+      const [
+        assignments,
+        todoLists,
+        units,
+        completions,
+        curricStatus,
+      ] = await Promise.all([
+        api.get<Assignment[]>(`/assignments/?classroom_id=${selectedClassroom}`).catch(() => []),
+        api.get<{ lesson: string[]; project: string[]; curriculum_assignment: string[] }>(
+          `/todo/me?classroom_id=${selectedClassroom}`
+        ).catch(() => ({ lesson: [], project: [], curriculum_assignment: [] })),
+        api.get<Array<{ id: string; title: string; order_index: number; lessons?: Array<{ id: string; title: string; order_index: number }>; projects?: Array<{ id: string; title: string; order_index: number; is_published: boolean }>; curriculum_assignments?: Array<{ id: string; title: string; order_index: number; assignment_type: string; is_published: boolean }> }>>(
+          `/curriculum/units`
+        ).catch(() => []),
+        api.get<Array<{ lesson_id: string; completed_at: string }>>(
+          `/curriculum/classroom/${selectedClassroom}/completions`
+        ).catch(() => []),
+        api.get<Record<string, CurricStatus>>(
+          `/curriculum/classroom/${selectedClassroom}/my-curric-status`
+        ).catch(() => ({} as Record<string, CurricStatus>)),
+      ])
 
-      const submissionResults = await Promise.all(
-        assignments.map(a =>
-          api.post<{ submission: Submission }>(`/code/open?assignment_id=${a.id}`, {})
-            .then(d => d.submission)
-            .catch(() => null)
+      const classroomAssignments = assignments || []
+
+      // ── Classroom assignment cards (existing behavior — always on the kanban) ──
+      let built: AssignmentCard[] = []
+      if (classroomAssignments.length > 0) {
+        const submissionResults = await Promise.all(
+          classroomAssignments.map(a =>
+            api.post<{ submission: Submission }>(`/code/open?assignment_id=${a.id}`, {})
+              .then(d => d.submission)
+              .catch(() => null)
+          )
         )
-      )
 
-      const built: AssignmentCard[] = assignments.map((a, i) => {
-        const sub = submissionResults[i]
-        let column: AssignmentCard['column'] = 'todo'
-        if (sub?.grade != null) column = 'graded'
-        else if (sub?.submitted_at) column = 'submitted'
-        else if (sub && sub.commit_count > 0) column = 'inprogress'
+        built = classroomAssignments.map((a, i) => {
+          const sub = submissionResults[i]
+          let column: AssignmentCard['column'] = 'todo'
+          if (sub?.grade != null) column = 'graded'
+          else if (sub?.submitted_at) column = 'submitted'
+          else if (sub && sub.commit_count > 0) column = 'inprogress'
 
-        // New grade = graded but never viewed
-        const isNewGrade = column === 'graded' && !!sub?.graded_at && !sub?.grade_viewed_at
+          const isNewGrade = column === 'graded' && !!sub?.graded_at && !sub?.grade_viewed_at
+          return {
+            assignment: a,
+            submission: sub,
+            column,
+            dueStatus: getDueStatus(a.due_date),
+            isNewGrade,
+          }
+        })
 
-        return {
-          assignment: a,
-          submission: sub,
+        built.sort((a, b) => {
+          if (a.column === 'graded' && b.column === 'graded') {
+            const aDate = a.submission?.graded_at ? new Date(a.submission.graded_at).getTime() : 0
+            const bDate = b.submission?.graded_at ? new Date(b.submission.graded_at).getTime() : 0
+            return bDate - aDate
+          }
+          return 0
+        })
+      }
+
+      // ── To-do extras: lessons + projects + curriculum assignments ──
+      const completedLessonIds = new Set((completions || []).map(c => c.lesson_id))
+      const lessonTitleById: Record<string, { title: string; unit: string }> = {}
+      const projectTitleById: Record<string, { title: string; unit: string }> = {}
+      const curricAsstById: Record<string, { title: string; unit: string; assignment_type: string }> = {}
+      for (const u of units || []) {
+        for (const l of (u.lessons || [])) {
+          lessonTitleById[l.id] = { title: l.title, unit: u.title }
+        }
+        for (const p of (u.projects || [])) {
+          projectTitleById[p.id] = { title: p.title, unit: u.title }
+        }
+        for (const a of (u.curriculum_assignments || [])) {
+          curricAsstById[a.id] = { title: a.title, unit: u.title, assignment_type: a.assignment_type }
+        }
+      }
+
+      const TYPE_COLORS: Record<string, { bg: string; color: string }> = {
+        lesson:       { bg: '#DCFCE7', color: '#166534' },
+        project:      { bg: '#FEF3C7', color: '#92400E' },
+        code:         { bg: '#EBF1FD', color: '#0C447C' },
+        activity:     { bg: '#F3E8FF', color: '#6B21A8' },
+        checkin:      { bg: '#FEF3C7', color: '#92400E' },
+        quiz:         { bg: '#FCE7F3', color: '#9D174D' },
+        code_review:  { bg: '#E0E7FF', color: '#3730A3' },
+        discussion:   { bg: '#E0F2FE', color: '#075985' },
+      }
+
+      const extras: TodoExtraCard[] = []
+      for (const lid of (todoLists.lesson || [])) {
+        const info = lessonTitleById[lid]
+        if (!info) continue
+        const completed = completedLessonIds.has(lid)
+        extras.push({
+          kind: 'lesson',
+          id: lid,
+          title: info.title,
+          typeLabel: 'lesson',
+          typeColor: TYPE_COLORS.lesson,
+          column: completed ? 'graded' : 'todo',
+          href: `/lesson/${lid}`,
+          grade: null,
+          unitTitle: info.unit,
+        })
+      }
+      for (const pid of (todoLists.project || [])) {
+        const info = projectTitleById[pid]
+        if (!info) continue
+        extras.push({
+          kind: 'project',
+          id: pid,
+          title: info.title,
+          typeLabel: 'project',
+          typeColor: TYPE_COLORS.project,
+          column: 'todo',
+          href: `/project/${pid}`,
+          grade: null,
+          unitTitle: info.unit,
+        })
+      }
+      for (const cid of (todoLists.curriculum_assignment || [])) {
+        const info = curricAsstById[cid]
+        if (!info) continue
+        const status = curricStatus[cid]
+        let column: TodoExtraCard['column'] = 'todo'
+        const grade = status?.grade ?? status?.score ?? null
+        if (grade != null) column = 'graded'
+        else if (status?.submitted) column = 'submitted'
+        extras.push({
+          kind: 'curriculum_assignment',
+          id: cid,
+          title: info.title,
+          typeLabel: info.assignment_type.replace('_', ' '),
+          typeColor: TYPE_COLORS[info.assignment_type] || TYPE_COLORS.code,
           column,
-          dueStatus: getDueStatus(a.due_date),
-          isNewGrade,
-        }
-      })
-
-      // Sort graded by most recently graded first
-      built.sort((a, b) => {
-        if (a.column === 'graded' && b.column === 'graded') {
-          const aDate = a.submission?.graded_at ? new Date(a.submission.graded_at).getTime() : 0
-          const bDate = b.submission?.graded_at ? new Date(b.submission.graded_at).getTime() : 0
-          return bDate - aDate
-        }
-        return 0
-      })
+          href: `/curriculum-assignment/${cid}?classroom_id=${selectedClassroom}`,
+          grade,
+          unitTitle: info.unit,
+        })
+      }
 
       setCards(built)
+      setExtraCards(extras)
     } catch (e) {
       console.error(e)
     } finally {
       setDataLoading(false)
+    }
+  }
+
+  const removeFromTodo = async (kind: 'lesson' | 'project' | 'curriculum_assignment', targetId: string) => {
+    try {
+      await api.delete(`/todo/me?classroom_id=${selectedClassroom}&kind=${kind}&target_id=${targetId}`)
+      setExtraCards(prev => prev.filter(c => !(c.kind === kind && c.id === targetId)))
+    } catch (e: any) {
+      alert(e?.message || 'Could not remove from to-do.')
     }
   }
 
@@ -174,11 +308,14 @@ export default function LearnPage() {
   }
 
   const getColumnCards = (colId: string) => cards.filter(c => c.column === colId)
+  const getExtraCards = (colId: string) => extraCards.filter(c => c.column === colId)
 
   const newGradeCount = cards.filter(c => c.isNewGrade).length
   const totalDone = cards.filter(c => c.column === 'graded' || c.column === 'submitted').length
-  const total = cards.length
-  const progress = total > 0 ? Math.round(((cards.filter(c => c.column === 'graded').length) / total) * 100) : 0
+    + extraCards.filter(c => c.column === 'graded' || c.column === 'submitted').length
+  const total = cards.length + extraCards.length
+  const gradedCount = cards.filter(c => c.column === 'graded').length + extraCards.filter(c => c.column === 'graded').length
+  const progress = total > 0 ? Math.round((gradedCount / total) * 100) : 0
 
   if (loading || !profile) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif" }}>
@@ -231,7 +368,7 @@ export default function LearnPage() {
             <div style={{ height: '100%', width: `${progress}%`, background: progress === 100 ? '#22C55E' : '#1A56DB', borderRadius: '99px', transition: 'width 0.5s ease' }} />
           </div>
           <span style={{ fontSize: '12px', fontWeight: 600, color: progress === 100 ? '#166534' : '#0E2D6E', flexShrink: 0 }}>
-            {cards.filter(c => c.column === 'graded').length} / {total} graded {progress === 100 ? '🎉' : ''}
+            {gradedCount} / {total} graded {progress === 100 ? '🎉' : ''}
           </span>
         </div>
       )}
@@ -240,12 +377,17 @@ export default function LearnPage() {
       <div style={{ flex: 1, padding: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', alignItems: 'start' }}>
         {COLUMNS.map(col => {
           const colCards = getColumnCards(col.id)
+          const colExtras = getExtraCards(col.id)
+          const totalInCol = colCards.length + colExtras.length
           const isGraded = col.id === 'graded'
           const newInCol = isGraded ? newGradeCount : 0
           const visibleCards = isGraded && !gradedExpanded
             ? colCards.slice(0, GRADED_SHOWN_DEFAULT)
             : colCards
-          const hiddenCount = isGraded ? colCards.length - GRADED_SHOWN_DEFAULT : 0
+          const visibleExtras = isGraded && !gradedExpanded
+            ? colExtras.slice(0, Math.max(0, GRADED_SHOWN_DEFAULT - visibleCards.length))
+            : colExtras
+          const hiddenCount = isGraded ? totalInCol - GRADED_SHOWN_DEFAULT : 0
 
           return (
             <div key={col.id}>
@@ -260,7 +402,7 @@ export default function LearnPage() {
                 )}
 
                 <span style={{ marginLeft: 'auto', fontSize: '12px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: col.bg, color: col.color, border: `1px solid ${col.border}` }}>
-                  {colCards.length}
+                  {totalInCol}
                 </span>
               </div>
 
@@ -273,7 +415,7 @@ export default function LearnPage() {
                       <div style={{ height: '10px', background: '#EBF1FD', borderRadius: '4px', width: '40%' }} />
                     </div>
                   ))
-                ) : colCards.length === 0 ? (
+                ) : totalInCol === 0 ? (
                   <div style={{ padding: '1.5rem', textAlign: 'center', borderRadius: '10px', border: `1.5px dashed ${col.border}`, background: col.bg + '40' }}>
                     <p style={{ margin: 0, fontSize: '12px', color: col.color, opacity: 0.7 }}>{col.emptyText}</p>
                   </div>
@@ -290,8 +432,18 @@ export default function LearnPage() {
                       />
                     ))}
 
+                    {visibleExtras.map(extra => (
+                      <TodoExtraKanbanCard
+                        key={`${extra.kind}-${extra.id}`}
+                        card={extra}
+                        colColor={col.color}
+                        colBorder={col.border}
+                        onRemove={() => removeFromTodo(extra.kind, extra.id)}
+                      />
+                    ))}
+
                     {/* SEE MORE / COLLAPSE for graded column */}
-                    {isGraded && colCards.length > GRADED_SHOWN_DEFAULT && (
+                    {isGraded && totalInCol > GRADED_SHOWN_DEFAULT && (
                       <button
                         onClick={() => setGradedExpanded(e => !e)}
                         style={{ width: '100%', padding: '8px', background: 'transparent', border: `1px dashed ${col.border}`, borderRadius: '8px', fontSize: '12px', fontWeight: 600, color: col.color, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif', transition: 'all 0.15s'" }}
@@ -346,6 +498,58 @@ function getCurriculumHref(assignment: Assignment) {
 }
 
 // ── ASSIGNMENT CARD ──────────────────────────────────────────
+
+function TodoExtraKanbanCard({ card, colColor, colBorder, onRemove }: {
+  card: TodoExtraCard
+  colColor: string
+  colBorder: string
+  onRemove: () => void
+}) {
+  const isGraded = card.column === 'graded'
+  const isSubmitted = card.column === 'submitted'
+  const accentColor = isGraded ? '#22C55E' : isSubmitted ? '#F59E0B' : '#D3D1C7'
+  return (
+    <div style={{ position: 'relative', overflow: 'visible' }}>
+      <Link
+        href={card.href}
+        style={{ textDecoration: 'none', display: 'block' }}
+      >
+        <div
+          style={{ background: 'white', borderRadius: '10px', padding: '1rem', border: `1px solid ${colBorder}`, cursor: 'pointer', transition: 'all 0.15s', position: 'relative', overflow: 'hidden' }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(14,45,110,0.1)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none' }}
+        >
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: accentColor, borderRadius: '10px 0 0 10px' }} />
+
+          <div style={{ paddingLeft: '8px', paddingRight: '20px' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E', marginBottom: '6px', lineHeight: 1.4, display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+              {card.title}
+              <span style={{ fontSize: '10px', fontWeight: 700, padding: '1px 6px', borderRadius: '99px', background: card.typeColor.bg, color: card.typeColor.color, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {card.typeLabel}
+              </span>
+            </div>
+            {card.unitTitle && (
+              <div style={{ fontSize: '11px', color: '#888780', marginBottom: card.grade != null ? '6px' : 0 }}>{card.unitTitle}</div>
+            )}
+            {isGraded && card.grade != null && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '18px', fontWeight: 700, color: '#166534', fontFamily: "'DM Mono', monospace" }}>{card.grade}</span>
+                <span style={{ fontSize: '11px', color: '#888780' }}>/ 100</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Link>
+      <button
+        onClick={onRemove}
+        title="remove from to-do"
+        style={{ position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(255,255,255,0.95)', border: `1px solid ${colBorder}`, color: '#888780', cursor: 'pointer', fontSize: '14px', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, fontFamily: "'DM Sans', sans-serif" }}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
 
 function AssignmentKanbanCard({ card, classroomId, colColor, colBorder, onView }: {
   card: AssignmentCard

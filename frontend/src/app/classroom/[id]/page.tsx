@@ -59,6 +59,7 @@ interface Classroom {
   late_penalty_max: number
   discussion_name_display?: 'first_name' | 'first_last_initial' | 'full_name'
   auto_grade_test_cases?: boolean
+  auto_add_assigned_to_todo?: boolean
 }
 
 interface StudentProgress {
@@ -914,6 +915,29 @@ export default function ClassroomPage() {
                 late_penalty_max: classroom.late_penalty_max ?? 0,
               }}
             />
+
+            <div style={{ marginTop: '1.5rem', padding: '1.25rem', border: '1px solid rgba(14,45,110,0.08)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '240px' }}>
+                <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>assigned auto-adds to to-do</h4>
+                <p style={{ margin: 0, fontSize: '12px', color: '#888780', lineHeight: 1.55 }}>
+                  When on, every lesson, project, and curriculum assignment you assign drops automatically into every student&apos;s to-do column on their kanban board. Students can&apos;t remove these manually — the per-item and per-unit add buttons in their classroom view become checked + greyed.
+                </p>
+              </div>
+              <div
+                onClick={async () => {
+                  const next = !classroom.auto_add_assigned_to_todo
+                  try {
+                    await api.patch(`/classrooms/${classroomId}`, { auto_add_assigned_to_todo: next })
+                    setClassroom(c => c ? { ...c, auto_add_assigned_to_todo: next } : c)
+                  } catch (err: any) {
+                    alert(err.message || 'Could not update.')
+                  }
+                }}
+                style={{ width: '44px', height: '24px', borderRadius: '99px', background: classroom.auto_add_assigned_to_todo ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <div style={{ position: 'absolute', top: '3px', left: classroom.auto_add_assigned_to_todo ? '23px' : '3px', width: '18px', height: '18px', borderRadius: '50%', background: 'white', transition: 'left 0.15s' }} />
+              </div>
+            </div>
 
             <div style={{ marginTop: '1.5rem', padding: '1.25rem', border: '1px solid rgba(14,45,110,0.08)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: '240px' }}>

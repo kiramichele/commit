@@ -58,6 +58,7 @@ interface Classroom {
   name: string
   description: string
   discussion_enabled?: boolean
+  auto_add_assigned_to_todo?: boolean
 }
 
 interface CurricStatus {
@@ -82,6 +83,10 @@ export default function StudentClassroomPage() {
   const [curriculumAssignmentsByUnitTitle, setCurriculumAssignmentsByUnitTitle] = useState<Record<string, UnitWithProjects['curriculum_assignments']>>({})
   const [curricStatus, setCurricStatus] = useState<Record<string, CurricStatus>>({})
   const [units, setUnits] = useState<UnitWithProjects[]>([])
+  const [todoIds, setTodoIds] = useState<{ lesson: Set<string>; project: Set<string>; curriculum_assignment: Set<string> }>({
+    lesson: new Set(), project: new Set(), curriculum_assignment: new Set(),
+  })
+  const [todoBusy, setTodoBusy] = useState<string | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
 
   useEffect(() => {
@@ -99,7 +104,7 @@ export default function StudentClassroomPage() {
   const fetchData = async () => {
     setDataLoading(true)
     try {
-      const [classroomData, assignmentsData, lessonsData, unitsData, unlocksData, curricStatusData] = await Promise.all([
+      const [classroomData, assignmentsData, lessonsData, unitsData, unlocksData, curricStatusData, todoData] = await Promise.all([
         api.get<Classroom>(`/classrooms/${classroomId}`),
         api.get<Assignment[]>(`/assignments/?classroom_id=${classroomId}`),
         api.get<UnlockedLesson[]>(`/curriculum/classroom/${classroomId}/unlocked`),
@@ -110,8 +115,16 @@ export default function StudentClassroomPage() {
         api.get<Record<string, CurricStatus>>(
           `/curriculum/classroom/${classroomId}/my-curric-status`
         ).catch(() => ({} as Record<string, CurricStatus>)),
+        api.get<{ lesson: string[]; project: string[]; curriculum_assignment: string[] }>(
+          `/todo/me?classroom_id=${classroomId}`
+        ).catch(() => ({ lesson: [], project: [], curriculum_assignment: [] })),
       ])
       setCurricStatus(curricStatusData || {})
+      setTodoIds({
+        lesson: new Set(todoData.lesson || []),
+        project: new Set(todoData.project || []),
+        curriculum_assignment: new Set(todoData.curriculum_assignment || []),
+      })
       setClassroom(classroomData)
       setAssignments(assignmentsData || [])
       setLessons(lessonsData || [])
@@ -170,6 +183,70 @@ export default function StudentClassroomPage() {
 
   const getSubmission = (assignmentId: string) =>
     submissions.find(s => s.assignment_id === assignmentId)
+
+  const autoOn = !!classroom?.auto_add_assigned_to_todo
+
+  const toggleTodo = async (kind: 'lesson' | 'project' | 'curriculum_assignment', targetId: string) => {
+    if (autoOn) return  // grayed out — nothing to toggle
+    const busyKey = `${kind}:${targetId}`
+    setTodoBusy(busyKey)
+    const present = todoIds[kind].has(targetId)
+    try {
+      if (present) {
+        await api.delete(`/todo/me?classroom_id=${classroomId}&kind=${kind}&target_id=${targetId}`)
+        setTodoIds(prev => {
+          const next = new Set(prev[kind]); next.delete(targetId)
+          return { ...prev, [kind]: next }
+        })
+      } else {
+        await api.post(`/todo/me`, { classroom_id: classroomId, kind, target_id: targetId })
+        setTodoIds(prev => ({ ...prev, [kind]: new Set(prev[kind]).add(targetId) }))
+      }
+    } catch (err: any) {
+      alert(err.message || 'Could not update to-do.')
+    } finally {
+      setTodoBusy(null)
+    }
+  }
+
+  const addUnitToTodo = async (unitId: string) => {
+    if (autoOn) return
+    const unit = units.find(u => u.id === unitId)
+    if (!unit) return
+    const busyKey = `unit:${unitId}`
+    setTodoBusy(busyKey)
+    try {
+      const items: Array<{ kind: string; target_id: string }> = []
+      const discussionsAllowed = classroom?.discussion_enabled !== false
+      const unitLessons = lessonsByUnit[unit.title] || []
+      for (const ul of unitLessons) {
+        if (ul.lesson_id) items.push({ kind: 'lesson', target_id: ul.lesson_id })
+      }
+      for (const p of (projectsByUnitTitle[unit.title] || [])) {
+        items.push({ kind: 'project', target_id: p.id })
+      }
+      for (const ca of (curriculumAssignmentsByUnitTitle[unit.title] || [])) {
+        if (!discussionsAllowed && ca.assignment_type === 'discussion') continue
+        items.push({ kind: 'curriculum_assignment', target_id: ca.id })
+      }
+      await api.post(`/todo/me/bulk`, { classroom_id: classroomId, items })
+      setTodoIds(prev => {
+        const lesson = new Set(prev.lesson)
+        const project = new Set(prev.project)
+        const curriculum_assignment = new Set(prev.curriculum_assignment)
+        for (const it of items) {
+          if (it.kind === 'lesson') lesson.add(it.target_id)
+          else if (it.kind === 'project') project.add(it.target_id)
+          else if (it.kind === 'curriculum_assignment') curriculum_assignment.add(it.target_id)
+        }
+        return { lesson, project, curriculum_assignment }
+      })
+    } catch (err: any) {
+      alert(err.message || 'Could not bulk-add to to-do.')
+    } finally {
+      setTodoBusy(null)
+    }
+  }
 
   const getAssignmentStatus = (assignment: Assignment) => {
     const sub = getSubmission(assignment.id)
@@ -490,15 +567,70 @@ export default function StudentClassroomPage() {
 
                     if (rows.length === 0) return null
 
+                    // Unit-level "all in to-do?" check: covers every
+                    // assignable row that has a todo toggle (lessons,
+                    // projects, curric assignments — not teacher
+                    // classroom assignments, which are always on the
+                    // kanban implicitly).
+                    const togglableRows = rows.filter(r => r.kind !== 'teacher_assignment')
+                    const allInTodo = togglableRows.length > 0 && togglableRows.every(r => {
+                      if (r.kind === 'lesson') return todoIds.lesson.has(r.id)
+                      if (r.kind === 'project') return todoIds.project.has(r.id)
+                      if (r.kind === 'curriculum') return todoIds.curriculum_assignment.has(r.id)
+                      return true
+                    })
+                    const unitBusy = todoBusy === `unit:${unit.id}`
+                    const unitBtnDisabled = autoOn || togglableRows.length === 0 || unitBusy
+
                     return (
                       <div key={unit.id} style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
-                        <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)' }}>
+                        <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
                           <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unit.title}</span>
+                          {togglableRows.length > 0 && (
+                            <button
+                              onClick={() => addUnitToTodo(unit.id)}
+                              disabled={unitBtnDisabled}
+                              title={autoOn ? 'auto-add is on — every assigned item is already on your to-do' : (allInTodo ? 'every item already on your to-do' : 'add every item in this unit to your to-do')}
+                              style={{
+                                padding: '5px 12px', borderRadius: '8px', border: 'none',
+                                background: (autoOn || allInTodo) ? '#DCFCE7' : '#1A56DB',
+                                color: (autoOn || allInTodo) ? '#166534' : 'white',
+                                fontSize: '11px', fontWeight: 600, cursor: unitBtnDisabled ? 'default' : 'pointer',
+                                opacity: unitBtnDisabled ? 0.7 : 1,
+                                fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {unitBusy ? '...' : autoOn ? '✓ auto-added' : allInTodo ? '✓ unit on to-do' : '+ add unit to to-do'}
+                            </button>
+                          )}
                         </div>
 
                         {rows.map((row, i) => {
                           const isLast = i === rows.length - 1
                           const rowBorder = isLast ? 'none' : '1px solid rgba(14,45,110,0.05)'
+                          const todoBtn = (kind: 'lesson' | 'project' | 'curriculum_assignment', id: string) => {
+                            const present = todoIds[kind].has(id)
+                            const busy = todoBusy === `${kind}:${id}`
+                            const disabled = autoOn || busy
+                            const label = busy ? '...' : autoOn ? '✓ auto-added' : present ? '✓ on to-do' : '+ to-do'
+                            return (
+                              <button
+                                onClick={() => toggleTodo(kind, id)}
+                                disabled={disabled}
+                                title={autoOn ? 'auto-add is on — every assigned item is already on your to-do' : present ? 'remove from your to-do' : 'add to your to-do'}
+                                style={{
+                                  padding: '5px 10px', borderRadius: '8px', border: 'none',
+                                  background: (autoOn || present) ? '#DCFCE7' : '#EBF1FD',
+                                  color: (autoOn || present) ? '#166534' : '#0C447C',
+                                  fontSize: '11px', fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+                                  opacity: disabled ? 0.7 : 1,
+                                  fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {label}
+                              </button>
+                            )
+                          }
 
                           if (row.kind === 'lesson') {
                             const lesson = row.data
@@ -520,6 +652,7 @@ export default function StudentClassroomPage() {
                                     <StandardsBadgeList tags={(lesson as any).standards_tags} max={2} />
                                   )}
                                 </div>
+                                {todoBtn('lesson', lesson.id)}
                                 <Link
                                   href={`/lesson/${lesson.id}`}
                                   style={{ padding: '8px 18px', background: isDone ? '#F1EFE8' : '#1A56DB', color: isDone ? '#5F5E5A' : 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}
@@ -544,6 +677,7 @@ export default function StudentClassroomPage() {
                                   </div>
                                   {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
                                 </div>
+                                {todoBtn('project', p.id)}
                                 <Link href={`/project/${p.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                                   open →
                                 </Link>
@@ -570,6 +704,7 @@ export default function StudentClassroomPage() {
                                     )}
                                   </div>
                                 </div>
+                                {todoBtn('curriculum_assignment', a.id)}
                                 <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '8px 18px', background: submitted ? '#F1EFE8' : '#1A56DB', color: submitted ? '#5F5E5A' : 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                                   {submitted ? 'view →' : 'open →'}
                                 </Link>

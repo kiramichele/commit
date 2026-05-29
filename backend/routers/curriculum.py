@@ -296,6 +296,7 @@ async def unlock_lesson(
         "lesson_id": lesson_id,
         "unlocked_by": user.profile_id,
     }).execute()
+    _auto_add_todo(classroom_id, [{"kind": "lesson", "target_id": lesson_id}])
 
     return {"unlocked": True}
 
@@ -333,6 +334,17 @@ def _assert_owns_classroom(classroom_id: str, profile_id: str):
     )
     if not classroom or not classroom.data:
         raise HTTPException(status_code=404, detail="Classroom not found.")
+
+
+def _auto_add_todo(classroom_id: str, items: list):
+    """Best-effort fan-out into every member's todo list. Imported
+    inline so we don't introduce a circular import at module load.
+    """
+    try:
+        from routers.todo import auto_add_for_classroom
+        auto_add_for_classroom(classroom_id, items)
+    except Exception as e:
+        print(f"auto_add_for_classroom failed: {e}")
 
 
 @router.get("/classroom/{classroom_id}/unlocks")
@@ -381,6 +393,7 @@ async def unlock_project(
         {"classroom_id": classroom_id, "project_id": project_id, "unlocked_by": user.profile_id},
         on_conflict="classroom_id,project_id",
     ).execute()
+    _auto_add_todo(classroom_id, [{"kind": "project", "target_id": project_id}])
     return {"unlocked": True}
 
 
@@ -408,6 +421,7 @@ async def unlock_curric_assignment(
         {"classroom_id": classroom_id, "curriculum_assignment_id": ca_id, "unlocked_by": user.profile_id},
         on_conflict="classroom_id,curriculum_assignment_id",
     ).execute()
+    _auto_add_todo(classroom_id, [{"kind": "curriculum_assignment", "target_id": ca_id}])
     return {"unlocked": True}
 
 
@@ -472,6 +486,12 @@ async def unlock_unit(
             [{"classroom_id": classroom_id, "curriculum_assignment_id": a["id"], "unlocked_by": user.profile_id} for a in assignments],
             on_conflict="classroom_id,curriculum_assignment_id",
         ).execute()
+
+    _auto_add_todo(classroom_id, [
+        *[{"kind": "lesson",                 "target_id": l["id"]} for l in lessons],
+        *[{"kind": "project",                "target_id": p["id"]} for p in projects],
+        *[{"kind": "curriculum_assignment",  "target_id": a["id"]} for a in assignments],
+    ])
 
     return {
         "lessons": len(lessons),

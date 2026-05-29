@@ -42,6 +42,7 @@ class ClassroomUpdate(BaseModel):
     discussion_enabled: Optional[bool] = None
     discussion_name_display: Optional[str] = None  # 'first_name' | 'first_last_initial' | 'full_name'
     auto_grade_test_cases: Optional[bool] = None
+    auto_add_assigned_to_todo: Optional[bool] = None
     archived: Optional[bool] = None
 
 
