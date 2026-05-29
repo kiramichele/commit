@@ -133,6 +133,10 @@ export default function ClassroomPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [curriculumUnits, setCurriculumUnits] = useState<CurriculumUnit[]>([])
   const [curriculumLoading, setCurriculumLoading] = useState(false)
+  const [unlockedLessonIds, setUnlockedLessonIds] = useState<Set<string>>(new Set())
+  const [unlockedProjectIds, setUnlockedProjectIds] = useState<Set<string>>(new Set())
+  const [unlockedAsstIds, setUnlockedAsstIds] = useState<Set<string>>(new Set())
+  const [busyUnlock, setBusyUnlock] = useState<string | null>(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [copiedCode, setCopiedCode] = useState(false)
   const [showAddStudent, setShowAddStudent] = useState(false)
@@ -164,15 +168,81 @@ export default function ClassroomPage() {
   }, [profile, classroomId])
 
   // Lazy-fetch the curriculum the first time the teacher opens that tab.
+  // Also pull the per-classroom unlock id sets so we can render
+  // assign/unassign toggles next to every item.
   useEffect(() => {
     if (tab !== 'curriculum' || !profile) return
     if (curriculumUnits.length > 0 || curriculumLoading) return
     setCurriculumLoading(true)
-    api.get<CurriculumUnit[]>('/curriculum/units')
-      .then(data => setCurriculumUnits(data || []))
-      .catch(() => setCurriculumUnits([]))
+    Promise.all([
+      api.get<CurriculumUnit[]>('/curriculum/units').catch(() => [] as CurriculumUnit[]),
+      api.get<{ lesson_ids: string[]; project_ids: string[]; curriculum_assignment_ids: string[] }>(
+        `/curriculum/classroom/${classroomId}/unlocks`
+      ).catch(() => ({ lesson_ids: [], project_ids: [], curriculum_assignment_ids: [] })),
+    ])
+      .then(([data, unlocks]) => {
+        setCurriculumUnits(data || [])
+        setUnlockedLessonIds(new Set(unlocks.lesson_ids))
+        setUnlockedProjectIds(new Set(unlocks.project_ids))
+        setUnlockedAsstIds(new Set(unlocks.curriculum_assignment_ids))
+      })
       .finally(() => setCurriculumLoading(false))
   }, [tab, profile])
+
+  const toggleAssign = async (
+    kind: 'lesson' | 'project' | 'assignment',
+    id: string,
+    currentlyAssigned: boolean,
+  ) => {
+    const busyKey = `${kind}:${id}`
+    setBusyUnlock(busyKey)
+    const path = kind === 'lesson'
+      ? `/curriculum/classroom/${classroomId}/unlock/${id}`
+      : kind === 'project'
+        ? `/curriculum/classroom/${classroomId}/unlock-project/${id}`
+        : `/curriculum/classroom/${classroomId}/unlock-assignment/${id}`
+    try {
+      if (currentlyAssigned) {
+        await api.delete(path)
+        if (kind === 'lesson') setUnlockedLessonIds(s => { const n = new Set(s); n.delete(id); return n })
+        else if (kind === 'project') setUnlockedProjectIds(s => { const n = new Set(s); n.delete(id); return n })
+        else setUnlockedAsstIds(s => { const n = new Set(s); n.delete(id); return n })
+      } else {
+        await api.post(path, {})
+        if (kind === 'lesson') setUnlockedLessonIds(s => new Set(s).add(id))
+        else if (kind === 'project') setUnlockedProjectIds(s => new Set(s).add(id))
+        else setUnlockedAsstIds(s => new Set(s).add(id))
+      }
+    } catch (err: any) {
+      alert(err.message || 'Could not update assignment.')
+    } finally {
+      setBusyUnlock(null)
+    }
+  }
+
+  const toggleAssignUnit = async (unitId: string, currentlyAllAssigned: boolean) => {
+    const busyKey = `unit:${unitId}`
+    setBusyUnlock(busyKey)
+    const path = `/curriculum/classroom/${classroomId}/unlock-unit/${unitId}`
+    try {
+      if (currentlyAllAssigned) {
+        await api.delete(path)
+      } else {
+        await api.post(path, {})
+      }
+      // Refresh unlocks from server to avoid drift.
+      const unlocks = await api.get<{ lesson_ids: string[]; project_ids: string[]; curriculum_assignment_ids: string[] }>(
+        `/curriculum/classroom/${classroomId}/unlocks`
+      )
+      setUnlockedLessonIds(new Set(unlocks.lesson_ids))
+      setUnlockedProjectIds(new Set(unlocks.project_ids))
+      setUnlockedAsstIds(new Set(unlocks.curriculum_assignment_ids))
+    } catch (err: any) {
+      alert(err.message || 'Could not update unit.')
+    } finally {
+      setBusyUnlock(null)
+    }
+  }
 
   // Move a teacher's classroom assignment up or down in the merged curriculum
   // view. We slot it next to the adjacent item by setting curriculum_order to
@@ -549,17 +619,35 @@ export default function ClassroomPage() {
                   | { kind: 'teacher_assignment'; data: Assignment; order_index: number; id: string }
                 const teacherAssignmentsInUnit = assignments
                   .filter(a => a.curriculum_unit_id === unit.id)
+                const discussionsAllowed = classroom?.discussion_enabled !== false
                 const merged: MergedRow[] = [
                   ...(unit.lessons || []).filter(l => l.is_published).map(l => ({ kind: 'lesson' as const, data: l, order_index: l.order_index, id: l.id })),
                   ...(unit.projects || []).filter(p => p.is_published).map(p => ({ kind: 'project' as const, data: p, order_index: p.order_index, id: p.id })),
-                  ...(unit.curriculum_assignments || []).filter(a => a.is_published).map(a => ({ kind: 'assignment' as const, data: a, order_index: a.order_index, id: a.id })),
-                  ...teacherAssignmentsInUnit.map(a => ({ kind: 'teacher_assignment' as const, data: a, order_index: a.curriculum_order || 9999, id: a.id })),
+                  ...(unit.curriculum_assignments || [])
+                    .filter(a => a.is_published)
+                    .filter(a => discussionsAllowed || a.assignment_type !== 'discussion')
+                    .map(a => ({ kind: 'assignment' as const, data: a, order_index: a.order_index, id: a.id })),
+                  ...teacherAssignmentsInUnit
+                    .filter(a => discussionsAllowed || a.assignment_type !== 'discussion')
+                    .map(a => ({ kind: 'teacher_assignment' as const, data: a, order_index: a.curriculum_order || 9999, id: a.id })),
                 ].sort((a, b) => {
                   if (a.order_index !== b.order_index) return a.order_index - b.order_index
                   const rank = { lesson: 0, project: 1, assignment: 2, teacher_assignment: 3 }
                   return rank[a.kind] - rank[b.kind]
                 })
                 if (merged.length === 0) return null
+
+                // Unit-level "assign all / unassign all" toggle. The unit is
+                // considered fully-assigned when every lesson + project +
+                // assignment is already unlocked for this classroom.
+                const unitContentIds = merged.filter(m => m.kind !== 'teacher_assignment')
+                const allAssigned = unitContentIds.length > 0 && unitContentIds.every(m => {
+                  if (m.kind === 'lesson') return unlockedLessonIds.has(m.id)
+                  if (m.kind === 'project') return unlockedProjectIds.has(m.id)
+                  if (m.kind === 'assignment') return unlockedAsstIds.has(m.id)
+                  return true
+                })
+                const unitBusy = busyUnlock === `unit:${unit.id}`
 
                 const typeColors: Record<string, { bg: string; color: string; label: string }> = {
                   code:     { bg: '#EBF1FD', color: '#0C447C', label: 'coding' },
@@ -571,13 +659,53 @@ export default function ClassroomPage() {
 
                 return (
                   <div key={unit.id} style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', overflow: 'hidden' }}>
-                    <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unit.title}</span>
-                      <span style={{ fontSize: '11px', color: '#888780' }}>{merged.length} item(s)</span>
+                    <div style={{ padding: '12px 1.25rem', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{unit.title}</span>
+                        <span style={{ fontSize: '11px', color: '#888780' }}>· {merged.length} item(s)</span>
+                      </div>
+                      {unitContentIds.length > 0 && (
+                        <button
+                          onClick={() => toggleAssignUnit(unit.id, allAssigned)}
+                          disabled={unitBusy}
+                          style={{
+                            padding: '6px 12px', borderRadius: '8px', border: 'none',
+                            background: allAssigned ? '#DCFCE7' : '#1A56DB',
+                            color: allAssigned ? '#166534' : 'white',
+                            fontSize: '12px', fontWeight: 600, cursor: unitBusy ? 'wait' : 'pointer',
+                            fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
+                          }}
+                          title={allAssigned ? 'unassign every lesson, project, and assignment in this unit' : 'assign every lesson, project, and assignment in this unit'}
+                        >
+                          {unitBusy ? '...' : allAssigned ? '✓ unit assigned · unassign' : '+ assign unit'}
+                        </button>
+                      )}
                     </div>
 
                     {merged.map((item, i) => {
                       const stepNum = i + 1
+                      const assignBtn = (kind: 'lesson' | 'project' | 'assignment', id: string) => {
+                        const assigned = kind === 'lesson' ? unlockedLessonIds.has(id)
+                          : kind === 'project' ? unlockedProjectIds.has(id)
+                          : unlockedAsstIds.has(id)
+                        const busy = busyUnlock === `${kind}:${id}`
+                        return (
+                          <button
+                            onClick={() => toggleAssign(kind, id, assigned)}
+                            disabled={busy}
+                            style={{
+                              padding: '6px 12px', borderRadius: '8px', border: 'none',
+                              background: assigned ? '#DCFCE7' : '#EBF1FD',
+                              color: assigned ? '#166534' : '#0C447C',
+                              fontSize: '12px', fontWeight: 600, cursor: busy ? 'wait' : 'pointer',
+                              fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap',
+                            }}
+                            title={assigned ? 'visible to students — click to unassign' : 'click to make visible to students'}
+                          >
+                            {busy ? '...' : assigned ? '✓ assigned' : '+ assign'}
+                          </button>
+                        )
+                      }
                       if (item.kind === 'lesson') {
                         const l = item.data
                         return (
@@ -589,6 +717,7 @@ export default function ClassroomPage() {
                                 <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: '#EBF1FD', color: '#0C447C', textTransform: 'uppercase', letterSpacing: '0.05em' }}>lesson</span>
                               </div>
                             </div>
+                            {assignBtn('lesson', l.id)}
                             <Link href={`/lesson/${l.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                           </div>
                         )
@@ -605,6 +734,7 @@ export default function ClassroomPage() {
                               </div>
                               {p.description && <div style={{ fontSize: '12px', color: '#5F5E5A', marginTop: '2px' }}>{p.description}</div>}
                             </div>
+                            {assignBtn('project', p.id)}
                             <Link href={`/project/${p.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                           </div>
                         )
@@ -644,6 +774,7 @@ export default function ClassroomPage() {
                                   ⚏ pairings
                                 </button>
                               )}
+                              {assignBtn('assignment', a.id)}
                               <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                               <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
                             </div>
@@ -825,7 +956,9 @@ export default function ClassroomPage() {
                 <div>
                   <label style={labelStyle}>assignment type</label>
                   <select value={newAssignment.assignment_type} onChange={e => setNewAssignment(s => ({ ...s, assignment_type: e.target.value }))} style={{ ...inputStyle, cursor: 'pointer' }}>
-                    {ASSIGNMENT_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    {ASSIGNMENT_TYPE_OPTIONS
+                      .filter(o => classroom?.discussion_enabled !== false || o.value !== 'discussion')
+                      .map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                 </div>
                 {newAssignment.assignment_type === 'code' && (

@@ -87,24 +87,38 @@ export default function StudentClassroomPage() {
   const fetchData = async () => {
     setDataLoading(true)
     try {
-      const [classroomData, assignmentsData, lessonsData, unitsData] = await Promise.all([
+      const [classroomData, assignmentsData, lessonsData, unitsData, unlocksData] = await Promise.all([
         api.get<Classroom>(`/classrooms/${classroomId}`),
         api.get<Assignment[]>(`/assignments/?classroom_id=${classroomId}`),
         api.get<UnlockedLesson[]>(`/curriculum/classroom/${classroomId}/unlocked`),
         api.get<UnitWithProjects[]>(`/curriculum/units`).catch(() => []),
+        api.get<{ project_ids: string[]; curriculum_assignment_ids: string[] }>(
+          `/curriculum/classroom/${classroomId}/unlocks`
+        ).catch(() => ({ project_ids: [], curriculum_assignment_ids: [] })),
       ])
       setClassroom(classroomData)
       setAssignments(assignmentsData || [])
       setLessons(lessonsData || [])
+
+      // Per-classroom assignment visibility — projects and curriculum
+      // assignments only show if the teacher has assigned them. The
+      // backfill in migration 019 means existing classrooms keep
+      // seeing everything they were seeing before.
+      const projectUnlocks = new Set(unlocksData.project_ids || [])
+      const asstUnlocks = new Set(unlocksData.curriculum_assignment_ids || [])
 
       // Build unitTitle → projects + unitTitle → curriculum assignments maps
       // so we can render them alongside lessons in the same per-unit blocks.
       const projectsMap: Record<string, UnitWithProjects['projects']> = {}
       const curricAsstMap: Record<string, UnitWithProjects['curriculum_assignments']> = {}
       for (const u of unitsData || []) {
-        const published = (u.projects || []).filter(p => p.is_published).sort((a, b) => a.order_index - b.order_index)
+        const published = (u.projects || [])
+          .filter(p => p.is_published && projectUnlocks.has(p.id))
+          .sort((a, b) => a.order_index - b.order_index)
         if (published.length) projectsMap[u.title] = published
-        const publishedAsst = (u.curriculum_assignments || []).filter(a => a.is_published).sort((a, b) => a.order_index - b.order_index)
+        const publishedAsst = (u.curriculum_assignments || [])
+          .filter(a => a.is_published && asstUnlocks.has(a.id))
+          .sort((a, b) => a.order_index - b.order_index)
         if (publishedAsst.length) curricAsstMap[u.title] = publishedAsst
       }
       setProjectsByUnitTitle(projectsMap)

@@ -314,6 +314,208 @@ async def lock_lesson(
 
 
 # ============================================================
+# PER-CLASSROOM ASSIGNMENT OF PROJECTS + CURRICULUM ASSIGNMENTS
+# ============================================================
+# Mirrors the lesson-unlock model so a teacher can choose which
+# projects and curriculum assignments their classroom sees. Backfill
+# in migration 019 preserves existing visibility.
+# ============================================================
+
+
+def _assert_owns_classroom(classroom_id: str, profile_id: str):
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("id")
+        .eq("id", classroom_id)
+        .eq("teacher_id", profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not classroom or not classroom.data:
+        raise HTTPException(status_code=404, detail="Classroom not found.")
+
+
+@router.get("/classroom/{classroom_id}/unlocks")
+async def list_classroom_unlocks(
+    classroom_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the id sets of every lesson, project, and curriculum
+    assignment unlocked for this classroom. Students and teachers can
+    both call this — students use it to filter what they see, teachers
+    use it to render assign/unassign toggles in their curriculum tab.
+    """
+    lesson_rows = (
+        supabase_admin.table("classroom_lesson_unlocks")
+        .select("lesson_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    project_rows = (
+        supabase_admin.table("classroom_project_unlocks")
+        .select("project_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    asst_rows = (
+        supabase_admin.table("classroom_curric_assignment_unlocks")
+        .select("curriculum_assignment_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    return {
+        "lesson_ids": [r["lesson_id"] for r in lesson_rows],
+        "project_ids": [r["project_id"] for r in project_rows],
+        "curriculum_assignment_ids": [r["curriculum_assignment_id"] for r in asst_rows],
+    }
+
+
+@router.post("/classroom/{classroom_id}/unlock-project/{project_id}")
+async def unlock_project(
+    classroom_id: str,
+    project_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    _assert_owns_classroom(classroom_id, user.profile_id)
+    supabase_admin.table("classroom_project_unlocks").upsert(
+        {"classroom_id": classroom_id, "project_id": project_id, "unlocked_by": user.profile_id},
+        on_conflict="classroom_id,project_id",
+    ).execute()
+    return {"unlocked": True}
+
+
+@router.delete("/classroom/{classroom_id}/unlock-project/{project_id}")
+async def lock_project(
+    classroom_id: str,
+    project_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    _assert_owns_classroom(classroom_id, user.profile_id)
+    supabase_admin.table("classroom_project_unlocks").delete().eq(
+        "classroom_id", classroom_id
+    ).eq("project_id", project_id).execute()
+    return {"locked": True}
+
+
+@router.post("/classroom/{classroom_id}/unlock-assignment/{ca_id}")
+async def unlock_curric_assignment(
+    classroom_id: str,
+    ca_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    _assert_owns_classroom(classroom_id, user.profile_id)
+    supabase_admin.table("classroom_curric_assignment_unlocks").upsert(
+        {"classroom_id": classroom_id, "curriculum_assignment_id": ca_id, "unlocked_by": user.profile_id},
+        on_conflict="classroom_id,curriculum_assignment_id",
+    ).execute()
+    return {"unlocked": True}
+
+
+@router.delete("/classroom/{classroom_id}/unlock-assignment/{ca_id}")
+async def lock_curric_assignment(
+    classroom_id: str,
+    ca_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    _assert_owns_classroom(classroom_id, user.profile_id)
+    supabase_admin.table("classroom_curric_assignment_unlocks").delete().eq(
+        "classroom_id", classroom_id
+    ).eq("curriculum_assignment_id", ca_id).execute()
+    return {"locked": True}
+
+
+@router.post("/classroom/{classroom_id}/unlock-unit/{unit_id}")
+async def unlock_unit(
+    classroom_id: str,
+    unit_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Unlocks every published lesson, project, and curriculum
+    assignment in a unit. Idempotent via upsert.
+    """
+    _assert_owns_classroom(classroom_id, user.profile_id)
+
+    lessons = (
+        supabase_admin.table("lessons")
+        .select("id")
+        .eq("unit_id", unit_id)
+        .eq("is_published", True)
+        .execute()
+    ).data or []
+    projects = (
+        supabase_admin.table("projects")
+        .select("id")
+        .eq("unit_id", unit_id)
+        .eq("is_published", True)
+        .execute()
+    ).data or []
+    assignments = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id")
+        .eq("unit_id", unit_id)
+        .eq("is_published", True)
+        .execute()
+    ).data or []
+
+    if lessons:
+        supabase_admin.table("classroom_lesson_unlocks").upsert(
+            [{"classroom_id": classroom_id, "lesson_id": l["id"], "unlocked_by": user.profile_id} for l in lessons],
+            on_conflict="classroom_id,lesson_id",
+        ).execute()
+    if projects:
+        supabase_admin.table("classroom_project_unlocks").upsert(
+            [{"classroom_id": classroom_id, "project_id": p["id"], "unlocked_by": user.profile_id} for p in projects],
+            on_conflict="classroom_id,project_id",
+        ).execute()
+    if assignments:
+        supabase_admin.table("classroom_curric_assignment_unlocks").upsert(
+            [{"classroom_id": classroom_id, "curriculum_assignment_id": a["id"], "unlocked_by": user.profile_id} for a in assignments],
+            on_conflict="classroom_id,curriculum_assignment_id",
+        ).execute()
+
+    return {
+        "lessons": len(lessons),
+        "projects": len(projects),
+        "curriculum_assignments": len(assignments),
+    }
+
+
+@router.delete("/classroom/{classroom_id}/unlock-unit/{unit_id}")
+async def lock_unit(
+    classroom_id: str,
+    unit_id: str,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Removes every per-classroom unlock row for content in this unit."""
+    _assert_owns_classroom(classroom_id, user.profile_id)
+
+    lessons = (
+        supabase_admin.table("lessons").select("id").eq("unit_id", unit_id).execute()
+    ).data or []
+    projects = (
+        supabase_admin.table("projects").select("id").eq("unit_id", unit_id).execute()
+    ).data or []
+    assignments = (
+        supabase_admin.table("curriculum_assignments").select("id").eq("unit_id", unit_id).execute()
+    ).data or []
+
+    if lessons:
+        supabase_admin.table("classroom_lesson_unlocks").delete().eq("classroom_id", classroom_id).in_(
+            "lesson_id", [l["id"] for l in lessons]
+        ).execute()
+    if projects:
+        supabase_admin.table("classroom_project_unlocks").delete().eq("classroom_id", classroom_id).in_(
+            "project_id", [p["id"] for p in projects]
+        ).execute()
+    if assignments:
+        supabase_admin.table("classroom_curric_assignment_unlocks").delete().eq("classroom_id", classroom_id).in_(
+            "curriculum_assignment_id", [a["id"] for a in assignments]
+        ).execute()
+
+    return {"locked": True}
+
+
+# ============================================================
 # CURRICULUM ASSIGNMENTS (student-facing reads + responses)
 # ============================================================
 

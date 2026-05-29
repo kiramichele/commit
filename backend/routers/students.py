@@ -30,17 +30,26 @@ def _can_view_student(viewer: CurrentUser, student_id: str) -> bool:
     if viewer.profile_id == student_id:
         return True
     if viewer.role == "teacher":
-        # Does the teacher own any classroom this student is in?
-        rows = (
+        # Two explicit lookups instead of an implicit FK join — the !inner
+        # form returns inconsistent shapes in some supabase-py versions
+        # and was the source of intermittent 500s on this endpoint.
+        member_rows = (
             supabase_admin.table("classroom_members")
-            .select("classroom_id, classrooms!inner(teacher_id)")
+            .select("classroom_id")
             .eq("student_id", student_id)
             .execute()
         ).data or []
-        for r in rows:
-            cls = r.get("classrooms") or {}
-            if cls.get("teacher_id") == viewer.profile_id:
-                return True
+        if not member_rows:
+            return False
+        classroom_ids = [r["classroom_id"] for r in member_rows]
+        owned = (
+            supabase_admin.table("classrooms")
+            .select("id")
+            .in_("id", classroom_ids)
+            .eq("teacher_id", viewer.profile_id)
+            .execute()
+        ).data or []
+        return bool(owned)
     return False
 
 
@@ -102,13 +111,18 @@ async def get_student_profile(
         ).data or []
         assignment_type_by_id = {a["id"]: a.get("assignment_type") or "code" for a in assignments_in_classroom}
 
-        subs = (
-            supabase_admin.table("submissions")
-            .select("assignment_id, grade, penalized_grade")
-            .eq("student_id", student_id)
-            .in_("assignment_id", [a["id"] for a in assignments_in_classroom] or ["__none__"])
-            .execute()
-        ).data or []
+        # Skip the IN-query entirely when there are no assignments —
+        # passing a placeholder like "__none__" to a UUID column 500s.
+        if assignments_in_classroom:
+            subs = (
+                supabase_admin.table("submissions")
+                .select("assignment_id, grade, penalized_grade")
+                .eq("student_id", student_id)
+                .in_("assignment_id", [a["id"] for a in assignments_in_classroom])
+                .execute()
+            ).data or []
+        else:
+            subs = []
 
         # Curriculum assignment scores for this student.
         curric_subs = (
