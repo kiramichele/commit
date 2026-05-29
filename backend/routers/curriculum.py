@@ -326,7 +326,13 @@ async def get_curriculum_assignment(
     assignment_id: str,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Returns a published curriculum assignment with its unit info."""
+    """Returns a published curriculum assignment with its unit info.
+    The raw `test_cases` array is stripped before returning — exposing
+    stdin/expected_stdout would let students hardcode outputs, and
+    hidden cases would leak their descriptions. Only a boolean
+    `has_test_cases` flag is exposed; the test runner is server-side
+    via /code/run-tests.
+    """
     response = (
         supabase_admin.table("curriculum_assignments")
         .select("*, units(id, title, order_index)")
@@ -337,7 +343,10 @@ async def get_curriculum_assignment(
     )
     if not response or not response.data:
         raise HTTPException(status_code=404, detail="Assignment not found.")
-    return response.data
+    data = response.data
+    raw_cases = data.pop("test_cases", None) or []
+    data["has_test_cases"] = bool(raw_cases)
+    return data
 
 
 @router.get("/curriculum-assignments/{assignment_id}/html-url")

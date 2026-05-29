@@ -506,6 +506,8 @@ class CurriculumAssignmentCreate(BaseModel):
     pairing_strategy: Optional[str] = None  # 'random' | 'similar_grade' | 'opposite_grade' | 'manual'
     discussion_min_posts: Optional[int] = None
     discussion_min_comments: Optional[int] = None
+    test_cases: Optional[List[dict]] = None  # see _validate_test_cases for shape
+    default_comparison: Optional[str] = None
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -529,10 +531,61 @@ class CurriculumAssignmentUpdate(BaseModel):
     pairing_strategy: Optional[str] = None
     discussion_min_posts: Optional[int] = None
     discussion_min_comments: Optional[int] = None
+    test_cases: Optional[List[dict]] = None
+    default_comparison: Optional[str] = None
 
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review", "discussion"}
 _VALID_PAIRING_STRATEGIES = {"random", "similar_grade", "opposite_grade", "manual"}
+_VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive"}
+
+
+def _validate_test_cases(raw):
+    """Normalizes and validates a list of test cases. Raises 400 on bad
+    input. Returns the cleaned list ready to store as JSONB.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail="test_cases must be a list.")
+    seen_ids = set()
+    cleaned = []
+    for i, tc in enumerate(raw):
+        if not isinstance(tc, dict):
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}] must be an object.")
+        tc_id = (tc.get("id") or "").strip()
+        description = (tc.get("description") or "").strip()
+        if not tc_id:
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].id is required.")
+        if tc_id in seen_ids:
+            raise HTTPException(status_code=400, detail=f"Duplicate test case id: {tc_id!r}.")
+        seen_ids.add(tc_id)
+        if not description:
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].description is required.")
+        if "expected_stdout" not in tc or tc["expected_stdout"] is None:
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].expected_stdout is required.")
+        comparison = tc.get("comparison")
+        if comparison is not None and comparison not in _VALID_COMPARISONS:
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].comparison invalid: {comparison!r}.")
+        weight = tc.get("weight", 1)
+        try:
+            weight = int(weight)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].weight must be an integer.")
+        if weight < 0:
+            raise HTTPException(status_code=400, detail=f"test_cases[{i}].weight must be >= 0.")
+        entry = {
+            "id": tc_id,
+            "description": description,
+            "stdin": tc.get("stdin", "") or "",
+            "expected_stdout": tc["expected_stdout"],
+            "weight": weight,
+            "hidden": bool(tc.get("hidden", False)),
+        }
+        if comparison:
+            entry["comparison"] = comparison
+        cleaned.append(entry)
+    return cleaned
 
 
 def _upload_assignment_html(assignment_id: str, body: str) -> str:
@@ -567,12 +620,15 @@ async def create_curriculum_assignment(
         raise HTTPException(status_code=400, detail="Invalid assignment_type.")
     if body.pairing_strategy and body.pairing_strategy not in _VALID_PAIRING_STRATEGIES:
         raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
+    if body.default_comparison is not None and body.default_comparison not in _VALID_COMPARISONS:
+        raise HTTPException(status_code=400, detail="Invalid default_comparison.")
     unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
     if not unit or not unit.data:
         raise HTTPException(status_code=404, detail="Unit not found.")
 
     raw = body.model_dump()
     html_body = raw.pop("html_body", None)
+    raw["test_cases"] = _validate_test_cases(raw.get("test_cases"))
     row = {**raw, "unit_id": unit_id}
     if row.get("order_index") is None:
         row["order_index"] = _next_order_for("curriculum_assignments", "unit_id", unit_id)
@@ -616,8 +672,14 @@ async def update_curriculum_assignment(
         raise HTTPException(status_code=400, detail="Invalid assignment_type.")
     if body.pairing_strategy and body.pairing_strategy not in _VALID_PAIRING_STRATEGIES:
         raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
+    if body.default_comparison is not None and body.default_comparison not in _VALID_COMPARISONS:
+        raise HTTPException(status_code=400, detail="Invalid default_comparison.")
     raw = body.model_dump()
     html_body = raw.pop("html_body", None)
+    # Validate test_cases shape if the caller is sending them. An empty
+    # list clears the test cases; None means leave them unchanged.
+    if "test_cases" in raw and raw["test_cases"] is not None:
+        raw["test_cases"] = _validate_test_cases(raw["test_cases"])
     updates = {k: v for k, v in raw.items() if v is not None}
 
     if updates:

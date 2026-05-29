@@ -41,6 +41,7 @@ class ClassroomUpdate(BaseModel):
     standup_frequency_days: Optional[int] = None
     discussion_enabled: Optional[bool] = None
     discussion_name_display: Optional[str] = None  # 'first_name' | 'first_last_initial' | 'full_name'
+    auto_grade_test_cases: Optional[bool] = None
     archived: Optional[bool] = None
 
 

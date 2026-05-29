@@ -4,7 +4,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+import asyncio
 import httpx
 import base64
 import os
@@ -50,6 +51,66 @@ class SubmitAssignment(BaseModel):
 class GradeSubmission(BaseModel):
     grade: float
     feedback: Optional[str] = None
+
+
+class RunTests(BaseModel):
+    curriculum_assignment_id: str
+    code: str
+
+
+VALID_COMPARISONS = {"exact", "strip_trailing_whitespace", "case_insensitive"}
+
+
+def _compare_outputs(actual: str, expected: str, mode: str) -> bool:
+    """Applies the chosen comparison rule. Falls back to exact match if
+    the mode string isn't recognized (defensive — admin write path
+    already validates).
+    """
+    if mode == "exact":
+        return actual == expected
+    if mode == "case_insensitive":
+        return actual.lower() == expected.lower()
+    # strip_trailing_whitespace: line-by-line, strip trailing ws.
+    a_lines = [ln.rstrip() for ln in actual.splitlines()]
+    e_lines = [ln.rstrip() for ln in expected.splitlines()]
+    # Trim trailing empty lines so a missing final \n doesn't flag.
+    while a_lines and a_lines[-1] == "":
+        a_lines.pop()
+    while e_lines and e_lines[-1] == "":
+        e_lines.pop()
+    return a_lines == e_lines
+
+
+async def _judge0_run_one(client: httpx.AsyncClient, api_key: str, code: str, stdin: str) -> dict:
+    """Single Judge0 invocation. Returns the raw decoded result."""
+    response = await client.post(
+        "https://judge0-ce.p.rapidapi.com/submissions?base64_encoded=true&wait=true",
+        headers={
+            "x-rapidapi-key": api_key,
+            "x-rapidapi-host": "judge0-ce.p.rapidapi.com",
+            "Content-Type": "application/json",
+        },
+        json={
+            "language_id": 71,
+            "source_code": base64.b64encode(code.encode()).decode(),
+            "stdin": base64.b64encode((stdin or "").encode()).decode(),
+        },
+    )
+    result = response.json()
+
+    def decode(val):
+        if not val:
+            return ""
+        try:
+            return base64.b64decode(val).decode("utf-8")
+        except Exception:
+            return str(val)
+
+    return {
+        "stdout": decode(result.get("stdout", "")),
+        "stderr": decode(result.get("stderr", "")) or decode(result.get("compile_output", "")),
+        "status": result.get("status", {}).get("description", ""),
+    }
 
 
 # ============================================================
@@ -111,6 +172,104 @@ async def run_code(
         raise HTTPException(status_code=408, detail="Code execution timed out.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Execution error: {str(e)}")
+
+
+@router.post("/run-tests")
+async def run_tests(
+    body: RunTests,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Runs the student's code against every test case on a curriculum
+    coding assignment. Each case is executed in a separate Judge0
+    submission (so stdin is isolated), gathered in parallel. Hidden
+    cases that don't pass have their description + expected output
+    blanked out before returning.
+    """
+    api_key = os.getenv("JUDGE0_API_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="Code execution not configured.")
+
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("id, assignment_type, test_cases, default_comparison, is_published")
+        .eq("id", body.curriculum_assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    if not assignment or not assignment.data:
+        raise HTTPException(status_code=404, detail="Assignment not found.")
+    a = assignment.data
+    if a.get("assignment_type") != "code":
+        raise HTTPException(status_code=400, detail="Assignment is not a coding assignment.")
+    if not a.get("is_published") and user.role not in ("teacher", "admin"):
+        raise HTTPException(status_code=404, detail="Assignment not published.")
+
+    cases = a.get("test_cases") or []
+    if not cases:
+        raise HTTPException(status_code=400, detail="No test cases defined for this assignment.")
+
+    default_comparison = a.get("default_comparison") or "strip_trailing_whitespace"
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            judge_results = await asyncio.gather(
+                *[_judge0_run_one(client, api_key, body.code, tc.get("stdin", "")) for tc in cases],
+                return_exceptions=True,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=408, detail="Code execution timed out.")
+
+    results: List[dict] = []
+    earned = 0
+    total = 0
+    for tc, raw in zip(cases, judge_results):
+        weight = int(tc.get("weight", 1) or 0)
+        hidden = bool(tc.get("hidden", False))
+        comparison = tc.get("comparison") or default_comparison
+        if isinstance(raw, Exception):
+            actual = ""
+            stderr = f"Execution error: {raw}"
+            passed = False
+        else:
+            actual = raw.get("stdout", "")
+            stderr = raw.get("stderr", "") or ""
+            status_desc = raw.get("status", "")
+            if stderr or (status_desc and status_desc not in ("Accepted", "")):
+                # Compilation / runtime error → fail without checking output.
+                passed = False
+            else:
+                passed = _compare_outputs(actual, tc["expected_stdout"], comparison)
+
+        total += weight
+        if passed:
+            earned += weight
+
+        entry = {
+            "tc_id": tc["id"],
+            "passed": passed,
+            "weight": weight,
+            "hidden": hidden,
+            "actual_stdout": actual,
+            "stderr": stderr,
+            "comparison": comparison,
+        }
+        # Hidden + failing → conceal the description and expected output
+        # so students can't reverse-engineer the edge case from the diff.
+        if hidden and not passed:
+            entry["description"] = None
+            entry["expected_stdout"] = None
+        else:
+            entry["description"] = tc["description"]
+            entry["expected_stdout"] = tc["expected_stdout"]
+        results.append(entry)
+
+    score = round(100 * earned / total, 1) if total > 0 else 0.0
+    return {
+        "score": score,
+        "earned": earned,
+        "total": total,
+        "results": results,
+    }
 
 
 # ============================================================
@@ -597,7 +756,100 @@ async def submit_assignment(
 
     await update_streak(user.profile_id)
 
+    # Auto-grade hook — runs only when the assignment has test cases AND
+    # at least one classroom the student belongs to has the auto-grade
+    # toggle on. Failures here must never break the submit, so swallow
+    # all exceptions and just skip auto-grading.
+    if sub.get("curriculum_assignment_id"):
+        try:
+            await _maybe_autograde_curriculum_submission(
+                submission_id=body.submission_id,
+                student_id=user.profile_id,
+                curriculum_assignment_id=sub["curriculum_assignment_id"],
+                final_code=sub.get("final_code") or "",
+            )
+        except Exception as e:
+            print(f"Auto-grade failed for submission {body.submission_id}: {e}")
+
     return updated.data[0] if updated.data else sub
+
+
+async def _maybe_autograde_curriculum_submission(
+    submission_id: str,
+    student_id: str,
+    curriculum_assignment_id: str,
+    final_code: str,
+):
+    """If the student is in at least one classroom with
+    auto_grade_test_cases=true, run the curriculum assignment's test
+    cases against their final_code and persist the score onto both
+    the submission row and the matching exercise_responses row.
+    """
+    assignment = (
+        supabase_admin.table("curriculum_assignments")
+        .select("test_cases, default_comparison")
+        .eq("id", curriculum_assignment_id)
+        .maybe_single()
+        .execute()
+    )
+    cases = ((assignment.data if assignment else {}) or {}).get("test_cases") or []
+    if not cases:
+        return
+
+    memberships = (
+        supabase_admin.table("classroom_members")
+        .select("classroom_id, classrooms(auto_grade_test_cases)")
+        .eq("student_id", student_id)
+        .execute()
+    ).data or []
+    auto_on = any(((m.get("classrooms") or {}).get("auto_grade_test_cases")) for m in memberships)
+    if not auto_on:
+        return
+
+    api_key = os.getenv("JUDGE0_API_KEY")
+    if not api_key:
+        return
+
+    default_comparison = assignment.data.get("default_comparison") or "strip_trailing_whitespace"
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        judge_results = await asyncio.gather(
+            *[_judge0_run_one(client, api_key, final_code, tc.get("stdin", "")) for tc in cases],
+            return_exceptions=True,
+        )
+
+    earned = 0
+    total = 0
+    for tc, raw in zip(cases, judge_results):
+        weight = int(tc.get("weight", 1) or 0)
+        total += weight
+        if isinstance(raw, Exception):
+            continue
+        if raw.get("stderr"):
+            continue
+        comparison = tc.get("comparison") or default_comparison
+        if _compare_outputs(raw.get("stdout", ""), tc["expected_stdout"], comparison):
+            earned += weight
+
+    if total == 0:
+        return
+    score = round(100 * earned / total, 1)
+
+    supabase_admin.table("submissions").update({"grade": score}).eq("id", submission_id).execute()
+
+    existing = (
+        supabase_admin.table("exercise_responses")
+        .select("id")
+        .eq("student_id", student_id)
+        .eq("lesson_id", curriculum_assignment_id)
+        .eq("exercise_type", "curriculum_assignment")
+        .maybe_single()
+        .execute()
+    )
+    if existing and existing.data:
+        supabase_admin.table("exercise_responses").update({
+            "score": score,
+            "is_correct": score >= 100,
+        }).eq("id", existing.data["id"]).execute()
 
 
 # ============================================================

@@ -19,6 +19,26 @@ interface Assignment {
   units: { id: string; title: string; order_index: number } | null
   checkin_format: 'html' | 'short_answer' | 'rating' | 'coding' | null
   html_file_path: string | null
+  has_test_cases?: boolean
+}
+
+interface TestResult {
+  tc_id: string
+  passed: boolean
+  weight: number
+  hidden: boolean
+  actual_stdout: string
+  stderr: string
+  comparison: string
+  description: string | null
+  expected_stdout: string | null
+}
+
+interface TestRunResponse {
+  score: number
+  earned: number
+  total: number
+  results: TestResult[]
 }
 
 interface Question {
@@ -141,6 +161,13 @@ function CurriculumAssignmentInner() {
   const [hint2UnlockedAt, setHint2UnlockedAt] = useState<string | null>(null)
   const [runCount, setRunCount] = useState(0)
   const [hasEditedSinceRun, setHasEditedSinceRun] = useState(false)
+
+  // Test runner state — populated by /code/run-tests when the student
+  // clicks Run tests. Result rows are individually expandable.
+  const [testResults, setTestResults] = useState<TestRunResponse | null>(null)
+  const [runningTests, setRunningTests] = useState(false)
+  const [expandedTcId, setExpandedTcId] = useState<string | null>(null)
+  const [testRunError, setTestRunError] = useState('')
 
   useEffect(() => {
     if (loading) return
@@ -383,6 +410,23 @@ function CurriculumAssignmentInner() {
     if (viewingCode) {
       setCode(viewingCode)
       setSelectedCommit(null); setViewingCode(null); setViewingMsg(null)
+    }
+  }
+
+  const handleRunTests = async () => {
+    if (!assignment) return
+    setRunningTests(true)
+    setTestRunError('')
+    try {
+      const res = await api.post<TestRunResponse>('/code/run-tests', {
+        curriculum_assignment_id: assignment.id,
+        code,
+      })
+      setTestResults(res)
+    } catch (err: any) {
+      setTestRunError(err.message || 'could not run tests')
+    } finally {
+      setRunningTests(false)
     }
   }
 
@@ -733,6 +777,11 @@ function CurriculumAssignmentInner() {
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button onClick={handleRun} disabled={running} style={{ padding: '5px 14px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{running ? '◌ running...' : '▶ run'}</button>
+                {assignment.has_test_cases && (
+                  <button onClick={handleRunTests} disabled={runningTests} style={{ padding: '5px 14px', background: runningTests ? '#166534' : '#0E7C66', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: runningTests ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }} title="run your code against every test case">
+                    {runningTests ? '◌ testing...' : '⚙ run tests'}
+                  </button>
+                )}
                 <button onClick={() => setShowCommitPanel(p => !p)} disabled={!submissionId} style={{ padding: '5px 14px', background: showCommitPanel ? '#7C3AED' : 'transparent', color: '#A78BFA', border: '1.5px solid #7C3AED', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: submissionId ? 'pointer' : 'not-allowed', fontFamily: "'DM Sans', sans-serif" }}>● commit</button>
                 <button onClick={handleCodeSubmit} disabled={saving || !submissionId || commits.length < minCommits || submitted} style={{ padding: '5px 14px', background: submitted ? '#166534' : commits.length >= minCommits ? '#1A56DB' : 'rgba(26,86,219,0.3)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: (saving || !submissionId || commits.length < minCommits || submitted) ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{saving ? 'submitting...' : submitted ? '✓ submitted' : 'submit'}</button>
               </div>
@@ -810,6 +859,75 @@ function CurriculumAssignmentInner() {
                 onFindInLesson={() => openDocs()}
                 showLessonLink={false}
               />
+            )}
+            {(testResults || testRunError || runningTests) && (
+              <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', background: '#1C1C1E', padding: '10px 14px', maxHeight: '40vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.5)' }}>test results</span>
+                  {testResults && (
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: testResults.score >= 100 ? '#22C55E' : testResults.score >= 50 ? '#FBBF24' : '#F87171', fontFamily: "'DM Mono', monospace" }}>
+                      {testResults.results.filter(r => r.passed).length}/{testResults.results.length} passed · {testResults.score}%
+                    </span>
+                  )}
+                </div>
+                {testRunError && (
+                  <div style={{ padding: '8px 12px', background: 'rgba(248,113,113,0.12)', color: '#F87171', borderRadius: '6px', fontSize: '12px' }}>
+                    {testRunError}
+                  </div>
+                )}
+                {runningTests && !testResults && (
+                  <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', padding: '4px 0' }}>running test cases...</div>
+                )}
+                {testResults && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {testResults.results.map(r => {
+                      const isOpen = expandedTcId === r.tc_id
+                      const labelText = r.description || (r.hidden ? `Hidden test ${r.tc_id}` : r.tc_id)
+                      return (
+                        <div key={r.tc_id} style={{ background: r.passed ? 'rgba(34,197,94,0.08)' : 'rgba(248,113,113,0.08)', border: `1px solid ${r.passed ? 'rgba(34,197,94,0.25)' : 'rgba(248,113,113,0.25)'}`, borderRadius: '6px' }}>
+                          <button
+                            onClick={() => setExpandedTcId(prev => prev === r.tc_id ? null : r.tc_id)}
+                            style={{ width: '100%', background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.85)', padding: '8px 10px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", fontSize: '12px', textAlign: 'left' }}
+                          >
+                            <span style={{ color: r.passed ? '#22C55E' : '#F87171', fontWeight: 700 }}>{r.passed ? '✓' : '✗'}</span>
+                            <span style={{ flex: 1 }}>{labelText}</span>
+                            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>{r.weight} pt{r.weight === 1 ? '' : 's'}</span>
+                            <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>{isOpen ? '▴' : '▾'}</span>
+                          </button>
+                          {isOpen && (
+                            <div style={{ padding: '4px 10px 10px', fontFamily: "'DM Mono', monospace", fontSize: '11px', color: 'rgba(255,255,255,0.85)' }}>
+                              {r.hidden && !r.passed ? (
+                                <div style={{ color: 'rgba(255,255,255,0.55)', fontFamily: "'DM Sans', sans-serif" }}>
+                                  This is a hidden test. Expected output is concealed — try edge cases the prompt hints at, then re-run.
+                                  {r.stderr && (
+                                    <div style={{ marginTop: '8px', color: '#F87171', whiteSpace: 'pre-wrap', fontFamily: "'DM Mono', monospace" }}>{r.stderr}</div>
+                                  )}
+                                </div>
+                              ) : (
+                                <>
+                                  {r.stderr && (
+                                    <div style={{ color: '#F87171', whiteSpace: 'pre-wrap', marginBottom: '8px' }}>{r.stderr}</div>
+                                  )}
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                    <div>
+                                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>your output</div>
+                                      <pre style={{ margin: 0, padding: '6px 8px', background: '#111113', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.actual_stdout || '(empty)'}</pre>
+                                    </div>
+                                    <div>
+                                      <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>expected</div>
+                                      <pre style={{ margin: 0, padding: '6px 8px', background: '#111113', borderRadius: '4px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{r.expected_stdout || '(empty)'}</pre>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             )}
             {submissionId && hintsEnabled && (
               <div style={{ padding: '10px 14px', background: '#0E2D6E', borderTop: '1px solid rgba(255,255,255,0.06)' }}>

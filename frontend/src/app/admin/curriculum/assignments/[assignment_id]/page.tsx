@@ -28,7 +28,27 @@ interface CurriculumAssignment {
   pairing_strategy?: string | null
   discussion_min_posts?: number | null
   discussion_min_comments?: number | null
+  test_cases?: TestCase[] | null
+  default_comparison?: string | null
 }
+
+type Comparison = 'exact' | 'strip_trailing_whitespace' | 'case_insensitive'
+
+interface TestCase {
+  id: string
+  description: string
+  stdin: string
+  expected_stdout: string
+  weight: number
+  hidden: boolean
+  comparison?: Comparison | ''
+}
+
+const COMPARISON_OPTIONS: Array<{ value: Comparison; label: string }> = [
+  { value: 'strip_trailing_whitespace', label: 'strip trailing whitespace' },
+  { value: 'exact',                     label: 'exact match' },
+  { value: 'case_insensitive',          label: 'case-insensitive' },
+]
 
 interface CurriculumAssignmentRow {
   id: string
@@ -91,6 +111,13 @@ export default function CurriculumAssignmentEditor() {
   const [availableSources, setAvailableSources] = useState<CurriculumAssignmentRow[]>([])
   const [discussionMinPosts, setDiscussionMinPosts] = useState(1)
   const [discussionMinComments, setDiscussionMinComments] = useState(2)
+
+  const [testCases, setTestCases] = useState<TestCase[]>([])
+  const [defaultComparison, setDefaultComparison] = useState<Comparison>('strip_trailing_whitespace')
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [importError, setImportError] = useState('')
+  const [testCaseErrors, setTestCaseErrors] = useState<string[]>([])
 
   const isCoding = assignmentType === 'code'
   const isActivity = assignmentType === 'activity'
@@ -155,6 +182,16 @@ export default function CurriculumAssignmentEditor() {
       setPairingStrategy(data.pairing_strategy || 'random')
       setDiscussionMinPosts(data.discussion_min_posts ?? 1)
       setDiscussionMinComments(data.discussion_min_comments ?? 2)
+      setDefaultComparison((data.default_comparison as Comparison) || 'strip_trailing_whitespace')
+      setTestCases((data.test_cases || []).map(tc => ({
+        id: tc.id,
+        description: tc.description,
+        stdin: tc.stdin ?? '',
+        expected_stdout: tc.expected_stdout ?? '',
+        weight: tc.weight ?? 1,
+        hidden: !!tc.hidden,
+        comparison: (tc.comparison as Comparison | undefined) || '',
+      })))
 
       // Fetch all curriculum assignments in this unit so the author can pick
       // one as the code-review source.
@@ -231,8 +268,128 @@ export default function CurriculumAssignmentEditor() {
     }
   }
 
+  const validateTestCases = (cases: TestCase[]): string[] => {
+    const errs: string[] = []
+    const seen = new Set<string>()
+    cases.forEach((tc, i) => {
+      const id = (tc.id || '').trim()
+      if (!id) errs.push(`Test case #${i + 1}: id is required.`)
+      else if (seen.has(id)) errs.push(`Test case #${i + 1}: duplicate id "${id}".`)
+      else seen.add(id)
+      if (!tc.description.trim()) errs.push(`Test case #${i + 1}: description is required.`)
+      if (tc.expected_stdout === undefined || tc.expected_stdout === null) errs.push(`Test case #${i + 1}: expected_stdout is required.`)
+      if (tc.weight < 0 || !Number.isFinite(tc.weight)) errs.push(`Test case #${i + 1}: weight must be a non-negative number.`)
+    })
+    return errs
+  }
+
+  const addTestCase = () => {
+    const nextNum = testCases.length + 1
+    setTestCases(prev => [...prev, {
+      id: `tc_${nextNum}`,
+      description: '',
+      stdin: '',
+      expected_stdout: '',
+      weight: 1,
+      hidden: false,
+      comparison: '',
+    }])
+  }
+
+  const updateTestCase = (idx: number, patch: Partial<TestCase>) => {
+    setTestCases(prev => prev.map((tc, i) => i === idx ? { ...tc, ...patch } : tc))
+  }
+
+  const deleteTestCase = (idx: number) => {
+    setTestCases(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  const applyImport = (rawText: string) => {
+    setImportError('')
+    let parsed: any
+    try {
+      parsed = JSON.parse(rawText)
+    } catch (e: any) {
+      setImportError(`Invalid JSON: ${e.message}`)
+      return
+    }
+    if (!parsed || typeof parsed !== 'object') {
+      setImportError('JSON must be an object.')
+      return
+    }
+    if (!Array.isArray(parsed.test_cases) || parsed.test_cases.length === 0) {
+      setImportError('JSON must include a non-empty "test_cases" array.')
+      return
+    }
+    const imported: TestCase[] = []
+    const seen = new Set<string>()
+    for (let i = 0; i < parsed.test_cases.length; i++) {
+      const tc = parsed.test_cases[i]
+      if (!tc || typeof tc !== 'object') {
+        setImportError(`test_cases[${i}] is not an object.`)
+        return
+      }
+      const id = String(tc.id || '').trim()
+      if (!id) { setImportError(`test_cases[${i}].id is required.`); return }
+      if (seen.has(id)) { setImportError(`Duplicate test case id: "${id}".`); return }
+      seen.add(id)
+      const description = String(tc.description || '').trim()
+      if (!description) { setImportError(`test_cases[${i}].description is required.`); return }
+      if (tc.expected_stdout === undefined || tc.expected_stdout === null) {
+        setImportError(`test_cases[${i}].expected_stdout is required.`)
+        return
+      }
+      const comparison = tc.comparison
+      if (comparison && !['exact', 'strip_trailing_whitespace', 'case_insensitive'].includes(comparison)) {
+        setImportError(`test_cases[${i}].comparison invalid: "${comparison}".`)
+        return
+      }
+      imported.push({
+        id,
+        description,
+        stdin: tc.stdin ?? '',
+        expected_stdout: String(tc.expected_stdout),
+        weight: Number.isFinite(tc.weight) ? tc.weight : 1,
+        hidden: !!tc.hidden,
+        comparison: (comparison as Comparison | undefined) || '',
+      })
+    }
+    if (parsed.default_comparison) {
+      if (!['exact', 'strip_trailing_whitespace', 'case_insensitive'].includes(parsed.default_comparison)) {
+        setImportError(`default_comparison invalid: "${parsed.default_comparison}".`)
+        return
+      }
+      setDefaultComparison(parsed.default_comparison)
+    }
+    if (parsed.title && parsed.title !== title) {
+      // Don't overwrite, just notify visually via a non-blocking alert.
+      console.warn(`Imported title "${parsed.title}" differs from current assignment title "${title}" — not changing the title.`)
+    }
+    setTestCases(imported)
+    setTestCaseErrors([])
+    setShowImportModal(false)
+    setImportText('')
+  }
+
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const text = await file.text()
+    setImportText(text)
+    e.target.value = ''
+  }
+
   const save = async () => {
     if (!title.trim()) return alert('Title is required')
+    if (isCoding && testCases.length > 0) {
+      const errs = validateTestCases(testCases)
+      if (errs.length) {
+        setTestCaseErrors(errs)
+        alert('Fix the test case errors before saving.')
+        return
+      }
+    }
+    setTestCaseErrors([])
     setSaving(true)
     try {
       const standardsList = standardsText.split(',').map(s => s.trim()).filter(Boolean)
@@ -257,6 +414,19 @@ export default function CurriculumAssignmentEditor() {
         pairing_strategy: isCodeReview ? pairingStrategy : null,
         discussion_min_posts: isDiscussion ? Math.max(0, discussionMinPosts) : null,
         discussion_min_comments: isDiscussion ? Math.max(0, discussionMinComments) : null,
+        test_cases: isCoding ? testCases.map(tc => {
+          const out: Record<string, unknown> = {
+            id: tc.id.trim(),
+            description: tc.description.trim(),
+            stdin: tc.stdin,
+            expected_stdout: tc.expected_stdout,
+            weight: tc.weight,
+            hidden: tc.hidden,
+          }
+          if (tc.comparison) out.comparison = tc.comparison
+          return out
+        }) : null,
+        default_comparison: isCoding ? defaultComparison : null,
       })
       alert('Saved')
     } catch (err: any) {
@@ -565,6 +735,102 @@ export default function CurriculumAssignmentEditor() {
             </div>
           )}
 
+          {/* TEST CASES — coding only */}
+          {isCoding && (
+            <div style={card}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px', flexWrap: 'wrap', gap: '8px' }}>
+                <div>
+                  <h3 style={{ margin: '0 0 2px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>test cases ({testCases.length})</h3>
+                  <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>
+                    Auto-graded against student code via Judge0. Each case is run with its <code style={{ fontFamily: "'DM Mono', monospace" }}>stdin</code> and its output compared to <code style={{ fontFamily: "'DM Mono', monospace" }}>expected_stdout</code>.
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button onClick={() => { setImportError(''); setImportText(''); setShowImportModal(true) }} style={{ ...btn(false), padding: '7px 12px', fontSize: '12px' }}>
+                    ⇪ import JSON
+                  </button>
+                  <button onClick={addTestCase} style={{ ...btn(true), padding: '7px 12px', fontSize: '12px' }}>
+                    + add test case
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', alignItems: 'end', marginTop: '12px', marginBottom: '14px' }}>
+                <div>
+                  <label style={label}>default comparison</label>
+                  <select value={defaultComparison} onChange={e => setDefaultComparison(e.target.value as Comparison)} style={input}>
+                    {COMPARISON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div style={{ fontSize: '11px', color: '#888780', padding: '8px 0' }}>
+                  Each test case may override this. Total weight {testCases.reduce((s, tc) => s + (Number.isFinite(tc.weight) ? tc.weight : 0), 0)} pt(s).
+                </div>
+              </div>
+
+              {testCaseErrors.length > 0 && (
+                <div style={{ padding: '10px 14px', background: '#FEE2E2', borderRadius: '8px', fontSize: '12px', color: '#991B1B', marginBottom: '12px' }}>
+                  <strong>fix before saving:</strong>
+                  <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                    {testCaseErrors.map((err, i) => <li key={i}>{err}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {testCases.length === 0 ? (
+                <p style={{ margin: 0, padding: '1.5rem', textAlign: 'center', color: '#888780', fontSize: '13px', background: '#FAFAF8', borderRadius: '8px' }}>
+                  no test cases — add one or import a JSON file
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {testCases.map((tc, i) => (
+                    <div key={i} style={{ padding: '12px 14px', border: '1px solid rgba(14,45,110,0.12)', borderRadius: '10px', background: '#FAFAF8' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr 90px 90px auto', gap: '8px', alignItems: 'end', marginBottom: '10px' }}>
+                        <div>
+                          <label style={label}>id</label>
+                          <input value={tc.id} onChange={e => updateTestCase(i, { id: e.target.value })} style={{ ...input, fontFamily: "'DM Mono', monospace" }} />
+                        </div>
+                        <div>
+                          <label style={label}>description</label>
+                          <input value={tc.description} onChange={e => updateTestCase(i, { description: e.target.value })} placeholder="what this case checks" style={input} />
+                        </div>
+                        <div>
+                          <label style={label}>weight</label>
+                          <input type="number" min={0} value={tc.weight} onChange={e => updateTestCase(i, { weight: parseInt(e.target.value, 10) || 0 })} style={input} />
+                        </div>
+                        <div>
+                          <label style={label}>hidden</label>
+                          <button onClick={() => updateTestCase(i, { hidden: !tc.hidden })} style={{ ...input, textAlign: 'left' as const, cursor: 'pointer', background: tc.hidden ? '#FEE2E2' : 'white', color: tc.hidden ? '#991B1B' : '#5F5E5A', fontWeight: 600 }}>
+                            {tc.hidden ? '● hidden' : '○ shown'}
+                          </button>
+                        </div>
+                        <button onClick={() => deleteTestCase(i)} style={{ ...btn(false), padding: '6px 10px', fontSize: '11px', borderColor: 'rgba(239,68,68,0.3)', color: '#991B1B', alignSelf: 'end' }}>
+                          delete
+                        </button>
+                      </div>
+                      <div style={{ marginBottom: '10px' }}>
+                        <label style={label}>comparison (override default)</label>
+                        <select value={tc.comparison || ''} onChange={e => updateTestCase(i, { comparison: (e.target.value as Comparison) || '' })} style={input}>
+                          <option value="">— use default ({COMPARISON_OPTIONS.find(o => o.value === defaultComparison)?.label}) —</option>
+                          {COMPARISON_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                          <label style={label}>stdin <span style={{ fontWeight: 400, color: '#888780' }}>(\n for newlines)</span></label>
+                          <textarea value={tc.stdin} onChange={e => updateTestCase(i, { stdin: e.target.value })} rows={4} placeholder="" style={textareaStyle} />
+                        </div>
+                        <div>
+                          <label style={label}>expected_stdout</label>
+                          <textarea value={tc.expected_stdout} onChange={e => updateTestCase(i, { expected_stdout: e.target.value })} rows={4} placeholder="" style={textareaStyle} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* COLLAB */}
           <div style={card}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -583,6 +849,49 @@ export default function CurriculumAssignmentEditor() {
             <button onClick={save} disabled={saving} style={btn(true)}>{saving ? 'saving...' : 'save changes'}</button>
           </div>
 
+        </div>
+      )}
+
+      {/* IMPORT JSON MODAL */}
+      {showImportModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(14,45,110,0.4)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', overflowY: 'auto' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowImportModal(false) }}
+        >
+          <div style={{ background: 'white', borderRadius: '14px', padding: '1.75rem', width: '100%', maxWidth: '640px' }}>
+            <h2 style={{ margin: '0 0 4px', fontSize: '15px', fontWeight: 700, color: '#0E2D6E' }}>import test cases</h2>
+            <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#888780', lineHeight: 1.55 }}>
+              Paste a JSON object matching the test-case schema, or upload a <code style={{ fontFamily: "'DM Mono', monospace" }}>.json</code> file. Replaces the current list. Required fields per case: <code style={{ fontFamily: "'DM Mono', monospace" }}>id</code>, <code style={{ fontFamily: "'DM Mono', monospace" }}>description</code>, <code style={{ fontFamily: "'DM Mono', monospace" }}>expected_stdout</code>.
+            </p>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <label style={{ ...label, marginBottom: 0 }}>JSON</label>
+              <label style={{ ...btn(false), padding: '5px 10px', fontSize: '12px', display: 'inline-block' }}>
+                + upload .json
+                <input type="file" accept=".json,application/json" onChange={handleImportFile} style={{ display: 'none' }} />
+              </label>
+            </div>
+            <textarea
+              value={importText}
+              onChange={e => setImportText(e.target.value)}
+              rows={14}
+              placeholder='{"exercise_id":"ex_2_1","title":"Hello, varied","default_comparison":"strip_trailing_whitespace","test_cases":[{"id":"tc_1","description":"Prints exactly","stdin":"","expected_stdout":"Hello, world!\n","weight":1,"hidden":false}]}'
+              style={textareaStyle}
+            />
+
+            {importError && (
+              <div style={{ marginTop: '12px', padding: '10px 14px', background: '#FEE2E2', borderRadius: '8px', fontSize: '12px', color: '#991B1B' }}>
+                {importError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+              <button onClick={() => setShowImportModal(false)} style={btn(false)}>cancel</button>
+              <button onClick={() => applyImport(importText)} disabled={!importText.trim()} style={{ ...btn(true), opacity: importText.trim() ? 1 : 0.5 }}>
+                import
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
