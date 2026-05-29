@@ -12,12 +12,13 @@ interface Weights {
   checkin: number
   quiz: number
   project: number
+  discussion: number
 }
 
-const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5 }
-const TYPE_KEYS: Array<keyof Weights> = ['code', 'activity', 'checkin', 'quiz', 'project']
+const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5, discussion: 0 }
+const TYPE_KEYS: Array<keyof Weights> = ['code', 'activity', 'checkin', 'quiz', 'project', 'discussion']
 const TYPE_LABELS: Record<keyof Weights, string> = {
-  code: 'coding', activity: 'activity', checkin: 'check-in', quiz: 'quiz', project: 'project',
+  code: 'coding', activity: 'activity', checkin: 'check-in', quiz: 'quiz', project: 'project', discussion: 'discussion',
 }
 
 interface Classroom {
@@ -269,7 +270,7 @@ export default function GradesPage() {
             {/* CURRENT WEIGHTED AVERAGE */}
             <div
               style={{ background: 'white', borderRadius: '14px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem', textAlign: 'center' }}
-              title={`Weighted by type — code:${weights.code}% project:${weights.project}% quiz:${weights.quiz}% activity:${weights.activity}% checkin:${weights.checkin}%`}
+              title={`Weighted by type — code:${weights.code}% project:${weights.project}% quiz:${weights.quiz}% activity:${weights.activity}% checkin:${weights.checkin}% discussion:${weights.discussion}%`}
             >
               <div style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#888780', marginBottom: '10px' }}>weighted avg</div>
               {currentAverage != null ? (

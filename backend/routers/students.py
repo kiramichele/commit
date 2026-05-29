@@ -87,8 +87,8 @@ async def get_student_profile(
 
     # For each visible classroom, pull a quick grade summary —
     # weighted avg, classroom assignments graded, curriculum assignments graded.
-    DEFAULT_WEIGHTS = {"code": 35, "project": 35, "quiz": 15, "activity": 10, "checkin": 5}
-    TYPE_KEYS = ["code", "activity", "checkin", "quiz", "project"]
+    DEFAULT_WEIGHTS = {"code": 35, "project": 35, "quiz": 15, "activity": 10, "checkin": 5, "discussion": 0}
+    TYPE_KEYS = ["code", "activity", "checkin", "quiz", "project", "discussion"]
 
     for c in classrooms:
         weights = {**DEFAULT_WEIGHTS, **(c.get("grade_weights") or {})}

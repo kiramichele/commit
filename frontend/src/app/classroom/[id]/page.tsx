@@ -57,6 +57,7 @@ interface Classroom {
   late_submissions_allowed: boolean
   late_penalty_per_day: number
   late_penalty_max: number
+  discussion_name_display?: 'first_name' | 'first_last_initial' | 'full_name'
 }
 
 interface StudentProgress {
@@ -92,14 +93,17 @@ interface NewAssignment {
   starter_code: string
   assignment_type: string
   curriculum_unit_id: string
+  discussion_min_posts: number
+  discussion_min_comments: number
 }
 
 const ASSIGNMENT_TYPE_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: 'code',     label: 'Coding' },
-  { value: 'activity', label: 'Interactive activity' },
-  { value: 'checkin',  label: 'Check-in' },
-  { value: 'quiz',     label: 'Quiz' },
-  { value: 'project',  label: 'Project' },
+  { value: 'code',       label: 'Coding' },
+  { value: 'activity',   label: 'Interactive activity' },
+  { value: 'checkin',    label: 'Check-in' },
+  { value: 'quiz',       label: 'Quiz' },
+  { value: 'project',    label: 'Project' },
+  { value: 'discussion', label: 'Discussion board' },
 ]
 
 const SCAFFOLD_LABELS: Record<string, string> = {
@@ -142,6 +146,7 @@ export default function ClassroomPage() {
     title: '', instructions: '', due_date: '', min_commits: 3,
     scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code',
     curriculum_unit_id: '',
+    discussion_min_posts: 1, discussion_min_comments: 2,
   })
   const [standardsTags, setStandardsTags] = useState<string[]>([])
   const [hintsEnabled, setHintsEnabled] = useState(true)
@@ -267,9 +272,11 @@ export default function ClassroomPage() {
         // Append to the end of the unit by default; teachers reorder with
         // the up/down arrows in the curriculum tab.
         curriculum_order: newAssignment.curriculum_unit_id ? Math.floor(Date.now() / 1000) : null,
+        discussion_min_posts: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_posts : null,
+        discussion_min_comments: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_comments : null,
       })
       setShowAddAssignment(false)
-      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '' })
+      setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '', discussion_min_posts: 1, discussion_min_comments: 2 })
       setStandardsTags([])
       setHintsEnabled(true)
       setHint1('')
@@ -636,7 +643,7 @@ export default function ClassroomPage() {
                                   ⚏ pairings
                                 </button>
                               )}
-                              <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
+                              <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                               <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
                             </div>
                           </div>
@@ -726,6 +733,30 @@ export default function ClassroomPage() {
               }}
             />
 
+            <div style={{ marginTop: '1.5rem', padding: '1.25rem', border: '1px solid rgba(14,45,110,0.08)', borderRadius: '10px' }}>
+              <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>discussion name display</h4>
+              <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#888780', lineHeight: 1.55 }}>
+                how each student&apos;s name appears next to their posts and comments on discussion boards in this classroom.
+              </p>
+              <select
+                value={classroom.discussion_name_display || 'first_name'}
+                onChange={async e => {
+                  const v = e.target.value as 'first_name' | 'first_last_initial' | 'full_name'
+                  try {
+                    await api.patch(`/classrooms/${classroomId}`, { discussion_name_display: v })
+                    setClassroom(c => c ? { ...c, discussion_name_display: v } : c)
+                  } catch (err: any) {
+                    alert(err.message || 'Could not update.')
+                  }
+                }}
+                style={{ width: '100%', maxWidth: '320px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer' }}
+              >
+                <option value="first_name">First name only (e.g. "Alex")</option>
+                <option value="first_last_initial">First name + last initial (e.g. "Alex J.")</option>
+                <option value="full_name">Full name (e.g. "Alex Johnson")</option>
+              </select>
+            </div>
+
             <div style={{ marginTop: '1.5rem' }}>
               <GradeWeightSettings classroomId={classroomId} />
             </div>
@@ -788,6 +819,18 @@ export default function ClassroomPage() {
                   </>
                 )}
               </div>
+              {newAssignment.assignment_type === 'discussion' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={labelStyle}>required posts (own threads)</label>
+                    <input type="number" min={0} value={newAssignment.discussion_min_posts} onChange={e => setNewAssignment(s => ({ ...s, discussion_min_posts: parseInt(e.target.value, 10) || 0 }))} style={inputStyle} />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>required comments (on others)</label>
+                    <input type="number" min={0} value={newAssignment.discussion_min_comments} onChange={e => setNewAssignment(s => ({ ...s, discussion_min_comments: parseInt(e.target.value, 10) || 0 }))} style={inputStyle} />
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={labelStyle}>due date <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <input type="datetime-local" value={newAssignment.due_date} onChange={e => setNewAssignment(s => ({ ...s, due_date: e.target.value }))} style={inputStyle} />

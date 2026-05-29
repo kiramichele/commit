@@ -40,6 +40,7 @@ class ClassroomUpdate(BaseModel):
     standup_enabled: Optional[bool] = None
     standup_frequency_days: Optional[int] = None
     discussion_enabled: Optional[bool] = None
+    discussion_name_display: Optional[str] = None  # 'first_name' | 'first_last_initial' | 'full_name'
     archived: Optional[bool] = None
 
 
@@ -62,6 +63,7 @@ class GradeWeights(BaseModel):
     checkin: int = 5
     quiz: int = 15
     project: int = 35
+    discussion: int = 0
 
 
 # ============================================================
@@ -435,7 +437,7 @@ async def get_grade_weights(
     if not response.data:
         raise HTTPException(status_code=404, detail="Classroom not found.")
     return response.data.get("grade_weights") or {
-        "code": 35, "project": 35, "quiz": 15, "activity": 10, "checkin": 5,
+        "code": 35, "project": 35, "quiz": 15, "activity": 10, "checkin": 5, "discussion": 0,
     }
 
 
@@ -446,7 +448,7 @@ async def update_grade_weights(
     user: CurrentUser = Depends(require_teacher),
 ):
     """Updates the per-classroom grade weight config. Values must sum to 100."""
-    total = body.code + body.activity + body.checkin + body.quiz + body.project
+    total = body.code + body.activity + body.checkin + body.quiz + body.project + body.discussion
     if total != 100:
         raise HTTPException(status_code=400, detail=f"Weights must sum to 100 (got {total}).")
 
@@ -519,6 +521,11 @@ async def update_classroom(
     updates = body.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update.")
+
+    if "discussion_name_display" in updates and updates["discussion_name_display"] not in (
+        "first_name", "first_last_initial", "full_name"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid discussion_name_display value.")
 
     result = (
         supabase_admin.table("classrooms")

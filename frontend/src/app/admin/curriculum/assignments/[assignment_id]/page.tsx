@@ -26,6 +26,8 @@ interface CurriculumAssignment {
   checkin_format?: string | null
   source_curriculum_assignment_id?: string | null
   pairing_strategy?: string | null
+  discussion_min_posts?: number | null
+  discussion_min_comments?: number | null
 }
 
 interface CurriculumAssignmentRow {
@@ -49,6 +51,7 @@ const TYPE_OPTIONS = [
   { value: 'quiz',         label: 'Quiz' },
   { value: 'project',      label: 'Project' },
   { value: 'code_review',  label: 'Code review' },
+  { value: 'discussion',   label: 'Discussion board' },
 ]
 const SCAFFOLD_LEVELS = ['typed_python', 'pseudocode', 'block_python', 'free_python']
 const PAIRING_OPTIONS = [
@@ -86,12 +89,15 @@ export default function CurriculumAssignmentEditor() {
   const [sourceCurriculumAssignmentId, setSourceCurriculumAssignmentId] = useState<string>('')
   const [pairingStrategy, setPairingStrategy] = useState<string>('random')
   const [availableSources, setAvailableSources] = useState<CurriculumAssignmentRow[]>([])
+  const [discussionMinPosts, setDiscussionMinPosts] = useState(1)
+  const [discussionMinComments, setDiscussionMinComments] = useState(2)
 
   const isCoding = assignmentType === 'code'
   const isActivity = assignmentType === 'activity'
   const isQuiz = assignmentType === 'quiz'
   const isCheckin = assignmentType === 'checkin'
   const isCodeReview = assignmentType === 'code_review'
+  const isDiscussion = assignmentType === 'discussion'
   // Check-ins with html or coding format need the same field surfaces as
   // activity / code types. Compute these once.
   const checkinIsHtml = isCheckin && checkinFormat === 'html'
@@ -147,6 +153,8 @@ export default function CurriculumAssignmentEditor() {
       setCheckinFormat(data.checkin_format || 'short_answer')
       setSourceCurriculumAssignmentId(data.source_curriculum_assignment_id || '')
       setPairingStrategy(data.pairing_strategy || 'random')
+      setDiscussionMinPosts(data.discussion_min_posts ?? 1)
+      setDiscussionMinComments(data.discussion_min_comments ?? 2)
 
       // Fetch all curriculum assignments in this unit so the author can pick
       // one as the code-review source.
@@ -247,6 +255,8 @@ export default function CurriculumAssignmentEditor() {
         checkin_format: isCheckin ? checkinFormat : null,
         source_curriculum_assignment_id: isCodeReview ? (sourceCurriculumAssignmentId || null) : null,
         pairing_strategy: isCodeReview ? pairingStrategy : null,
+        discussion_min_posts: isDiscussion ? Math.max(0, discussionMinPosts) : null,
+        discussion_min_comments: isDiscussion ? Math.max(0, discussionMinComments) : null,
       })
       alert('Saved')
     } catch (err: any) {
@@ -380,6 +390,26 @@ export default function CurriculumAssignmentEditor() {
                     <div style={{ fontSize: '11px', color: '#888780', lineHeight: 1.5 }}>{opt.desc}</div>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* DISCUSSION SETTINGS */}
+          {isDiscussion && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>discussion settings</h3>
+              <p style={{ margin: '0 0 14px', fontSize: '12px', color: '#888780', lineHeight: 1.55 }}>
+                Students must hit both thresholds to count as complete. Posts and comments are scoped to each classroom; per-classroom name display is controlled in classroom settings.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={label}>required posts (own threads)</label>
+                  <input type="number" min={0} value={discussionMinPosts} onChange={e => setDiscussionMinPosts(parseInt(e.target.value, 10) || 0)} style={input} />
+                </div>
+                <div>
+                  <label style={label}>required comments (on others)</label>
+                  <input type="number" min={0} value={discussionMinComments} onChange={e => setDiscussionMinComments(parseInt(e.target.value, 10) || 0)} style={input} />
+                </div>
               </div>
             </div>
           )}

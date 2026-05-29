@@ -330,7 +330,7 @@ export default function StudentClassroomPage() {
                               <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#E0F2FE', color: '#075985', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{a.assignment_type}</span>
                             </div>
                           </div>
-                          <Link href={`/curriculum-assignment/${a.id}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                          <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '8px 18px', background: '#1A56DB', color: 'white', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
                             open →
                           </Link>
                         </div>

@@ -19,12 +19,13 @@ interface Weights {
   checkin: number
   quiz: number
   project: number
+  discussion: number
 }
 
-const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5 }
-const TYPE_KEYS: Array<keyof Weights> = ['code', 'activity', 'checkin', 'quiz', 'project']
+const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5, discussion: 0 }
+const TYPE_KEYS: Array<keyof Weights> = ['code', 'activity', 'checkin', 'quiz', 'project', 'discussion']
 const TYPE_LABELS: Record<keyof Weights, string> = {
-  code: 'coding', activity: 'activity', checkin: 'check-in', quiz: 'quiz', project: 'project',
+  code: 'coding', activity: 'activity', checkin: 'check-in', quiz: 'quiz', project: 'project', discussion: 'discussion',
 }
 
 interface Submission {
@@ -376,7 +377,7 @@ export default function GradebookPage() {
                   {/* WEIGHTED AVERAGE COLUMN */}
                   <th
                     style={{ padding: '10px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#888780', width: '90px' }}
-                    title={`Weighted by type — code:${weights.code}% project:${weights.project}% quiz:${weights.quiz}% activity:${weights.activity}% checkin:${weights.checkin}%`}
+                    title={`Weighted by type — code:${weights.code}% project:${weights.project}% quiz:${weights.quiz}% activity:${weights.activity}% checkin:${weights.checkin}% discussion:${weights.discussion}%`}
                   >
                     weighted avg
                   </th>

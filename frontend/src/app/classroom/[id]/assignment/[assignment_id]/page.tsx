@@ -8,6 +8,7 @@ import ReadAloud from '@/components/ReadAloud'
 import ErrorPanel from '@/components/ErrorPanel'
 import type { ScaffoldLevel } from '@/lib/errorInterpreter'
 import HintPanel from '@/components/HintPanel'
+import DiscussionBoard from '@/components/DiscussionBoard'
 
 interface Assignment {
   id: string
@@ -19,6 +20,7 @@ interface Assignment {
   starter_code: string
   hints_enabled: boolean
   lesson_id: string | null
+  assignment_type?: string
 }
 
 interface Submission {
@@ -68,6 +70,9 @@ export default function AssignmentEditorPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [runCount, setRunCount] = useState(0)
   const [hasEditedSinceRun, setHasEditedSinceRun] = useState(false)
+  const [isDiscussion, setIsDiscussion] = useState(false)
+  const [discussionTitle, setDiscussionTitle] = useState('')
+  const [discussionInstructions, setDiscussionInstructions] = useState('')
 
   useEffect(() => {
     if (loading) return
@@ -99,6 +104,17 @@ export default function AssignmentEditorPage() {
   const loadAssignment = async () => {
     setDataLoading(true)
     try {
+      // Discussion assignments don't go through the code-open flow — they
+      // have no submission row until thresholds are crossed. Detect early.
+      const meta = await api.get<{ assignment_type?: string; title: string; instructions: string }>(`/assignments/${assignmentId}`).catch(() => null)
+      if (meta && meta.assignment_type === 'discussion') {
+        setIsDiscussion(true)
+        setDiscussionTitle(meta.title)
+        setDiscussionInstructions(meta.instructions || '')
+        setDataLoading(false)
+        return
+      }
+
       const data = await api.post<{ submission: Submission; commits: Commit[]; assignment: Assignment }>(
         `/code/open?assignment_id=${assignmentId}`, {}
       )
@@ -268,6 +284,38 @@ export default function AssignmentEditorPage() {
       <p style={{ color: '#888780' }}>loading assignment...</p>
     </div>
   )
+
+  if (isDiscussion) {
+    const role = (profile?.role as 'student' | 'teacher' | 'admin') || 'student'
+    return (
+      <div style={{ minHeight: '100vh', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+        <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,247,245,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(14,45,110,0.08)', padding: '0 1.5rem', height: '52px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Link href={`/classroom/${classroomId}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', textDecoration: 'none' }}>
+            <div style={{ width: '26px', height: '26px', background: '#1A56DB', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", fontSize: '10px', color: 'white' }}>{'>'}_</div>
+          </Link>
+          <span style={{ color: '#D3D1C7' }}>/</span>
+          <span style={{ fontSize: '13px', color: '#0E2D6E', fontWeight: 500 }}>{discussionTitle}</span>
+        </nav>
+        <div style={{ background: 'white', borderBottom: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem 1.5rem' }}>
+          <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+            <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#075985', background: '#E0F2FE', padding: '3px 10px', borderRadius: '99px', marginBottom: '10px' }}>discussion</span>
+            <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 700, color: '#0E2D6E', letterSpacing: '-0.01em' }}>{discussionTitle}</h1>
+            {discussionInstructions && (
+              <p style={{ margin: 0, fontSize: '14px', color: '#5F5E5A', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{discussionInstructions}</p>
+            )}
+          </div>
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <DiscussionBoard
+            assignmentId={assignmentId}
+            classroomId={classroomId}
+            viewerRole={role}
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#1C1C1E', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>

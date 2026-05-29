@@ -504,6 +504,8 @@ class CurriculumAssignmentCreate(BaseModel):
     checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
     source_curriculum_assignment_id: Optional[str] = None  # for code_review type
     pairing_strategy: Optional[str] = None  # 'random' | 'similar_grade' | 'opposite_grade' | 'manual'
+    discussion_min_posts: Optional[int] = None
+    discussion_min_comments: Optional[int] = None
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -525,9 +527,11 @@ class CurriculumAssignmentUpdate(BaseModel):
     checkin_format: Optional[str] = None  # 'html' | 'short_answer' | 'rating' | 'coding'
     source_curriculum_assignment_id: Optional[str] = None
     pairing_strategy: Optional[str] = None
+    discussion_min_posts: Optional[int] = None
+    discussion_min_comments: Optional[int] = None
 
 
-_VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review"}
+_VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review", "discussion"}
 _VALID_PAIRING_STRATEGIES = {"random", "similar_grade", "opposite_grade", "manual"}
 
 

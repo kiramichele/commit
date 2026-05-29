@@ -8,17 +8,19 @@ interface Weights {
   checkin: number
   quiz: number
   project: number
+  discussion: number
 }
 
 const TYPE_LABELS: Array<{ key: keyof Weights; label: string; desc: string }> = [
-  { key: 'code',     label: 'Coding',                desc: 'Code assignments — write, run, submit' },
-  { key: 'project',  label: 'Projects',              desc: 'Multi-step projects from the curriculum' },
-  { key: 'quiz',     label: 'Quizzes',               desc: 'Short auto-graded knowledge checks' },
-  { key: 'activity', label: 'Interactive activities', desc: 'HTML activities with student responses' },
-  { key: 'checkin',  label: 'Check-ins',             desc: 'Reflections, exit tickets, surveys' },
+  { key: 'code',       label: 'Coding',                desc: 'Code assignments — write, run, submit' },
+  { key: 'project',    label: 'Projects',              desc: 'Multi-step projects from the curriculum' },
+  { key: 'quiz',       label: 'Quizzes',               desc: 'Short auto-graded knowledge checks' },
+  { key: 'activity',   label: 'Interactive activities', desc: 'HTML activities with student responses' },
+  { key: 'checkin',    label: 'Check-ins',             desc: 'Reflections, exit tickets, surveys' },
+  { key: 'discussion', label: 'Discussion boards',     desc: 'Threaded posts and comments with peers' },
 ]
 
-const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5 }
+const DEFAULT_WEIGHTS: Weights = { code: 35, project: 35, quiz: 15, activity: 10, checkin: 5, discussion: 0 }
 
 interface Props {
   classroomId: string
@@ -38,7 +40,7 @@ export default function GradeWeightSettings({ classroomId }: Props) {
       .finally(() => setLoading(false))
   }, [classroomId])
 
-  const total = weights.code + weights.activity + weights.checkin + weights.quiz + weights.project
+  const total = weights.code + weights.activity + weights.checkin + weights.quiz + weights.project + weights.discussion
   const ok = total === 100
 
   const handleSave = async () => {

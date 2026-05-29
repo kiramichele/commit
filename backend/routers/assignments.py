@@ -27,7 +27,7 @@ class AssignmentCreate(BaseModel):
     scaffold_level: str = 'typed_python'
     due_date: Optional[str] = None
     allow_collab: bool = False
-    assignment_type: str = 'code'  # code | activity | checkin | quiz | project
+    assignment_type: str = 'code'  # code | activity | checkin | quiz | project | discussion
     is_graded: bool = True
     standards_tags: Optional[List[str]] = []
     hints_enabled: bool = True
@@ -35,6 +35,8 @@ class AssignmentCreate(BaseModel):
     hint_2: Optional[str] = None
     curriculum_unit_id: Optional[str] = None  # if set, this assignment shows in the curriculum tab of the teacher's classroom
     curriculum_order: Optional[float] = None  # numeric so we can slot between admin items via half-steps
+    discussion_min_posts: Optional[int] = None
+    discussion_min_comments: Optional[int] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -50,6 +52,8 @@ class AssignmentUpdate(BaseModel):
     hint_2: Optional[str] = None
     curriculum_unit_id: Optional[str] = None
     curriculum_order: Optional[float] = None
+    discussion_min_posts: Optional[int] = None
+    discussion_min_comments: Optional[int] = None
 
 
 # ============================================================
@@ -145,30 +149,35 @@ async def create_assignment(
     if body.scaffold_level not in ('block_pseudo', 'typed_pseudo', 'block_python', 'typed_python'):
         raise HTTPException(status_code=400, detail="Invalid scaffold level.")
 
-    if body.assignment_type not in ('code', 'activity', 'checkin', 'quiz', 'project'):
+    if body.assignment_type not in ('code', 'activity', 'checkin', 'quiz', 'project', 'discussion'):
         raise HTTPException(status_code=400, detail="Invalid assignment type.")
+
+    row = {
+        "classroom_id": body.classroom_id,
+        "lesson_id": body.lesson_id or None,
+        "title": body.title,
+        "instructions": body.instructions,
+        "starter_code": body.starter_code,
+        "min_commits": max(0, body.min_commits) if body.assignment_type != 'code' else max(1, body.min_commits),
+        "scaffold_level": body.scaffold_level,
+        "due_date": body.due_date or None,
+        "allow_collab": body.allow_collab,
+        "assignment_type": body.assignment_type,
+        "is_graded": body.is_graded,
+        "standards_tags": body.standards_tags or [],
+        "hints_enabled": body.hints_enabled,
+        "hint_1": body.hint_1,
+        "hint_2": body.hint_2,
+        "curriculum_unit_id": body.curriculum_unit_id,
+        "curriculum_order": body.curriculum_order,
+    }
+    if body.assignment_type == 'discussion':
+        row["discussion_min_posts"] = body.discussion_min_posts if body.discussion_min_posts is not None else 1
+        row["discussion_min_comments"] = body.discussion_min_comments if body.discussion_min_comments is not None else 2
 
     result = (
         supabase_admin.table("assignments")
-        .insert({
-            "classroom_id": body.classroom_id,
-            "lesson_id": body.lesson_id or None,
-            "title": body.title,
-            "instructions": body.instructions,
-            "starter_code": body.starter_code,
-            "min_commits": max(0, body.min_commits) if body.assignment_type != 'code' else max(1, body.min_commits),
-            "scaffold_level": body.scaffold_level,
-            "due_date": body.due_date or None,
-            "allow_collab": body.allow_collab,
-            "assignment_type": body.assignment_type,
-            "is_graded": body.is_graded,
-            "standards_tags": body.standards_tags or [],
-            "hints_enabled": body.hints_enabled,
-            "hint_1": body.hint_1,
-            "hint_2": body.hint_2,
-            "curriculum_unit_id": body.curriculum_unit_id,
-            "curriculum_order": body.curriculum_order,
-        })
+        .insert(row)
         .execute()
     )
 
