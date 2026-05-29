@@ -167,11 +167,12 @@ export default function ClassroomPage() {
     fetchAll()
   }, [profile, classroomId])
 
-  // Lazy-fetch the curriculum the first time the teacher opens that tab.
-  // Also pull the per-classroom unlock id sets so we can render
-  // assign/unassign toggles next to every item.
+  // Fetch curriculum + per-classroom unlocks on first render. Both the
+  // curriculum tab AND the assignments tab need them (the assignments
+  // tab merges curriculum assignments into the teacher's list), so no
+  // longer gated on tab.
   useEffect(() => {
-    if (tab !== 'curriculum' || !profile) return
+    if (!profile) return
     if (curriculumUnits.length > 0 || curriculumLoading) return
     setCurriculumLoading(true)
     Promise.all([
@@ -187,7 +188,7 @@ export default function ClassroomPage() {
         setUnlockedAsstIds(new Set(unlocks.curriculum_assignment_ids))
       })
       .finally(() => setCurriculumLoading(false))
-  }, [tab, profile])
+  }, [profile])
 
   const toggleAssign = async (
     kind: 'lesson' | 'project' | 'assignment',
@@ -531,56 +532,105 @@ export default function ClassroomPage() {
         )}
 
         {/* ── ASSIGNMENTS TAB ── */}
-        {tab === 'assignments' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
-              <button onClick={() => setShowAddAssignment(true)} style={{ padding: '9px 18px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
-                + new assignment
-              </button>
-            </div>
+        {tab === 'assignments' && (() => {
+          // Pull curriculum assignments unlocked for this classroom and
+          // merge them into the assignments list so teachers see one
+          // unified actionable surface. Hide discussions when the
+          // classroom toggle is off.
+          const discussionsAllowed = classroom?.discussion_enabled !== false
+          const unlockedCurricAssts = curriculumUnits.flatMap(u =>
+            (u.curriculum_assignments || [])
+              .filter(a => a.is_published && unlockedAsstIds.has(a.id))
+              .filter(a => discussionsAllowed || a.assignment_type !== 'discussion')
+              .map(a => ({ ...a, _unitTitle: u.title, _unitOrder: u.order_index }))
+          )
+          const hasAny = assignments.length > 0 || unlockedCurricAssts.length > 0
+          const curricTypeColors: Record<string, { bg: string; color: string; label: string }> = {
+            code:        { bg: '#EBF1FD', color: '#0C447C', label: 'coding' },
+            activity:    { bg: '#F3E8FF', color: '#6B21A8', label: 'activity' },
+            checkin:     { bg: '#FEF3C7', color: '#92400E', label: 'check-in' },
+            quiz:        { bg: '#FCE7F3', color: '#9D174D', label: 'quiz' },
+            project:     { bg: '#FEF3C7', color: '#92400E', label: 'project' },
+            code_review: { bg: '#E0E7FF', color: '#3730A3', label: 'code review' },
+            discussion:  { bg: '#E0F2FE', color: '#075985', label: 'discussion' },
+          }
+          return (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+                <button onClick={() => setShowAddAssignment(true)} style={{ padding: '9px 18px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>
+                  + new assignment
+                </button>
+              </div>
 
-            {assignments.length === 0 ? (
-              <div style={{ padding: '3rem', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)' }}>
-                <p style={{ color: '#888780', fontSize: '14px', margin: '0 0 1rem' }}>no assignments yet</p>
-                <button onClick={() => setShowAddAssignment(true)} style={{ padding: '9px 20px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>+ create first assignment</button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {assignments.map(a => {
-                  const overdue = isOverdue(a.due_date)
-                  const sc = SCAFFOLD_COLORS[a.scaffold_level] || SCAFFOLD_COLORS.typed_python
-                  return (
-                    <div key={a.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1, minWidth: '200px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
-                          <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{a.title}</span>
-                          <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '99px', background: sc.bg, color: sc.text }}>{SCAFFOLD_LABELS[a.scaffold_level]}</span>
+              {!hasAny ? (
+                <div style={{ padding: '3rem', textAlign: 'center', background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)' }}>
+                  <p style={{ color: '#888780', fontSize: '14px', margin: '0 0 1rem' }}>no assignments yet</p>
+                  <button onClick={() => setShowAddAssignment(true)} style={{ padding: '9px 20px', background: '#1A56DB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif" }}>+ create first assignment</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {assignments.map(a => {
+                    const overdue = isOverdue(a.due_date)
+                    const sc = SCAFFOLD_COLORS[a.scaffold_level] || SCAFFOLD_COLORS.typed_python
+                    return (
+                      <div key={a.id} style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{a.title}</span>
+                            <span style={{ fontSize: '11px', fontWeight: 500, padding: '2px 8px', borderRadius: '99px', background: sc.bg, color: sc.text }}>{SCAFFOLD_LABELS[a.scaffold_level]}</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#888780', flexWrap: 'wrap' }}>
+                            <span>min {a.min_commits} commits</span>
+                            {a.due_date && (
+                              <span style={{ color: overdue ? '#991B1B' : '#5F5E5A', fontWeight: overdue ? 600 : 400 }}>
+                                {overdue ? 'overdue · ' : 'due '}
+                                {formatDate(a.due_date)}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: '#888780', flexWrap: 'wrap' }}>
-                          <span>min {a.min_commits} commits</span>
-                          {a.due_date && (
-                            <span style={{ color: overdue ? '#991B1B' : '#5F5E5A', fontWeight: overdue ? 600 : 400 }}>
-                              {overdue ? 'overdue · ' : 'due '}
-                              {formatDate(a.due_date)}
-                            </span>
-                          )}
-                        </div>
+                        <Link href={a.assignment_type === 'code' || !a.assignment_type ? `/classroom/${classroomId}/submissions/${a.id}` : `/classroom/${classroomId}/curriculum-submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                          view submissions
+                        </Link>
+                        <InstructionsUpload
+                          assignmentId={a.id}
+                          currentHtmlPath={a.instructions_html_path}
+                          onUploaded={fetchAll}
+                        />
                       </div>
-                      <Link href={a.assignment_type === 'code' || !a.assignment_type ? `/classroom/${classroomId}/submissions/${a.id}` : `/classroom/${classroomId}/curriculum-submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                        view submissions
-                      </Link>
-                      <InstructionsUpload
-                        assignmentId={a.id}
-                        currentHtmlPath={a.instructions_html_path}
-                        onUploaded={fetchAll}
-                      />
+                    )
+                  })}
+
+                  {unlockedCurricAssts.length > 0 && (
+                    <div style={{ marginTop: '0.5rem', padding: '8px 14px', fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                      from the curriculum
                     </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )}
+                  )}
+                  {unlockedCurricAssts.map(a => {
+                    const tc = curricTypeColors[a.assignment_type] || curricTypeColors.code
+                    return (
+                      <div key={`ca-${a.id}`} style={{ background: 'white', borderRadius: '12px', border: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                        <div style={{ flex: 1, minWidth: '200px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: 600, fontSize: '14px', color: '#0E2D6E' }}>{a.title}</span>
+                            <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: tc.bg, color: tc.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{tc.label}</span>
+                          </div>
+                          <div style={{ fontSize: '12px', color: '#888780' }}>{a._unitTitle}</div>
+                        </div>
+                        <Link href={`/classroom/${classroomId}/curriculum-submissions/${a.id}`} style={{ padding: '7px 16px', background: '#EBF1FD', color: '#0C447C', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                          view submissions
+                        </Link>
+                        <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '7px 16px', background: '#F1EFE8', color: '#5F5E5A', borderRadius: '8px', fontSize: '13px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                          preview →
+                        </Link>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── CURRICULUM TAB ── */}
         {tab === 'curriculum' && (

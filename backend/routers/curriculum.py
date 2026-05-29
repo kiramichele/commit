@@ -693,6 +693,70 @@ async def get_my_curriculum_assignment_submission(
     return response.data if response else None
 
 
+@router.get("/classroom/{classroom_id}/my-curric-status")
+async def get_my_curriculum_status_for_classroom(
+    classroom_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the current student's submitted/graded status for every
+    curriculum assignment unlocked in this classroom. Single round-trip
+    so the assignments tab can render without N per-assignment calls.
+
+    Code-type curriculum assignments live in `submissions` (via the
+    baby-git commit flow); every other type lives in
+    `exercise_responses`. We fetch both and merge by assignment id.
+    """
+    unlocked = (
+        supabase_admin.table("classroom_curric_assignment_unlocks")
+        .select("curriculum_assignment_id")
+        .eq("classroom_id", classroom_id)
+        .execute()
+    ).data or []
+    ca_ids = [r["curriculum_assignment_id"] for r in unlocked]
+    if not ca_ids:
+        return {}
+
+    out: dict = {ca_id: {"submitted": False, "score": None, "grade": None} for ca_id in ca_ids}
+
+    # Non-code curriculum assignments mirror their responses into
+    # exercise_responses.
+    er_rows = (
+        supabase_admin.table("exercise_responses")
+        .select("lesson_id, score, is_correct, created_at")
+        .eq("student_id", user.profile_id)
+        .eq("exercise_type", "curriculum_assignment")
+        .in_("lesson_id", ca_ids)
+        .execute()
+    ).data or []
+    for r in er_rows:
+        ca_id = r["lesson_id"]
+        if ca_id not in out:
+            continue
+        out[ca_id]["submitted"] = True
+        if r.get("score") is not None:
+            out[ca_id]["score"] = float(r["score"])
+
+    # Code-type curriculum assignments use the submissions table directly.
+    sub_rows = (
+        supabase_admin.table("submissions")
+        .select("curriculum_assignment_id, submitted_at, grade, penalized_grade")
+        .eq("student_id", user.profile_id)
+        .in_("curriculum_assignment_id", ca_ids)
+        .execute()
+    ).data or []
+    for s in sub_rows:
+        ca_id = s["curriculum_assignment_id"]
+        if ca_id not in out:
+            continue
+        if s.get("submitted_at"):
+            out[ca_id]["submitted"] = True
+        g = s.get("penalized_grade") if s.get("penalized_grade") is not None else s.get("grade")
+        if g is not None:
+            out[ca_id]["grade"] = float(g)
+
+    return out
+
+
 # ============================================================
 # CODE REVIEW
 # ============================================================
