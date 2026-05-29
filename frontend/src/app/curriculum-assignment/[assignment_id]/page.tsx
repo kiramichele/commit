@@ -461,35 +461,31 @@ function CurriculumAssignmentInner() {
         </div>
       ) : assignment.assignment_type === 'discussion' ? (
         // ── DISCUSSION BOARD ──
-        // Needs a classroom_id so posts are scoped to the viewer's classroom
-        // (curriculum-level discussions are still shown per-classroom).
-        !classroomIdParam ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}>
-            <div style={{ background: 'white', padding: '2rem', borderRadius: '12px', textAlign: 'center', maxWidth: '460px', border: '1px solid rgba(14,45,110,0.08)' }}>
-              <h2 style={{ margin: '0 0 8px', fontSize: '16px', fontWeight: 700, color: '#0E2D6E' }}>open from your classroom</h2>
-              <p style={{ margin: 0, fontSize: '13px', color: '#888780', lineHeight: 1.6 }}>
-                discussion boards are scoped to a classroom. open this assignment from your <Link href="/learn" style={{ color: '#1A56DB', fontWeight: 600 }}>learn page</Link> so we know which classmates to show.
-              </p>
+        // Real posts need a classroom_id (so we know which classmates to
+        // show); without one we fall back to a static preview with sample
+        // posts and comments — used by admin/teacher curriculum preview.
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <div style={{ background: 'white', borderBottom: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem 1.5rem' }}>
+            <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+              <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#075985', background: '#E0F2FE', padding: '3px 10px', borderRadius: '99px', marginBottom: '10px' }}>discussion</span>
+              <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 700, color: '#0E2D6E', letterSpacing: '-0.01em' }}>{assignment.title}</h1>
+              {assignment.instructions && (
+                <p style={{ margin: 0, fontSize: '14px', color: '#5F5E5A', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{assignment.instructions}</p>
+              )}
             </div>
           </div>
-        ) : (
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            <div style={{ background: 'white', borderBottom: '1px solid rgba(14,45,110,0.08)', padding: '1.25rem 1.5rem' }}>
-              <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-                <span style={{ display: 'inline-block', fontSize: '10px', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#075985', background: '#E0F2FE', padding: '3px 10px', borderRadius: '99px', marginBottom: '10px' }}>discussion</span>
-                <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 700, color: '#0E2D6E', letterSpacing: '-0.01em' }}>{assignment.title}</h1>
-                {assignment.instructions && (
-                  <p style={{ margin: 0, fontSize: '14px', color: '#5F5E5A', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{assignment.instructions}</p>
-                )}
-              </div>
+          {!classroomIdParam && (
+            <div style={{ background: '#FEF3C7', borderBottom: '1px solid rgba(245,158,11,0.3)', padding: '8px 16px', textAlign: 'center', fontSize: '12px', color: '#854D0E', fontWeight: 600 }}>
+              👁 preview mode — sample posts and comments. nothing here is saved.
             </div>
-            <DiscussionBoard
-              assignmentId={assignment.id}
-              classroomId={classroomIdParam}
-              viewerRole={(profile?.role as 'student' | 'teacher' | 'admin') || 'student'}
-            />
-          </div>
-        )
+          )}
+          <DiscussionBoard
+            assignmentId={assignment.id}
+            classroomId={classroomIdParam || 'preview'}
+            viewerRole={(profile?.role as 'student' | 'teacher' | 'admin') || 'student'}
+            previewMode={!classroomIdParam}
+          />
+        </div>
       ) : assignment.assignment_type === 'checkin' && assignment.checkin_format === 'coding' ? (
         // ── CHECK-IN: coding format → 3-pane editor ──
         <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>

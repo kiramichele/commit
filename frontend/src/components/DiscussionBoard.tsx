@@ -71,9 +71,80 @@ interface Props {
   assignmentId: string
   classroomId: string
   viewerRole: 'student' | 'teacher' | 'admin'
+  previewMode?: boolean
+  previewNameMode?: NameDisplayMode
 }
 
-export default function DiscussionBoard({ assignmentId, classroomId, viewerRole }: Props) {
+// Hardcoded sample posts used in preview mode. Designed to demonstrate
+// the upvote, comment count, and name-display behavior without touching
+// the API or requiring a real classroom.
+const PREVIEW_NOW = Date.now()
+const PREVIEW_POSTS: DiscussionPost[] = [
+  {
+    id: 'preview-post-1',
+    author_id: 'preview-1',
+    author_display_name: 'Maya Patel',
+    author_avatar_url: null,
+    author_role: 'student',
+    body: 'I think the trickiest part of the lesson was figuring out when to use a for-loop vs a while-loop. The example with `range()` finally made it click for me — anyone else have a moment where it suddenly clicked?',
+    created_at: new Date(PREVIEW_NOW - 1000 * 60 * 30).toISOString(),
+    comment_count: 2,
+    upvote_count: 4,
+    upvoted_by_me: false,
+    is_mine: false,
+  },
+  {
+    id: 'preview-post-2',
+    author_id: 'preview-2',
+    author_display_name: 'Jordan Lee',
+    author_avatar_url: null,
+    author_role: 'student',
+    body: 'Question: can you nest a for-loop inside a while-loop? I tried it and it worked but I want to make sure that\'s actually a valid pattern and not just luck.',
+    created_at: new Date(PREVIEW_NOW - 1000 * 60 * 60 * 2).toISOString(),
+    comment_count: 1,
+    upvote_count: 2,
+    upvoted_by_me: true,
+    is_mine: false,
+  },
+]
+const PREVIEW_COMMENTS: Record<string, DiscussionComment[]> = {
+  'preview-post-1': [
+    {
+      id: 'preview-comment-1',
+      author_id: 'preview-3',
+      author_display_name: 'Sam Rodriguez',
+      author_avatar_url: null,
+      author_role: 'student',
+      body: 'Same! I used to mix them up. The way I remember it now is: for-loop when you know how many times, while-loop when you only know the stop condition.',
+      created_at: new Date(PREVIEW_NOW - 1000 * 60 * 20).toISOString(),
+      is_mine: false,
+    },
+    {
+      id: 'preview-comment-2',
+      author_id: 'preview-4',
+      author_display_name: 'Ms. Chen',
+      author_avatar_url: null,
+      author_role: 'teacher',
+      body: 'Great explanation, Sam. Maya — try rewriting one of the lesson examples using the other loop type and see what changes.',
+      created_at: new Date(PREVIEW_NOW - 1000 * 60 * 10).toISOString(),
+      is_mine: false,
+    },
+  ],
+  'preview-post-2': [
+    {
+      id: 'preview-comment-3',
+      author_id: 'preview-3',
+      author_display_name: 'Sam Rodriguez',
+      author_avatar_url: null,
+      author_role: 'student',
+      body: 'Yes, nesting is totally valid. Just watch out for infinite loops — the inner one needs its own exit condition.',
+      created_at: new Date(PREVIEW_NOW - 1000 * 60 * 90).toISOString(),
+      is_mine: false,
+    },
+  ],
+}
+
+export default function DiscussionBoard({ assignmentId, classroomId, viewerRole, previewMode = false, previewNameMode = 'first_name' }: Props) {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [posts, setPosts] = useState<DiscussionPost[]>([])
   const [progress, setProgress] = useState<MyProgress | null>(null)
@@ -105,8 +176,31 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
   }
 
   useEffect(() => {
+    if (previewMode) {
+      // Static sample data — no network. Lets admins see what students
+      // will experience without needing to log in as a real student.
+      setMeta({
+        assignment: {
+          id: assignmentId,
+          title: 'Sample discussion',
+          kind: 'curriculum',
+          discussion_min_posts: 1,
+          discussion_min_comments: 2,
+        },
+        classroom: {
+          id: 'preview',
+          name: 'Sample classroom',
+          name_display: previewNameMode,
+        },
+      })
+      setPosts(PREVIEW_POSTS)
+      setCommentsByPost(PREVIEW_COMMENTS)
+      setProgress({ posts: 0, comments: 0, required_posts: 1, required_comments: 2 })
+      setLoading(false)
+      return
+    }
     loadAll()
-  }, [assignmentId, classroomId])
+  }, [assignmentId, classroomId, previewMode, previewNameMode])
 
   const refreshPosts = async () => {
     const p = await api.get<PostsResponse>(`/discussions/${assignmentId}/posts?classroom_id=${classroomId}`)
@@ -117,6 +211,24 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
   const submitPost = async () => {
     const body = newPostBody.trim()
     if (!body) return
+    if (previewMode) {
+      const nowIso = new Date().toISOString()
+      setPosts(prev => [{
+        id: `preview-new-${Date.now()}`,
+        author_id: 'preview-self',
+        author_display_name: 'You',
+        author_avatar_url: null,
+        author_role: viewerRole,
+        body,
+        created_at: nowIso,
+        comment_count: 0,
+        upvote_count: 0,
+        upvoted_by_me: false,
+        is_mine: true,
+      }, ...prev])
+      setNewPostBody('')
+      return
+    }
     setPosting(true)
     try {
       await api.post(`/discussions/${assignmentId}/posts`, { classroom_id: classroomId, body })
@@ -135,6 +247,7 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
       ? { ...p, upvoted_by_me: !p.upvoted_by_me, upvote_count: p.upvote_count + (p.upvoted_by_me ? -1 : 1) }
       : p
     ))
+    if (previewMode) return
     try {
       const res = await api.post<{ upvoted: boolean; upvote_count: number }>(`/discussions/posts/${postId}/upvote`)
       setPosts(prev => prev.map(p => p.id === postId
@@ -153,6 +266,7 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
       return
     }
     setOpenPostId(postId)
+    if (previewMode) return
     if (!commentsByPost[postId]) {
       try {
         const data = await api.get<DiscussionComment[]>(`/discussions/posts/${postId}/comments`)
@@ -166,6 +280,25 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
   const submitComment = async (postId: string) => {
     const draft = (commentDraftByPost[postId] || '').trim()
     if (!draft) return
+    if (previewMode) {
+      const nowIso = new Date().toISOString()
+      setCommentsByPost(prev => ({
+        ...prev,
+        [postId]: [...(prev[postId] || []), {
+          id: `preview-comment-new-${Date.now()}`,
+          author_id: 'preview-self',
+          author_display_name: 'You',
+          author_avatar_url: null,
+          author_role: viewerRole,
+          body: draft,
+          created_at: nowIso,
+          is_mine: true,
+        }],
+      }))
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comment_count: p.comment_count + 1 } : p))
+      setCommentDraftByPost(prev => ({ ...prev, [postId]: '' }))
+      return
+    }
     setCommentSavingByPost(prev => ({ ...prev, [postId]: true }))
     try {
       await api.post(`/discussions/posts/${postId}/comments`, { body: draft })
@@ -186,6 +319,10 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
   }
 
   const deletePost = async (postId: string) => {
+    if (previewMode) {
+      setPosts(prev => prev.filter(p => p.id !== postId))
+      return
+    }
     if (!confirm('Delete this post and all its comments?')) return
     try {
       await api.delete(`/discussions/posts/${postId}`)
@@ -196,6 +333,14 @@ export default function DiscussionBoard({ assignmentId, classroomId, viewerRole 
   }
 
   const deleteComment = async (postId: string, commentId: string) => {
+    if (previewMode) {
+      setCommentsByPost(prev => ({
+        ...prev,
+        [postId]: (prev[postId] || []).filter(c => c.id !== commentId),
+      }))
+      setPosts(prev => prev.map(p => p.id === postId ? { ...p, comment_count: Math.max(0, p.comment_count - 1) } : p))
+      return
+    }
     try {
       await api.delete(`/discussions/comments/${commentId}`)
       setCommentsByPost(prev => ({
