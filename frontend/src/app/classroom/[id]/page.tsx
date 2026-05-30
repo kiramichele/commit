@@ -168,11 +168,13 @@ export default function ClassroomPage() {
   const [hintsEnabled, setHintsEnabled] = useState(true)
   const [hint1, setHint1] = useState('')
   const [hint2, setHint2] = useState('')
-  // Collab toggle on the new-assignment form. We only expose the
-  // master enable here; size + strategy + student-choice + solo
-  // inherit from the classroom defaults unless the teacher edits the
-  // assignment later. Keeps the modal lightweight.
+  // Collab settings on the new-assignment form. When the master
+  // toggle is on we surface the strategy + group size so the teacher
+  // picks per assignment. student-choice + solo overrides inherit
+  // the classroom defaults (editable later in the assignment editor).
   const [collabEnabled, setCollabEnabled] = useState(false)
+  const [collabStrategy, setCollabStrategy] = useState<'random' | 'similar_grade' | 'opposite_grade' | 'manual' | 'student_choice'>('random')
+  const [collabGroupSize, setCollabGroupSize] = useState<number>(2)
 
   useEffect(() => {
     if (!loading && !profile) router.push('/login')
@@ -363,6 +365,8 @@ export default function ClassroomPage() {
         discussion_min_posts: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_posts : null,
         discussion_min_comments: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_comments : null,
         collab_enabled: collabEnabled,
+        collab_strategy: collabEnabled ? collabStrategy : null,
+        collab_group_size: collabEnabled ? collabGroupSize : null,
       })
       setShowAddAssignment(false)
       setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '', discussion_min_posts: 1, discussion_min_comments: 2 })
@@ -371,6 +375,8 @@ export default function ClassroomPage() {
       setHint1('')
       setHint2('')
       setCollabEnabled(false)
+      setCollabStrategy('random')
+      setCollabGroupSize(2)
       fetchAll()
     } catch (err: any) {
       setActionError(err.message || 'Could not create assignment.')
@@ -1211,15 +1217,51 @@ export default function ClassroomPage() {
                 <StandardsPicker selected={standardsTags} onChange={setStandardsTags} />
               </div>
 
-              {/* COLLAB toggle — defaults inherit from classroom. */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
-                <div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable collaboration</div>
-                  <div style={{ fontSize: '11px', color: '#888780' }}>students work in groups; size + strategy inherit classroom defaults</div>
+              {/* COLLAB — toggle + per-assignment strategy + size.
+                  When the strategy is random / grade-based, the
+                  backend auto-fills groups on assignment create AND
+                  lazily slots in late-joining students on first
+                  open. Manual + student_choice leave group formation
+                  to the teacher / students respectively. */}
+              <div style={{ padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable collaboration</div>
+                    <div style={{ fontSize: '11px', color: '#888780' }}>students work in groups; pick how to assign them below</div>
+                  </div>
+                  <div onClick={() => setCollabEnabled(c => !c)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: collabEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
+                    <div style={{ position: 'absolute', top: '3px', left: collabEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                  </div>
                 </div>
-                <div onClick={() => setCollabEnabled(c => !c)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: collabEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
-                  <div style={{ position: 'absolute', top: '3px', left: collabEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
-                </div>
+                {collabEnabled && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: '8px', marginTop: '10px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#0E2D6E', marginBottom: '4px' }}>grouping strategy</label>
+                      <select
+                        value={collabStrategy}
+                        onChange={e => setCollabStrategy(e.target.value as typeof collabStrategy)}
+                        style={{ ...inputStyle, cursor: 'pointer', fontSize: '13px' }}
+                      >
+                        <option value="random">Randomly</option>
+                        <option value="similar_grade">By grade (similar)</option>
+                        <option value="opposite_grade">By grade (opposite)</option>
+                        <option value="manual">Manually (teacher picks)</option>
+                        <option value="student_choice">Students choose</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#0E2D6E', marginBottom: '4px' }}>group size</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={6}
+                        value={collabGroupSize}
+                        onChange={e => setCollabGroupSize(Math.max(1, Math.min(6, parseInt(e.target.value, 10) || 2)))}
+                        style={{ ...inputStyle, fontSize: '13px' }}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* HINTS — coding only */}

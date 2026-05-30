@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import { AuthProvider } from '@/lib/auth-context'
+import FeedbackButton from '@/components/FeedbackButton'
 
 export const metadata: Metadata = {
   title: 'commit — commit to learning. commit to code.',
@@ -13,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <AuthProvider>
           {children}
+          <FeedbackButton />
         </AuthProvider>
       </body>
     </html>

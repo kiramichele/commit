@@ -209,7 +209,55 @@ async def create_assignment(
     if not result.data:
         raise HTTPException(status_code=500, detail="Failed to create assignment.")
 
-    return result.data[0]
+    created = result.data[0]
+
+    # If collab is enabled on the new assignment AND the strategy is
+    # teacher-driven (random / similar_grade / opposite_grade), generate
+    # the initial groups up front so the teacher sees them immediately
+    # in the GroupsManager + every existing student has a placement
+    # the moment they open the assignment. Manual + student_choice
+    # strategies skip this — manual is hand-set, student_choice waits
+    # on the picker.
+    if created.get("collab_enabled"):
+        try:
+            from routers.groups import (
+                _classroom_member_ids,
+                _student_grade_map,
+                _build_groups_for_strategy,
+            )
+            classroom_row = (
+                supabase_admin.table("classrooms")
+                .select("collab_default_group_size, collab_default_strategy")
+                .eq("id", body.classroom_id)
+                .maybe_single()
+                .execute()
+            ).data or {}
+            strategy = created.get("collab_strategy") or classroom_row.get("collab_default_strategy") or "random"
+            group_size = created.get("collab_group_size") or classroom_row.get("collab_default_group_size") or 2
+            if strategy in ("random", "similar_grade", "opposite_grade"):
+                student_ids = _classroom_member_ids(body.classroom_id)
+                grades_by_student = _student_grade_map(body.classroom_id) if strategy != "random" else {}
+                groups = _build_groups_for_strategy(student_ids, grades_by_student, strategy, int(group_size))
+                for i, members in enumerate(groups):
+                    if not members:
+                        continue
+                    g = supabase_admin.table("assignment_groups").insert({
+                        "classroom_id": body.classroom_id,
+                        "assignment_id": created["id"],
+                        "curriculum_assignment_id": None,
+                        "name": f"Group {i + 1}",
+                        "formed_by": user.profile_id,
+                    }).execute().data[0]
+                    supabase_admin.table("assignment_group_members").insert(
+                        [{"group_id": g["id"], "student_id": s} for s in members]
+                    ).execute()
+        except Exception as e:
+            # Auto-generation is a nice-to-have, not load-bearing — if
+            # something goes wrong, the lazy auto-place in
+            # /groups/my-group still catches students on first open.
+            print(f"Auto-generate groups failed for assignment {created.get('id')}: {e}")
+
+    return created
 
 
 @router.get("/{assignment_id}/analytics")

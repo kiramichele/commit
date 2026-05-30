@@ -326,3 +326,44 @@ def send_new_assignment_notification(
         subject=f"📋 new assignment: {assignment_title}",
         html=_base_template(content, preheader=f"New assignment in {classroom_name}: {assignment_title}"),
     )
+
+
+def send_feedback_notification(
+    to_email: str,
+    kind: str,
+    page: str,
+    message: str,
+    from_email: Optional[str],
+    from_name: Optional[str],
+):
+    """Pings the platform owner whenever a user submits feedback from
+    the floating button. Keeps the rest of the system in the dark —
+    this is a one-way notification, no reply chain.
+    """
+    KIND_LABELS = {
+        "bug": "🐛 bug report",
+        "feature": "✨ feature request",
+        "general": "💬 general feedback",
+    }
+    label = KIND_LABELS.get(kind, kind)
+    safe_message = (message or "").replace("\n", "<br/>")
+    reporter_line = ""
+    if from_email:
+        reporter_line = f'<p style="margin:0 0 8px;font-size:13px;color:#888780;">from: <strong style="color:#0E2D6E;">{from_name or from_email}</strong> &nbsp;·&nbsp; <span style="color:#5F5E5A;">{from_email}</span></p>'
+    else:
+        reporter_line = '<p style="margin:0 0 8px;font-size:13px;color:#888780;">from: <em>anonymous</em></p>'
+    page_line = f'<p style="margin:0 0 16px;font-size:13px;color:#888780;">page: <code style="font-family:\'Courier New\',monospace;font-size:12px;background:#F8F7F5;padding:2px 6px;border-radius:4px;">{page or "(unknown)"}</code></p>' if page else ""
+
+    content = f"""
+    {_h1(label)}
+    {reporter_line}
+    {page_line}
+    <div style="margin:16px 0;padding:14px 16px;background:#F8F7F5;border-left:3px solid #1A56DB;border-radius:4px;font-size:14px;color:#0E2D6E;line-height:1.7;white-space:pre-wrap;">{safe_message}</div>
+    """
+
+    short = (message or "").strip().splitlines()[0][:60] if message else "(empty)"
+    _send(
+        to=to_email,
+        subject=f"{label}: {short}",
+        html=_base_template(content, preheader=f"New feedback from {from_email or 'anonymous'}"),
+    )

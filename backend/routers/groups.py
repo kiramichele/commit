@@ -325,9 +325,13 @@ async def get_my_group(
     curriculum_assignment_id: Optional[str] = None,
     user: CurrentUser = Depends(get_current_user),
 ):
-    """Returns the group the current user is in for this assignment,
-    or null. Students hit this on assignment open to decide whether to
-    show the picker or the editor.
+    """Returns the group the current user is in for this assignment.
+
+    For teacher-driven strategies (random / similar_grade / opposite_grade)
+    we auto-place the student here so they don't sit on "waiting on your
+    teacher" forever — fill the first non-full existing group, otherwise
+    spin up a new one. Manual + student_choice strategies still return
+    null so the picker / waiting state shows.
     """
     classroom = _load_classroom(classroom_id)
     _assert_member_or_teacher(classroom, user)
@@ -336,33 +340,107 @@ async def get_my_group(
             status_code=400,
             detail="Pass exactly one of assignment_id or curriculum_assignment_id.",
         )
+
+    def _format(g: dict) -> dict:
+        members = []
+        for m in (g.get("members") or []):
+            p = m.get("profile") or {}
+            members.append({
+                "student_id": m["student_id"],
+                "display_name": p.get("display_name"),
+                "avatar_url": p.get("avatar_url"),
+                "joined_at": m.get("joined_at"),
+            })
+        return {
+            "id": g["id"],
+            "name": g.get("name"),
+            "formed_at": g.get("formed_at"),
+            "members": members,
+        }
+
     gid = _find_existing_membership(
         user.profile_id, classroom_id, assignment_id, curriculum_assignment_id
     )
-    if not gid:
+    if gid:
+        res = (
+            _groups_query(assignment_id, curriculum_assignment_id, classroom_id)
+            .eq("id", gid)
+            .single()
+            .execute()
+        )
+        return _format(res.data)
+
+    # Not in a group yet. Only auto-place actual students; teachers /
+    # admins viewing the page should still see null so they can
+    # observe what students will experience.
+    if user.role != "student":
         return None
+
+    _, assignment_row = _resolve_assignment(assignment_id, curriculum_assignment_id)
+    cfg = _resolve_collab_config(assignment_row, classroom)
+    if not cfg["enabled"]:
+        return None
+    if cfg["strategy"] in ("manual", "student_choice"):
+        return None
+
+    target_group_id = _autoplace_student(
+        student_id=user.profile_id,
+        classroom_id=classroom_id,
+        assignment_id=assignment_id,
+        curriculum_assignment_id=curriculum_assignment_id,
+        group_size=int(cfg["group_size"] or 2),
+    )
     res = (
         _groups_query(assignment_id, curriculum_assignment_id, classroom_id)
-        .eq("id", gid)
+        .eq("id", target_group_id)
         .single()
         .execute()
     )
-    g = res.data
-    members = []
-    for m in (g.get("members") or []):
-        p = m.get("profile") or {}
-        members.append({
-            "student_id": m["student_id"],
-            "display_name": p.get("display_name"),
-            "avatar_url": p.get("avatar_url"),
-            "joined_at": m.get("joined_at"),
-        })
-    return {
-        "id": g["id"],
-        "name": g.get("name"),
-        "formed_at": g.get("formed_at"),
-        "members": members,
-    }
+    return _format(res.data)
+
+
+def _autoplace_student(
+    student_id: str,
+    classroom_id: str,
+    assignment_id: Optional[str],
+    curriculum_assignment_id: Optional[str],
+    group_size: int,
+) -> str:
+    """Slots a student into a group with vacancy, or creates a new one.
+    Returns the group_id they ended up in. Idempotent — safe to call
+    even if they were already a member.
+    """
+    q = supabase_admin.table("assignment_groups").select(
+        "id, assignment_group_members(student_id)"
+    ).eq("classroom_id", classroom_id)
+    if assignment_id:
+        q = q.eq("assignment_id", assignment_id)
+    else:
+        q = q.eq("curriculum_assignment_id", curriculum_assignment_id)
+    existing = q.execute().data or []
+
+    target = None
+    for g in existing:
+        members = g.get("assignment_group_members") or []
+        if len(members) < group_size:
+            target = g["id"]
+            break
+
+    if not target:
+        created = supabase_admin.table("assignment_groups").insert({
+            "classroom_id": classroom_id,
+            "assignment_id": assignment_id,
+            "curriculum_assignment_id": curriculum_assignment_id,
+            "name": f"Group {len(existing) + 1}",
+            "formed_by": student_id,
+        }).execute()
+        target = created.data[0]["id"]
+
+    supabase_admin.table("assignment_group_members").upsert(
+        {"group_id": target, "student_id": student_id},
+        on_conflict="group_id,student_id",
+    ).execute()
+    return target
 
 
 # ============================================================
