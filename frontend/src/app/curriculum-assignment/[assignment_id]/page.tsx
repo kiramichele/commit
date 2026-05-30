@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useEffect, useState, useCallback, useRef, Suspense } from 'react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
@@ -7,6 +7,10 @@ import { api } from '@/lib/api'
 import ErrorPanel from '@/components/ErrorPanel'
 import HintPanel from '@/components/HintPanel'
 import DiscussionBoard from '@/components/DiscussionBoard'
+import GroupPicker from '@/components/GroupPicker'
+import CollabPresence from '@/components/CollabPresence'
+import CollabCursors from '@/components/CollabCursors'
+import { useCollab } from '@/lib/useCollab'
 
 type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project' | 'code_review' | 'discussion'
 
@@ -168,6 +172,65 @@ function CurriculumAssignmentInner() {
   const [runningTests, setRunningTests] = useState(false)
   const [expandedTcId, setExpandedTcId] = useState<string | null>(null)
   const [testRunError, setTestRunError] = useState('')
+
+  // Collab state — populated by GroupPicker once we know which group
+  // the student is in. Phase 2 wires this to a Realtime channel.
+  const [collabGroupId, setCollabGroupId] = useState<string | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement | null>(null)
+  const editorTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const codeBroadcastTimer = useRef<number | null>(null)
+  const collabMe = profile
+    ? { user_id: profile.profile_id, display_name: profile.display_name, avatar_url: profile.avatar_url || null }
+    : null
+  const channelName = collabGroupId ? `collab:group:${collabGroupId}` : null
+
+  const { ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice, sendCode, sendCaret, sendMouse } = useCollab({
+    channelName,
+    me: collabMe,
+    onRemoteCode: (incoming) => {
+      // Last-write-wins. We accept whatever the broadcaster sent and
+      // overwrite local state. The textarea's caret moves if the
+      // change is upstream of it, which matches Google-Docs-ish feel.
+      setCode(incoming)
+    },
+  })
+
+  // Mouse + caret broadcasters. We throttle mouse to ~30Hz and
+  // broadcast caret on selectionchange. Code goes through a
+  // setTimeout debounce so a typing burst is one message instead of
+  // dozens.
+  useEffect(() => {
+    if (!collabReady) return
+    const el = editorContainerRef.current
+    if (!el) return
+    let last = 0
+    const onMove = (e: MouseEvent) => {
+      const now = Date.now()
+      if (now - last < 33) return
+      last = now
+      const rect = el.getBoundingClientRect()
+      sendMouse(e.clientX - rect.left, e.clientY - rect.top)
+    }
+    el.addEventListener('mousemove', onMove)
+    return () => el.removeEventListener('mousemove', onMove)
+  }, [collabReady, sendMouse])
+
+  useEffect(() => {
+    if (!collabReady) return
+    const ta = editorTextareaRef.current
+    if (!ta) return
+    const onSelChange = () => {
+      sendCaret(ta.selectionStart, ta.selectionEnd, ta.value.length)
+    }
+    ta.addEventListener('select', onSelChange)
+    ta.addEventListener('keyup', onSelChange)
+    ta.addEventListener('click', onSelChange)
+    return () => {
+      ta.removeEventListener('select', onSelChange)
+      ta.removeEventListener('keyup', onSelChange)
+      ta.removeEventListener('click', onSelChange)
+    }
+  }, [collabReady, sendCaret])
 
   useEffect(() => {
     if (loading) return
@@ -755,7 +818,20 @@ function CurriculumAssignmentInner() {
         )
       ) : assignment.assignment_type === 'code' ? (
         // ── 3-PANE FOR CODING (with baby-git commit flow) ──
-        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr', minHeight: 'calc(100vh - 52px)' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 52px)' }}>
+          {/* COLLAB GROUP PICKER — renders nothing when collab is off
+              for this assignment. When on, shows the picker; once the
+              student is in a group, shows their group bar. */}
+          {classroomIdParam && (
+            <div style={{ padding: '0.75rem 1rem' }}>
+              <GroupPicker
+                classroomId={classroomIdParam}
+                curriculumAssignmentId={assignment.id}
+                onGroupChange={g => setCollabGroupId(g?.id || null)}
+              />
+            </div>
+          )}
+        <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1.1fr 1fr' }}>
           {/* PROBLEM PANE */}
           <div style={{ borderRight: '1px solid rgba(14,45,110,0.08)', background: 'white', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '10px 16px', background: '#F8F7F5', borderBottom: '1px solid rgba(14,45,110,0.06)', fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#888780' }}>problem</div>
@@ -767,13 +843,16 @@ function CurriculumAssignmentInner() {
           </div>
 
           {/* EDITOR PANE */}
-          <div style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)' }}>
+          <div ref={editorContainerRef} style={{ background: '#1C1C1E', display: 'flex', flexDirection: 'column', borderRight: '1px solid rgba(14,45,110,0.08)', position: 'relative' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#242426', borderBottom: '1px solid rgba(255,255,255,0.06)', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <span style={{ fontSize: '11px', fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.4)' }}>editor · python</span>
                 <span style={{ fontSize: '11px', color: commits.length >= minCommits ? '#22C55E' : '#F59E0B', fontWeight: 600 }}>
                   {commits.length}/{minCommits} commits {flashCommit && '✓'}
                 </span>
+                {collabReady && profile && (
+                  <CollabPresence members={collabMembers} meUserId={profile.profile_id} />
+                )}
               </div>
               <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                 <button onClick={handleRun} disabled={running} style={{ padding: '5px 14px', background: running ? '#166534' : '#22C55E', color: 'white', border: 'none', borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: running ? 'not-allowed' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>{running ? '◌ running...' : '▶ run'}</button>
@@ -827,13 +906,35 @@ function CurriculumAssignmentInner() {
             )}
 
             <textarea
+              ref={editorTextareaRef}
               value={viewingCode ?? code}
-              onChange={e => { setCode(e.target.value); setHasEditedSinceRun(true) }}
+              onChange={e => {
+                const v = e.target.value
+                setCode(v)
+                setHasEditedSinceRun(true)
+                // Debounce code broadcast — typing bursts collapse into
+                // one message instead of one per keystroke.
+                if (collabReady) {
+                  if (codeBroadcastTimer.current) window.clearTimeout(codeBroadcastTimer.current)
+                  codeBroadcastTimer.current = window.setTimeout(() => sendCode(v), 150)
+                }
+              }}
               onKeyDown={handleTab}
               readOnly={!!viewingCode}
               spellCheck={false}
               style={{ flex: 1, background: '#1C1C1E', color: '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: '1rem 1.25rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
             />
+
+            {collabReady && (
+              <CollabCursors
+                containerRef={editorContainerRef}
+                textareaRef={editorTextareaRef}
+                code={viewingCode ?? code}
+                members={collabMembers}
+                carets={collabCarets}
+                mice={collabMice}
+              />
+            )}
 
             {submitError && (
               <div style={{ padding: '8px 14px', background: '#FEE2E2', color: '#991B1B', fontSize: '12px', fontWeight: 500 }}>
@@ -955,6 +1056,7 @@ function CurriculumAssignmentInner() {
               </div>
             )}
           </div>
+        </div>
         </div>
       ) : assignment.assignment_type === 'activity' ? (
         // ── ACTIVITY (iframe with Commit SDK) ──

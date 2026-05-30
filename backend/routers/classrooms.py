@@ -43,6 +43,10 @@ class ClassroomUpdate(BaseModel):
     discussion_name_display: Optional[str] = None  # 'first_name' | 'first_last_initial' | 'full_name'
     auto_grade_test_cases: Optional[bool] = None
     auto_add_assigned_to_todo: Optional[bool] = None
+    collab_default_group_size: Optional[int] = None
+    collab_default_strategy: Optional[str] = None
+    collab_allow_student_choice: Optional[bool] = None
+    collab_allow_solo: Optional[bool] = None
     archived: Optional[bool] = None
 
 
@@ -528,6 +532,16 @@ async def update_classroom(
         "first_name", "first_last_initial", "full_name"
     ):
         raise HTTPException(status_code=400, detail="Invalid discussion_name_display value.")
+
+    if "collab_default_strategy" in updates and updates["collab_default_strategy"] not in (
+        "random", "similar_grade", "opposite_grade", "manual", "student_choice"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid collab_default_strategy.")
+
+    if "collab_default_group_size" in updates:
+        gs = updates["collab_default_group_size"]
+        if not isinstance(gs, int) or gs < 1 or gs > 6:
+            raise HTTPException(status_code=400, detail="collab_default_group_size must be 1–6.")
 
     result = (
         supabase_admin.table("classrooms")

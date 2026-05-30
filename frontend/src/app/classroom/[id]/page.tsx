@@ -7,6 +7,7 @@ import { api } from '@/lib/api'
 import HelpQueue from '@/components/HelpQueue'
 import LatePenaltySettings from '@/components/LatePenaltySettings'
 import GradeWeightSettings from '@/components/GradeWeightSettings'
+import GroupsManager from '@/components/GroupsManager'
 import { StandardsPicker } from '@/components/Standards'
 import InstructionsUpload from '@/components/InstructionsUpload'
 
@@ -60,6 +61,10 @@ interface Classroom {
   discussion_name_display?: 'first_name' | 'first_last_initial' | 'full_name'
   auto_grade_test_cases?: boolean
   auto_add_assigned_to_todo?: boolean
+  collab_default_group_size?: number
+  collab_default_strategy?: 'random' | 'similar_grade' | 'opposite_grade' | 'manual' | 'student_choice'
+  collab_allow_student_choice?: boolean
+  collab_allow_solo?: boolean
 }
 
 interface StudentProgress {
@@ -138,6 +143,11 @@ export default function ClassroomPage() {
   const [unlockedProjectIds, setUnlockedProjectIds] = useState<Set<string>>(new Set())
   const [unlockedAsstIds, setUnlockedAsstIds] = useState<Set<string>>(new Set())
   const [busyUnlock, setBusyUnlock] = useState<string | null>(null)
+  // When the teacher clicks "⚏ groups" on an assignment row, we open a
+  // modal scoped to that one assignment.
+  const [openGroupsForAsst, setOpenGroupsForAsst] = useState<
+    { kind: 'classroom' | 'curriculum'; id: string } | null
+  >(null)
   const [dataLoading, setDataLoading] = useState(true)
   const [copiedCode, setCopiedCode] = useState(false)
   const [showAddStudent, setShowAddStudent] = useState(false)
@@ -158,6 +168,11 @@ export default function ClassroomPage() {
   const [hintsEnabled, setHintsEnabled] = useState(true)
   const [hint1, setHint1] = useState('')
   const [hint2, setHint2] = useState('')
+  // Collab toggle on the new-assignment form. We only expose the
+  // master enable here; size + strategy + student-choice + solo
+  // inherit from the classroom defaults unless the teacher edits the
+  // assignment later. Keeps the modal lightweight.
+  const [collabEnabled, setCollabEnabled] = useState(false)
 
   useEffect(() => {
     if (!loading && !profile) router.push('/login')
@@ -347,6 +362,7 @@ export default function ClassroomPage() {
         curriculum_order: newAssignment.curriculum_unit_id ? Math.floor(Date.now() / 1000) : null,
         discussion_min_posts: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_posts : null,
         discussion_min_comments: newAssignment.assignment_type === 'discussion' ? newAssignment.discussion_min_comments : null,
+        collab_enabled: collabEnabled,
       })
       setShowAddAssignment(false)
       setNewAssignment({ title: '', instructions: '', due_date: '', min_commits: 3, scaffold_level: 'typed_python', starter_code: '', assignment_type: 'code', curriculum_unit_id: '', discussion_min_posts: 1, discussion_min_comments: 2 })
@@ -354,6 +370,7 @@ export default function ClassroomPage() {
       setHintsEnabled(true)
       setHint1('')
       setHint2('')
+      setCollabEnabled(false)
       fetchAll()
     } catch (err: any) {
       setActionError(err.message || 'Could not create assignment.')
@@ -825,6 +842,13 @@ export default function ClassroomPage() {
                                   ⚏ pairings
                                 </button>
                               )}
+                              <button
+                                onClick={() => setOpenGroupsForAsst({ kind: 'curriculum', id: a.id })}
+                                style={{ padding: '6px 12px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}
+                                title="manage collab groups for this assignment"
+                              >
+                                ⚏ groups
+                              </button>
                               {assignBtn('assignment', a.id)}
                               <Link href={`/curriculum-assignment/${a.id}?classroom_id=${classroomId}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#F1EFE8', color: '#5F5E5A', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>preview →</Link>
                               <Link href={`/classroom/${classroomId}/curriculum-grading/${a.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>grade →</Link>
@@ -861,6 +885,13 @@ export default function ClassroomPage() {
                               <span style={{ fontSize: '10px', fontWeight: 600, padding: '2px 8px', borderRadius: '99px', background: tatc.bg, color: tatc.color }}>{tatc.label}</span>
                             </div>
                           </div>
+                          <button
+                            onClick={() => setOpenGroupsForAsst({ kind: 'classroom', id: ta.id })}
+                            style={{ padding: '6px 12px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none', whiteSpace: 'nowrap' }}
+                            title="manage collab groups for this assignment"
+                          >
+                            ⚏ groups
+                          </button>
                           <Link href={ta.assignment_type === 'code' || !ta.assignment_type ? `/classroom/${classroomId}/submissions/${ta.id}` : `/classroom/${classroomId}/curriculum-submissions/${ta.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>submissions →</Link>
                         </div>
                       )
@@ -870,6 +901,15 @@ export default function ClassroomPage() {
               })
             )}
           </div>
+        )}
+
+        {openGroupsForAsst && (
+          <GroupsManager
+            classroomId={classroomId}
+            assignmentId={openGroupsForAsst.kind === 'classroom' ? openGroupsForAsst.id : undefined}
+            curriculumAssignmentId={openGroupsForAsst.kind === 'curriculum' ? openGroupsForAsst.id : undefined}
+            onClose={() => setOpenGroupsForAsst(null)}
+          />
         )}
 
         {/* ── HELP QUEUE TAB ── */}
@@ -986,6 +1026,87 @@ export default function ClassroomPage() {
               </select>
             </div>
 
+            <div style={{ marginTop: '1.5rem', padding: '1.25rem', border: '1px solid rgba(14,45,110,0.08)', borderRadius: '10px' }}>
+              <h4 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>collaboration defaults</h4>
+              <p style={{ margin: '0 0 12px', fontSize: '12px', color: '#888780', lineHeight: 1.55 }}>
+                Defaults applied to every collab-enabled assignment in this classroom. Individual assignments can override any of these.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#0E2D6E', marginBottom: '4px' }}>default group size</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={classroom.collab_default_group_size ?? 2}
+                    onChange={async e => {
+                      const v = Math.max(1, Math.min(6, parseInt(e.target.value, 10) || 2))
+                      try {
+                        await api.patch(`/classrooms/${classroomId}`, { collab_default_group_size: v })
+                        setClassroom(c => c ? { ...c, collab_default_group_size: v } : c)
+                      } catch (err: any) {
+                        alert(err.message || 'Could not update.')
+                      }
+                    }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, color: '#0E2D6E', marginBottom: '4px' }}>default grouping strategy</label>
+                  <select
+                    value={classroom.collab_default_strategy ?? 'random'}
+                    onChange={async e => {
+                      const v = e.target.value as Classroom['collab_default_strategy']
+                      try {
+                        await api.patch(`/classrooms/${classroomId}`, { collab_default_strategy: v })
+                        setClassroom(c => c ? { ...c, collab_default_strategy: v } : c)
+                      } catch (err: any) {
+                        alert(err.message || 'Could not update.')
+                      }
+                    }}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif", cursor: 'pointer' }}
+                  >
+                    <option value="random">Random</option>
+                    <option value="similar_grade">By grade (similar)</option>
+                    <option value="opposite_grade">By grade (opposite)</option>
+                    <option value="manual">Manual (teacher picks)</option>
+                    <option value="student_choice">Student choice</option>
+                  </select>
+                </div>
+              </div>
+              {(['collab_allow_student_choice', 'collab_allow_solo'] as const).map(key => {
+                const checked = !!classroom[key]
+                const label = key === 'collab_allow_student_choice'
+                  ? 'Students can form their own groups'
+                  : 'Students can choose to work solo'
+                const desc = key === 'collab_allow_student_choice'
+                  ? 'Lets students create new groups or join existing ones from the assignment page.'
+                  : 'Lets students opt out of group work entirely on a collab assignment.'
+                return (
+                  <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderTop: '1px solid rgba(14,45,110,0.05)' }}>
+                    <div style={{ flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>{label}</div>
+                      <div style={{ fontSize: '11px', color: '#888780', lineHeight: 1.5 }}>{desc}</div>
+                    </div>
+                    <div
+                      onClick={async () => {
+                        const next = !checked
+                        try {
+                          await api.patch(`/classrooms/${classroomId}`, { [key]: next })
+                          setClassroom(c => c ? { ...c, [key]: next } : c)
+                        } catch (err: any) {
+                          alert(err.message || 'Could not update.')
+                        }
+                      }}
+                      style={{ width: '40px', height: '22px', borderRadius: '99px', background: checked ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer', flexShrink: 0 }}
+                    >
+                      <div style={{ position: 'absolute', top: '3px', left: checked ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.15s' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
             <div style={{ marginTop: '1.5rem' }}>
               <GradeWeightSettings classroomId={classroomId} />
             </div>
@@ -1088,6 +1209,17 @@ export default function ClassroomPage() {
               <div>
                 <label style={labelStyle}>learning objectives <span style={{ color: '#888780', fontWeight: 400 }}>(optional)</span></label>
                 <StandardsPicker selected={standardsTags} onChange={setStandardsTags} />
+              </div>
+
+              {/* COLLAB toggle — defaults inherit from classroom. */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: '#F8F7F5', borderRadius: '8px' }}>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>enable collaboration</div>
+                  <div style={{ fontSize: '11px', color: '#888780' }}>students work in groups; size + strategy inherit classroom defaults</div>
+                </div>
+                <div onClick={() => setCollabEnabled(c => !c)} style={{ width: '40px', height: '22px', borderRadius: '99px', background: collabEnabled ? '#1A56DB' : '#D3D1C7', position: 'relative', cursor: 'pointer' }}>
+                  <div style={{ position: 'absolute', top: '3px', left: collabEnabled ? '21px' : '3px', width: '16px', height: '16px', borderRadius: '50%', background: 'white', transition: 'left 0.2s' }} />
+                </div>
               </div>
 
               {/* HINTS — coding only */}

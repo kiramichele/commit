@@ -4,6 +4,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { api } from '@/lib/api'
+import CollabOverrideCard, { CollabOverrides } from '@/components/CollabOverrideCard'
 
 interface CurriculumAssignment {
   id: string
@@ -30,6 +31,11 @@ interface CurriculumAssignment {
   discussion_min_comments?: number | null
   test_cases?: TestCase[] | null
   default_comparison?: string | null
+  collab_enabled?: boolean | null
+  collab_group_size?: number | null
+  collab_strategy?: 'random' | 'similar_grade' | 'opposite_grade' | 'manual' | 'student_choice' | null
+  collab_allow_student_choice?: boolean | null
+  collab_allow_solo?: boolean | null
 }
 
 type Comparison = 'exact' | 'strip_trailing_whitespace' | 'case_insensitive' | 'contains'
@@ -113,6 +119,14 @@ export default function CurriculumAssignmentEditor() {
   const [discussionMinPosts, setDiscussionMinPosts] = useState(1)
   const [discussionMinComments, setDiscussionMinComments] = useState(2)
 
+  const [collab, setCollab] = useState<CollabOverrides>({
+    collab_enabled: false,
+    collab_group_size: null,
+    collab_strategy: null,
+    collab_allow_student_choice: null,
+    collab_allow_solo: null,
+  })
+
   const [testCases, setTestCases] = useState<TestCase[]>([])
   const [defaultComparison, setDefaultComparison] = useState<Comparison>('strip_trailing_whitespace')
   const [showImportModal, setShowImportModal] = useState(false)
@@ -183,6 +197,13 @@ export default function CurriculumAssignmentEditor() {
       setPairingStrategy(data.pairing_strategy || 'random')
       setDiscussionMinPosts(data.discussion_min_posts ?? 1)
       setDiscussionMinComments(data.discussion_min_comments ?? 2)
+      setCollab({
+        collab_enabled: !!data.collab_enabled,
+        collab_group_size: data.collab_group_size ?? null,
+        collab_strategy: data.collab_strategy ?? null,
+        collab_allow_student_choice: data.collab_allow_student_choice ?? null,
+        collab_allow_solo: data.collab_allow_solo ?? null,
+      })
       setDefaultComparison((data.default_comparison as Comparison) || 'strip_trailing_whitespace')
       setTestCases((data.test_cases || []).map(tc => ({
         id: tc.id,
@@ -415,6 +436,11 @@ export default function CurriculumAssignmentEditor() {
         pairing_strategy: isCodeReview ? pairingStrategy : null,
         discussion_min_posts: isDiscussion ? Math.max(0, discussionMinPosts) : null,
         discussion_min_comments: isDiscussion ? Math.max(0, discussionMinComments) : null,
+        collab_enabled: !!collab.collab_enabled,
+        collab_group_size: collab.collab_group_size,
+        collab_strategy: collab.collab_strategy,
+        collab_allow_student_choice: collab.collab_allow_student_choice,
+        collab_allow_solo: collab.collab_allow_solo,
         test_cases: isCoding ? testCases.map(tc => {
           const out: Record<string, unknown> = {
             id: tc.id.trim(),
@@ -832,18 +858,17 @@ export default function CurriculumAssignmentEditor() {
             </div>
           )}
 
-          {/* COLLAB */}
-          <div style={card}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <h3 style={{ margin: '0 0 2px', fontSize: '14px', fontWeight: 700, color: '#0E2D6E' }}>allow collaboration</h3>
-                <p style={{ margin: 0, fontSize: '12px', color: '#888780' }}>let students work together on this assignment</p>
-              </div>
-              <button onClick={() => setAllowCollab(c => !c)} style={{ ...btn(false), padding: '5px 12px', fontSize: '12px', background: allowCollab ? '#DCFCE7' : '#FEF9C3', color: allowCollab ? '#166534' : '#854D0E', border: 'none' }}>
-                {allowCollab ? 'enabled' : 'disabled'}
-              </button>
-            </div>
-          </div>
+          {/* COLLAB — new override card. Classroom defaults are
+              applied at runtime per classroom; this admin form has no
+              specific classroom to read defaults from, so we leave the
+              defaults panel empty. */}
+          <CollabOverrideCard
+            value={collab}
+            onChange={next => {
+              setCollab(next)
+              setAllowCollab(!!next.collab_enabled)
+            }}
+          />
 
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
             <Link href="/admin/curriculum" style={{ ...btn(false), textDecoration: 'none' }}>← back</Link>

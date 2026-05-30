@@ -508,6 +508,11 @@ class CurriculumAssignmentCreate(BaseModel):
     discussion_min_comments: Optional[int] = None
     test_cases: Optional[List[dict]] = None  # see _validate_test_cases for shape
     default_comparison: Optional[str] = None
+    collab_enabled: Optional[bool] = None
+    collab_group_size: Optional[int] = None
+    collab_strategy: Optional[str] = None
+    collab_allow_student_choice: Optional[bool] = None
+    collab_allow_solo: Optional[bool] = None
 
 
 class CurriculumAssignmentUpdate(BaseModel):
@@ -533,6 +538,11 @@ class CurriculumAssignmentUpdate(BaseModel):
     discussion_min_comments: Optional[int] = None
     test_cases: Optional[List[dict]] = None
     default_comparison: Optional[str] = None
+    collab_enabled: Optional[bool] = None
+    collab_group_size: Optional[int] = None
+    collab_strategy: Optional[str] = None
+    collab_allow_student_choice: Optional[bool] = None
+    collab_allow_solo: Optional[bool] = None
 
 
 _VALID_ASSIGNMENT_TYPES = {"code", "activity", "checkin", "quiz", "project", "code_review", "discussion"}
@@ -622,6 +632,12 @@ async def create_curriculum_assignment(
         raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
     if body.default_comparison is not None and body.default_comparison not in _VALID_COMPARISONS:
         raise HTTPException(status_code=400, detail="Invalid default_comparison.")
+    if body.collab_strategy is not None and body.collab_strategy not in (
+        "random", "similar_grade", "opposite_grade", "manual", "student_choice"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid collab_strategy.")
+    if body.collab_group_size is not None and (body.collab_group_size < 1 or body.collab_group_size > 6):
+        raise HTTPException(status_code=400, detail="collab_group_size must be 1–6.")
     unit = supabase_admin.table("units").select("id").eq("id", unit_id).maybe_single().execute()
     if not unit or not unit.data:
         raise HTTPException(status_code=404, detail="Unit not found.")
@@ -674,6 +690,12 @@ async def update_curriculum_assignment(
         raise HTTPException(status_code=400, detail="Invalid pairing_strategy.")
     if body.default_comparison is not None and body.default_comparison not in _VALID_COMPARISONS:
         raise HTTPException(status_code=400, detail="Invalid default_comparison.")
+    if body.collab_strategy is not None and body.collab_strategy not in (
+        "random", "similar_grade", "opposite_grade", "manual", "student_choice"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid collab_strategy.")
+    if body.collab_group_size is not None and (body.collab_group_size < 1 or body.collab_group_size > 6):
+        raise HTTPException(status_code=400, detail="collab_group_size must be 1–6.")
     raw = body.model_dump()
     html_body = raw.pop("html_body", None)
     # Validate test_cases shape if the caller is sending them. An empty

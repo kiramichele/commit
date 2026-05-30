@@ -9,6 +9,10 @@ import ErrorPanel from '@/components/ErrorPanel'
 import type { ScaffoldLevel } from '@/lib/errorInterpreter'
 import HintPanel from '@/components/HintPanel'
 import DiscussionBoard from '@/components/DiscussionBoard'
+import GroupPicker from '@/components/GroupPicker'
+import CollabPresence from '@/components/CollabPresence'
+import CollabCursors from '@/components/CollabCursors'
+import { useCollab } from '@/lib/useCollab'
 
 interface Assignment {
   id: string
@@ -73,6 +77,57 @@ export default function AssignmentEditorPage() {
   const [isDiscussion, setIsDiscussion] = useState(false)
   const [discussionTitle, setDiscussionTitle] = useState('')
   const [discussionInstructions, setDiscussionInstructions] = useState('')
+
+  // Collab state — wired to a Supabase Realtime channel once the
+  // student has joined a group via the picker above the editor.
+  const [collabGroupId, setCollabGroupId] = useState<string | null>(null)
+  const editorContainerRef = useRef<HTMLDivElement | null>(null)
+  const codeBroadcastTimer = useRef<number | null>(null)
+  const collabMe = profile
+    ? { user_id: profile.profile_id, display_name: profile.display_name, avatar_url: profile.avatar_url || null }
+    : null
+  const channelName = collabGroupId ? `collab:group:${collabGroupId}` : null
+  const {
+    ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice,
+    sendCode, sendCaret, sendMouse,
+  } = useCollab({
+    channelName,
+    me: collabMe,
+    onRemoteCode: incoming => { setCode(incoming) },
+  })
+
+  useEffect(() => {
+    if (!collabReady) return
+    const el = editorContainerRef.current
+    if (!el) return
+    let last = 0
+    const onMove = (e: MouseEvent) => {
+      const now = Date.now()
+      if (now - last < 33) return
+      last = now
+      const rect = el.getBoundingClientRect()
+      sendMouse(e.clientX - rect.left, e.clientY - rect.top)
+    }
+    el.addEventListener('mousemove', onMove)
+    return () => el.removeEventListener('mousemove', onMove)
+  }, [collabReady, sendMouse])
+
+  useEffect(() => {
+    if (!collabReady) return
+    const ta = textareaRef.current
+    if (!ta) return
+    const onSelChange = () => {
+      sendCaret(ta.selectionStart, ta.selectionEnd, ta.value.length)
+    }
+    ta.addEventListener('select', onSelChange)
+    ta.addEventListener('keyup', onSelChange)
+    ta.addEventListener('click', onSelChange)
+    return () => {
+      ta.removeEventListener('select', onSelChange)
+      ta.removeEventListener('keyup', onSelChange)
+      ta.removeEventListener('click', onSelChange)
+    }
+  }, [collabReady, sendCaret])
 
   useEffect(() => {
     if (loading) return
@@ -381,6 +436,17 @@ export default function AssignmentEditorPage() {
         </div>
       )}
 
+      {/* COLLAB GROUP PICKER — null while collab is off for this
+          assignment, otherwise shows the picker or the student's
+          current group bar. */}
+      <div style={{ padding: '0 1rem' }}>
+        <GroupPicker
+          classroomId={classroomId}
+          assignmentId={assignmentId}
+          onGroupChange={g => setCollabGroupId(g?.id || null)}
+        />
+      </div>
+
       {/* MAIN AREA */}
       <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '280px 1fr 320px', minHeight: 0 }}>
 
@@ -454,7 +520,12 @@ export default function AssignmentEditorPage() {
         </div>
 
         {/* CENTER — EDITOR + OUTPUT */}
-        <div style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <div ref={editorContainerRef} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
+          {collabReady && profile && (
+            <div style={{ position: 'absolute', top: '8px', right: '12px', zIndex: 11 }}>
+              <CollabPresence members={collabMembers} meUserId={profile.profile_id} />
+            </div>
+          )}
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             {viewingCode !== null && (
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, background: '#0E2D6E', padding: '8px 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
@@ -465,7 +536,38 @@ export default function AssignmentEditorPage() {
                 </div>
               </div>
             )}
-            <textarea ref={textareaRef} value={viewingCode !== null ? viewingCode : code} onChange={e => { if (viewingCode === null && !isSubmitted) { setCode(e.target.value); if (!hasEditedSinceRun && submission) { setHasEditedSinceRun(true); api.post(`/code/track-edit?submission_id=${submission.id}`, {}).catch(() => {}) } } }} onKeyDown={handleTab} readOnly={viewingCode !== null || isSubmitted} spellCheck={false} style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }} />
+            <textarea
+              ref={textareaRef}
+              value={viewingCode !== null ? viewingCode : code}
+              onChange={e => {
+                if (viewingCode === null && !isSubmitted) {
+                  const v = e.target.value
+                  setCode(v)
+                  if (!hasEditedSinceRun && submission) {
+                    setHasEditedSinceRun(true)
+                    api.post(`/code/track-edit?submission_id=${submission.id}`, {}).catch(() => {})
+                  }
+                  if (collabReady) {
+                    if (codeBroadcastTimer.current) window.clearTimeout(codeBroadcastTimer.current)
+                    codeBroadcastTimer.current = window.setTimeout(() => sendCode(v), 150)
+                  }
+                }
+              }}
+              onKeyDown={handleTab}
+              readOnly={viewingCode !== null || isSubmitted}
+              spellCheck={false}
+              style={{ width: '100%', height: '100%', background: viewingCode !== null ? '#1a2a1a' : '#1C1C1E', color: viewingCode !== null ? '#9FE1CB' : '#EBF1FD', fontFamily: "'DM Mono', monospace", fontSize: '14px', lineHeight: 1.8, padding: viewingCode !== null ? '2.5rem 1.5rem 1.5rem' : '1.5rem', border: 'none', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+            />
+            {collabReady && (
+              <CollabCursors
+                containerRef={editorContainerRef}
+                textareaRef={textareaRef}
+                code={viewingCode !== null ? viewingCode : code}
+                members={collabMembers}
+                carets={collabCarets}
+                mice={collabMice}
+              />
+            )}
           </div>
           <div style={{ minHeight: '160px', background: '#111113', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
             <div style={{ padding: '8px 1rem', borderBottom: '1px solid rgba(255,255,255,0.04)', display: 'flex', alignItems: 'center', gap: '8px' }}>

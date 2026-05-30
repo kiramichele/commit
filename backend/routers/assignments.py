@@ -37,6 +37,11 @@ class AssignmentCreate(BaseModel):
     curriculum_order: Optional[float] = None  # numeric so we can slot between admin items via half-steps
     discussion_min_posts: Optional[int] = None
     discussion_min_comments: Optional[int] = None
+    collab_enabled: Optional[bool] = None
+    collab_group_size: Optional[int] = None
+    collab_strategy: Optional[str] = None
+    collab_allow_student_choice: Optional[bool] = None
+    collab_allow_solo: Optional[bool] = None
 
 
 class AssignmentUpdate(BaseModel):
@@ -54,6 +59,11 @@ class AssignmentUpdate(BaseModel):
     curriculum_order: Optional[float] = None
     discussion_min_posts: Optional[int] = None
     discussion_min_comments: Optional[int] = None
+    collab_enabled: Optional[bool] = None
+    collab_group_size: Optional[int] = None
+    collab_strategy: Optional[str] = None
+    collab_allow_student_choice: Optional[bool] = None
+    collab_allow_solo: Optional[bool] = None
 
 
 # ============================================================
@@ -174,6 +184,21 @@ async def create_assignment(
     if body.assignment_type == 'discussion':
         row["discussion_min_posts"] = body.discussion_min_posts if body.discussion_min_posts is not None else 1
         row["discussion_min_comments"] = body.discussion_min_comments if body.discussion_min_comments is not None else 2
+
+    # Collab fields are optional and inherit classroom defaults at read
+    # time. Persist only what the teacher set so NULL overrides mean
+    # "use classroom default".
+    for key in ("collab_enabled", "collab_group_size", "collab_strategy",
+                "collab_allow_student_choice", "collab_allow_solo"):
+        val = getattr(body, key, None)
+        if val is not None:
+            row[key] = val
+    if body.collab_strategy is not None and body.collab_strategy not in (
+        "random", "similar_grade", "opposite_grade", "manual", "student_choice"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid collab_strategy.")
+    if body.collab_group_size is not None and (body.collab_group_size < 1 or body.collab_group_size > 6):
+        raise HTTPException(status_code=400, detail="collab_group_size must be 1–6.")
 
     result = (
         supabase_admin.table("assignments")
@@ -313,6 +338,15 @@ async def update_assignment(
     updates = body.model_dump(exclude_none=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update.")
+
+    if "collab_strategy" in updates and updates["collab_strategy"] not in (
+        "random", "similar_grade", "opposite_grade", "manual", "student_choice"
+    ):
+        raise HTTPException(status_code=400, detail="Invalid collab_strategy.")
+    if "collab_group_size" in updates:
+        gs = updates["collab_group_size"]
+        if not isinstance(gs, int) or gs < 1 or gs > 6:
+            raise HTTPException(status_code=400, detail="collab_group_size must be 1–6.")
 
     existing = (
         supabase_admin.table("assignments")
