@@ -705,12 +705,26 @@ async def update_curriculum_assignment(
     updates = {k: v for k, v in raw.items() if v is not None}
 
     if updates:
-        response = (
-            supabase_admin.table("curriculum_assignments")
-            .update(updates)
-            .eq("id", assignment_id)
-            .execute()
-        )
+        try:
+            response = (
+                supabase_admin.table("curriculum_assignments")
+                .update(updates)
+                .eq("id", assignment_id)
+                .execute()
+            )
+        except Exception as e:
+            # Surface DB schema mismatches as a clean error instead of
+            # letting them bubble to the frontend as "failed to fetch".
+            # The most common cause is a migration that hasn't been
+            # applied yet — better to tell the admin which column blew
+            # up so they can run the right migration.
+            msg = str(e)
+            if "column" in msg.lower() or "schema" in msg.lower() or "violates check" in msg.lower():
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Database schema rejected the update: {msg}. Make sure all migrations are applied.",
+                )
+            raise HTTPException(status_code=500, detail=f"Update failed: {msg}")
         if not response.data:
             raise HTTPException(status_code=404, detail="Assignment not found.")
 
