@@ -187,6 +187,7 @@ function CurriculumAssignmentInner() {
   const { ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice, sendCode, sendCaret, sendMouse } = useCollab({
     channelName,
     me: collabMe,
+    groupId: collabGroupId,
     onRemoteCode: (incoming) => {
       // Last-write-wins. We accept whatever the broadcaster sent and
       // overwrite local state. The textarea's caret moves if the

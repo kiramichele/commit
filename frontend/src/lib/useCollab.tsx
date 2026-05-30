@@ -21,6 +21,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { RealtimeChannel } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { api } from '@/lib/api'
 
 export interface CollabMember {
   user_id: string
@@ -52,6 +53,13 @@ interface UseCollabArgs {
     avatar_url: string | null
   } | null
   onRemoteCode?: (code: string, fromUserId: string) => void
+  // When set, the hook fetches the persisted snapshot for this group
+  // as soon as the channel is ready and replays it as if it were a
+  // remote code event. While the local user types, sendCode also
+  // debounces a PUT back to the same group so late joiners see the
+  // freshest possible state instead of waiting on the next
+  // broadcast.
+  groupId?: string | null
 }
 
 interface UseCollabResult {
@@ -64,7 +72,7 @@ interface UseCollabResult {
   sendMouse: (x: number, y: number) => void
 }
 
-export function useCollab({ channelName, me, onRemoteCode }: UseCollabArgs): UseCollabResult {
+export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabArgs): UseCollabResult {
   const [members, setMembers] = useState<CollabMember[]>([])
   const [carets, setCarets] = useState<Record<string, RemoteCaret>>({})
   const [mice, setMice] = useState<Record<string, RemoteMouse>>({})
@@ -72,6 +80,10 @@ export function useCollab({ channelName, me, onRemoteCode }: UseCollabArgs): Use
   const channelRef = useRef<RealtimeChannel | null>(null)
   const onRemoteCodeRef = useRef(onRemoteCode)
   onRemoteCodeRef.current = onRemoteCode
+  // Debounce snapshot saves so a typing burst is one PUT instead of
+  // dozens. Fires ~2.5s after the most recent sendCode call.
+  const snapshotSaveTimer = useRef<number | null>(null)
+  const latestCodeRef = useRef<string>('')
 
   // Subscribe / unsubscribe.
   useEffect(() => {
@@ -128,6 +140,20 @@ export function useCollab({ channelName, me, onRemoteCode }: UseCollabArgs): Use
             joined_at: Date.now(),
           })
           setReady(true)
+          // Pull the persisted snapshot so a late joiner sees what
+          // everyone else has been typing instead of an empty buffer.
+          if (groupId) {
+            try {
+              const snap = await api.get<{ code: string | null; updated_at: string | null; updated_by: string | null }>(
+                `/groups/${groupId}/snapshot`
+              )
+              if (snap?.code && onRemoteCodeRef.current) {
+                onRemoteCodeRef.current(snap.code, snap.updated_by || 'snapshot')
+              }
+            } catch {
+              // Non-fatal — no snapshot just means the group's brand new.
+            }
+          }
         }
       })
 
@@ -161,7 +187,18 @@ export function useCollab({ channelName, me, onRemoteCode }: UseCollabArgs): Use
     const ch = channelRef.current
     if (!ch || !me) return
     ch.send({ type: 'broadcast', event: 'code', payload: { user_id: me.user_id, code } })
-  }, [me?.user_id])
+    // Mirror the latest local edit into the persisted snapshot so a
+    // student who joins the group later loads what's actually on
+    // screen, not what was there hours ago. Debounced to keep the
+    // PUT volume sane during typing bursts.
+    if (groupId) {
+      latestCodeRef.current = code
+      if (snapshotSaveTimer.current) window.clearTimeout(snapshotSaveTimer.current)
+      snapshotSaveTimer.current = window.setTimeout(() => {
+        api.put(`/groups/${groupId}/snapshot`, { code: latestCodeRef.current }).catch(() => {})
+      }, 2500) as unknown as number
+    }
+  }, [me?.user_id, groupId])
 
   const sendCaret = useCallback((selection_start: number, selection_end: number, length: number) => {
     const ch = channelRef.current

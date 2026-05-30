@@ -93,6 +93,7 @@ export default function AssignmentEditorPage() {
   } = useCollab({
     channelName,
     me: collabMe,
+    groupId: collabGroupId,
     onRemoteCode: incoming => { setCode(incoming) },
   })
 

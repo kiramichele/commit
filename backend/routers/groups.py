@@ -664,3 +664,97 @@ async def remove_member(
     supabase_admin.table("assignment_group_members").delete().eq(
         "group_id", group_id
     ).eq("student_id", student_id).execute()
+
+
+# ============================================================
+# SNAPSHOTS — persistent shared document for late joiners
+# ============================================================
+
+class SnapshotWrite(BaseModel):
+    code: str
+
+
+def _assert_member_of_group(group_id: str, user: CurrentUser) -> dict:
+    """Loads the group + checks the caller is a member, the teacher
+    of the owning classroom, or an admin.
+    """
+    group = (
+        supabase_admin.table("assignment_groups")
+        .select("id, classroom_id")
+        .eq("id", group_id)
+        .maybe_single()
+        .execute()
+    )
+    if not group or not group.data:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    g = group.data
+    if user.role == "admin":
+        return g
+    classroom = (
+        supabase_admin.table("classrooms")
+        .select("teacher_id")
+        .eq("id", g["classroom_id"])
+        .maybe_single()
+        .execute()
+    )
+    if classroom and classroom.data and classroom.data["teacher_id"] == user.profile_id:
+        return g
+    member = (
+        supabase_admin.table("assignment_group_members")
+        .select("student_id")
+        .eq("group_id", group_id)
+        .eq("student_id", user.profile_id)
+        .maybe_single()
+        .execute()
+    )
+    if not member or not member.data:
+        raise HTTPException(status_code=403, detail="Not a member of this group.")
+    return g
+
+
+@router.get("/{group_id}/snapshot")
+async def get_snapshot(
+    group_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Returns the latest saved shared document for this group.
+    Returns null `code` when no snapshot exists yet — the caller
+    should fall back to the assignment's starter code in that case.
+    """
+    _assert_member_of_group(group_id, user)
+    row = (
+        supabase_admin.table("assignment_group_snapshots")
+        .select("code, updated_at, updated_by")
+        .eq("group_id", group_id)
+        .maybe_single()
+        .execute()
+    )
+    if not row or not row.data:
+        return {"code": None, "updated_at": None, "updated_by": None}
+    return row.data
+
+
+@router.put("/{group_id}/snapshot")
+async def put_snapshot(
+    group_id: str,
+    body: SnapshotWrite,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Upserts the shared document. Last write wins — the realtime
+    channel keeps members in sync, so the saved snapshot only needs
+    to be approximately current. Frontend debounces ~2-3s between
+    writes from each member.
+    """
+    _assert_member_of_group(group_id, user)
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    supabase_admin.table("assignment_group_snapshots").upsert(
+        {
+            "group_id": group_id,
+            "code": body.code,
+            "updated_at": now,
+            "updated_by": user.profile_id,
+        },
+        on_conflict="group_id",
+    ).execute()
+    return {"saved": True, "updated_at": now}
