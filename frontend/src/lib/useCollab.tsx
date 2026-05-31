@@ -92,6 +92,9 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       return
     }
 
+    const log = (...args: unknown[]) => console.log('[collab]', channelName, ...args)
+    log('opening channel', { me: me.user_id })
+
     const channel = supabase.channel(channelName, {
       config: {
         broadcast: { self: false },
@@ -116,7 +119,9 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         // Deduplicate by user_id (in case of multiple tabs from same user).
         const byId = new Map<string, CollabMember>()
         for (const m of out) byId.set(m.user_id, m)
-        setMembers([...byId.values()])
+        const final = [...byId.values()]
+        log('presence sync', final.map(m => m.display_name))
+        setMembers(final)
       })
       .on('broadcast', { event: 'code' }, ({ payload }: { payload: { user_id: string; code: string } }) => {
         if (!payload || !onRemoteCodeRef.current) return
@@ -132,6 +137,7 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         setMice(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .subscribe(async status => {
+        log('subscribe status', status)
         if (status === 'SUBSCRIBED') {
           await channel.track({
             user_id: me.user_id,
@@ -148,12 +154,18 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
                 `/groups/${groupId}/snapshot`
               )
               if (snap?.code && onRemoteCodeRef.current) {
+                log('applied snapshot', { length: snap.code.length })
                 onRemoteCodeRef.current(snap.code, snap.updated_by || 'snapshot')
               }
-            } catch {
-              // Non-fatal — no snapshot just means the group's brand new.
+            } catch (e) {
+              log('snapshot fetch failed', e)
             }
           }
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Realtime didn't come up cleanly — surface it so the
+          // student / dev sees something in the console instead of a
+          // silent dead channel.
+          console.warn('[collab] channel not subscribed:', status, channelName)
         }
       })
 

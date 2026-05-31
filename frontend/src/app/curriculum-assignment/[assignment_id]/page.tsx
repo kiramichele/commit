@@ -829,6 +829,8 @@ function CurriculumAssignmentInner() {
                 classroomId={classroomIdParam}
                 curriculumAssignmentId={assignment.id}
                 onGroupChange={g => setCollabGroupId(g?.id || null)}
+                collabReady={collabReady}
+                collabMemberCount={collabMembers.length}
               />
             </div>
           )}

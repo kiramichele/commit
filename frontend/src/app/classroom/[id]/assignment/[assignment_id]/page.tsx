@@ -445,6 +445,8 @@ export default function AssignmentEditorPage() {
           classroomId={classroomId}
           assignmentId={assignmentId}
           onGroupChange={g => setCollabGroupId(g?.id || null)}
+          collabReady={collabReady}
+          collabMemberCount={collabMembers.length}
         />
       </div>
 
