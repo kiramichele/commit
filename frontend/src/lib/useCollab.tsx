@@ -77,6 +77,11 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
   const [carets, setCarets] = useState<Record<string, RemoteCaret>>({})
   const [mice, setMice] = useState<Record<string, RemoteMouse>>({})
   const [ready, setReady] = useState(false)
+  // Bumped every time we detect the channel went CLOSED — used as a
+  // dep on the subscribe effect so it tears down + rebuilds the
+  // channel automatically. Without this, a single network blip
+  // permanently strands the channel and stops live sync.
+  const [reconnectVersion, setReconnectVersion] = useState(0)
   const channelRef = useRef<RealtimeChannel | null>(null)
   const onRemoteCodeRef = useRef(onRemoteCode)
   onRemoteCodeRef.current = onRemoteCode
@@ -228,10 +233,15 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
             }
           }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          // Realtime didn't come up cleanly — surface it so the
-          // student / dev sees something in the console instead of a
-          // silent dead channel.
           console.warn('[collab] channel not subscribed:', status, channelName)
+          setReady(false)
+          // Tear down + bump the reconnect counter so the subscribe
+          // effect re-fires and rebuilds the channel from scratch.
+          // A short delay so we don't busy-loop if the server is
+          // throttling us.
+          window.setTimeout(() => {
+            setReconnectVersion(v => v + 1)
+          }, 2000)
         }
       })
 
@@ -242,7 +252,7 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       supabase.removeChannel(channel)
       channelRef.current = null
     }
-  }, [channelName, me?.user_id])
+  }, [channelName, me?.user_id, reconnectVersion])
 
   // Stale-mouse / stale-caret cleanup. We don't get an explicit
   // "stopped moving" event, so we age out anything older than 6s.
@@ -266,17 +276,35 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
   // wipes us out. Supabase considers a client gone after ~30s of no
   // presence updates; a heartbeat keeps us alive AND repopulates if
   // we somehow disappeared from the other peer's view.
+  //
+  // Also doubles as a liveness probe — if track() returns 'timed
+  // out', the channel is gone in practice even if the subscribe
+  // callback didn't fire CLOSED. Bump the reconnect counter so the
+  // subscribe effect rebuilds it.
   useEffect(() => {
     if (!ready || !me) return
     const ch = channelRef.current
     if (!ch) return
+    let stuck = 0
     const heartbeat = setInterval(() => {
       ch.track({
         user_id: me.user_id,
         display_name: me.display_name,
         avatar_url: me.avatar_url,
         joined_at: Date.now(),
-      }).then(r => console.log('[collab] heartbeat track', r)).catch(e => console.warn('[collab] heartbeat failed', e))
+      }).then(r => {
+        console.log('[collab] heartbeat track', r)
+        if (r === 'timed out' || r === 'error') {
+          stuck += 1
+          if (stuck >= 2) {
+            console.warn('[collab] heartbeat stuck, triggering reconnect')
+            stuck = 0
+            setReconnectVersion(v => v + 1)
+          }
+        } else {
+          stuck = 0
+        }
+      }).catch(e => console.warn('[collab] heartbeat failed', e))
     }, 5000)
     return () => clearInterval(heartbeat)
   }, [ready, me?.user_id])
