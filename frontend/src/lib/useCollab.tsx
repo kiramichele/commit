@@ -125,6 +125,21 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         for (const m of out) byId.set(m.user_id, m)
         const final = [...byId.values()]
         log('presence sync (deduped)', final.map(m => `${m.display_name} (${m.user_id.slice(0, 8)})`))
+
+        // Self-heal: if presence comes back empty but we're supposed
+        // to be tracked, immediately re-track. Otherwise we'd wait
+        // for the next 5s heartbeat to fix it.
+        const meAbsent = !final.some(m => m.user_id === me.user_id)
+        if (meAbsent) {
+          log('not in presence — re-tracking self')
+          channel.track({
+            user_id: me.user_id,
+            display_name: me.display_name,
+            avatar_url: me.avatar_url,
+            joined_at: Date.now(),
+          }).then(r => log('re-track', r)).catch(e => log('re-track failed', e))
+        }
+
         setMembers(final)
       })
       .on('presence', { event: 'join' }, ({ key, newPresences }) => {
@@ -219,6 +234,26 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
     }, 2000)
     return () => clearInterval(t)
   }, [ready])
+
+  // Presence heartbeat — re-track our own presence every few seconds
+  // so the channel stays warm even if a transient empty presence-sync
+  // wipes us out. Supabase considers a client gone after ~30s of no
+  // presence updates; a heartbeat keeps us alive AND repopulates if
+  // we somehow disappeared from the other peer's view.
+  useEffect(() => {
+    if (!ready || !me) return
+    const ch = channelRef.current
+    if (!ch) return
+    const heartbeat = setInterval(() => {
+      ch.track({
+        user_id: me.user_id,
+        display_name: me.display_name,
+        avatar_url: me.avatar_url,
+        joined_at: Date.now(),
+      }).then(r => console.log('[collab] heartbeat track', r)).catch(e => console.warn('[collab] heartbeat failed', e))
+    }, 5000)
+    return () => clearInterval(heartbeat)
+  }, [ready, me?.user_id])
 
   const sendCode = useCallback((code: string) => {
     const ch = channelRef.current
