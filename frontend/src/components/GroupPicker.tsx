@@ -124,9 +124,14 @@ export default function GroupPicker({
       }
       try {
         const all = await api.get<Group[]>(`/groups/?${queryString}`)
+        console.log('[collab] groups for this assignment:', all, 'group_size cap:', cfg.group_size)
         setGroups(all || [])
-      } catch (e) {
-        console.warn('[collab] /groups/ list failed (continuing)', e)
+      } catch (e: any) {
+        console.warn('[collab] /groups/ list failed', e)
+        // Surface this — losing the list silently is what makes the
+        // modal look like "you have to create a new group" when
+        // there's actually one already there.
+        setError(`Couldn't load existing groups: ${e?.message || 'unknown error'}`)
       }
 
       // First-open modal: show if collab is on AND we haven't shown
@@ -418,32 +423,47 @@ export default function GroupPicker({
 
             {config.allow_student_choice && (
               <>
-                {openGroups.length > 0 && (
-                  <>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' }}>join an open group</div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
-                      {openGroups.map(g => (
+                {/* Always render the "groups in your class" section so
+                    the student can see existing groups (and know the
+                    feature is working) even when they're all full.
+                    Empty list gets an explicit message. */}
+                <div style={{ fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' }}>
+                  groups in your class · {groups.length}
+                </div>
+                {groups.length === 0 ? (
+                  <div style={{ padding: '12px 14px', background: '#FAFAF8', borderRadius: '8px', fontSize: '12px', color: '#888780', marginBottom: '14px', fontStyle: 'italic' }}>
+                    no groups yet — you can start the first one below.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                    {groups.map(g => {
+                      const full = g.members.length >= config.group_size
+                      return (
                         <div key={g.id} style={{ padding: '10px 12px', background: '#FAFAF8', borderRadius: '8px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
                               <span style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>{g.name || 'Unnamed group'}</span>
-                              <span style={{ fontSize: '11px', color: '#888780' }}>{g.members.length} / {config.group_size}</span>
+                              <span style={{ fontSize: '11px', color: full ? '#991B1B' : '#888780', fontWeight: full ? 700 : 400 }}>{g.members.length} / {config.group_size}{full ? ' · full' : ''}</span>
                               <div style={{ display: 'flex', gap: '4px' }}>
                                 {g.members.map(m => (
                                   <div key={m.student_id} title={m.display_name || ''}>{avatar(m.display_name, m.avatar_url, 22)}</div>
                                 ))}
                               </div>
                             </div>
-                            <button onClick={() => joinGroup(g.id)} disabled={busy} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>join</button>
+                            {full ? (
+                              <span style={{ padding: '6px 10px', borderRadius: '8px', background: '#FEE2E2', color: '#991B1B', fontSize: '11px', fontWeight: 700 }}>full</span>
+                            ) : (
+                              <button onClick={() => joinGroup(g.id)} disabled={busy} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>join</button>
+                            )}
                           </div>
                           <div style={{ fontSize: '12px', color: g.idea ? '#0E2D6E' : '#888780', fontStyle: g.idea ? 'normal' : 'italic', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                             <span style={{ color: '#888780', fontWeight: 600, marginRight: '6px' }}>idea:</span>
                             {g.idea || 'not sure yet'}
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </>
+                      )
+                    })}
+                  </div>
                 )}
                 <div style={{ padding: '12px', background: '#FAFAF8', borderRadius: '10px', marginBottom: '14px' }}>
                   <div style={{ fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' }}>or start your own</div>
