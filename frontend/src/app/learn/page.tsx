@@ -139,6 +139,7 @@ export default function LearnPage() {
         units,
         completions,
         curricStatus,
+        unlocks,
       ] = await Promise.all([
         api.get<Assignment[]>(`/assignments/?classroom_id=${selectedClassroom}`).catch(() => []),
         api.get<{ lesson: string[]; project: string[]; curriculum_assignment: string[] }>(
@@ -153,6 +154,13 @@ export default function LearnPage() {
         api.get<Record<string, CurricStatus>>(
           `/curriculum/classroom/${selectedClassroom}/my-curric-status`
         ).catch(() => ({} as Record<string, CurricStatus>)),
+        // Also pull what's been *unlocked* (assigned) for this
+        // classroom — curriculum assignments should show on the
+        // kanban whether or not the student has explicitly added
+        // them to their personal to-do.
+        api.get<{ lesson_ids: string[]; project_ids: string[]; curriculum_assignment_ids: string[] }>(
+          `/curriculum/classroom/${selectedClassroom}/unlocks`
+        ).catch(() => ({ lesson_ids: [], project_ids: [], curriculum_assignment_ids: [] })),
       ])
 
       const classroomAssignments = assignments || []
@@ -162,8 +170,13 @@ export default function LearnPage() {
       if (classroomAssignments.length > 0) {
         const submissionResults = await Promise.all(
           classroomAssignments.map(a =>
-            api.post<{ submission: Submission }>(`/code/open?assignment_id=${a.id}`, {})
-              .then(d => d.submission)
+            // /code/open returns { submission, commits, assignment }
+            // — the submissions table has no commit_count column, so
+            // we derive it from the commits array length here. Without
+            // this, every classroom assignment stayed in the "to-do"
+            // column even after the student had committed.
+            api.post<{ submission: Submission; commits: unknown[] }>(`/code/open?assignment_id=${a.id}`, {})
+              .then(d => d.submission ? { ...d.submission, commit_count: (d.commits || []).length } : null)
               .catch(() => null)
           )
         )
@@ -255,7 +268,16 @@ export default function LearnPage() {
           unitTitle: info.unit,
         })
       }
-      for (const cid of (todoLists.curriculum_assignment || [])) {
+      // Curriculum assignments on the kanban = union of (student's
+      // to-do list) and (everything the teacher has assigned to the
+      // classroom). The teacher's assigned items show up
+      // automatically so the student doesn't have to hunt them down
+      // to-do-by-to-do — they ARE the work, after all.
+      const curricAsstIds = new Set<string>([
+        ...(todoLists.curriculum_assignment || []),
+        ...(unlocks.curriculum_assignment_ids || []),
+      ])
+      for (const cid of curricAsstIds) {
         const info = curricAsstById[cid]
         if (!info) continue
         const status = curricStatus[cid]
