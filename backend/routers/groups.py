@@ -297,70 +297,99 @@ async def list_groups(
     """Returns every group for this assignment in this classroom, with
     members + display name + avatar so the picker can render them.
 
-    Implemented as three small selects (groups → members → profiles)
-    instead of one PostgREST join. That keeps the query path robust
-    against the FK-name + nested-resource pitfalls supabase-py has
-    intermittently with deeply nested selects, and it makes failures
-    easier to diagnose because each step is its own roundtrip.
+    Wrapped in a top-level try/except so any supabase-py exception
+    (e.g. a column missing from a half-applied migration) returns a
+    real JSON 500 — which the CORS middleware can wrap with the
+    allow-origin header — instead of crashing the worker and letting
+    Railway return a header-less 502 that the browser then blocks
+    with a confusing "No 'Access-Control-Allow-Origin' header" error.
     """
-    classroom = _load_classroom(classroom_id)
-    _assert_member_or_teacher(classroom, user)
-    if bool(assignment_id) == bool(curriculum_assignment_id):
-        raise HTTPException(
-            status_code=400,
-            detail="Pass exactly one of assignment_id or curriculum_assignment_id.",
-        )
+    print(f"[groups.list] classroom={classroom_id} assignment={assignment_id} curric={curriculum_assignment_id} user={user.profile_id}")
+    try:
+        classroom = _load_classroom(classroom_id)
+        _assert_member_or_teacher(classroom, user)
+        if bool(assignment_id) == bool(curriculum_assignment_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Pass exactly one of assignment_id or curriculum_assignment_id.",
+            )
 
-    q = supabase_admin.table("assignment_groups").select(
-        "id, classroom_id, assignment_id, curriculum_assignment_id, name, idea, formed_at"
-    ).eq("classroom_id", classroom_id)
-    if assignment_id:
-        q = q.eq("assignment_id", assignment_id)
-    else:
-        q = q.eq("curriculum_assignment_id", curriculum_assignment_id)
-    groups = (q.order("formed_at").execute()).data or []
-    if not groups:
-        return []
+        # Try selecting `idea` first. If migration 024 hasn't been
+        # applied yet, retry without it so the picker still works.
+        cols = "id, classroom_id, assignment_id, curriculum_assignment_id, name, idea, formed_at"
+        try:
+            q = supabase_admin.table("assignment_groups").select(cols).eq("classroom_id", classroom_id)
+            if assignment_id:
+                q = q.eq("assignment_id", assignment_id)
+            else:
+                q = q.eq("curriculum_assignment_id", curriculum_assignment_id)
+            groups = (q.order("formed_at").execute()).data or []
+        except Exception as col_err:
+            msg = str(col_err)
+            if "idea" in msg.lower() or "column" in msg.lower():
+                print(f"[groups.list] retrying without idea column ({col_err})")
+                cols = "id, classroom_id, assignment_id, curriculum_assignment_id, name, formed_at"
+                q = supabase_admin.table("assignment_groups").select(cols).eq("classroom_id", classroom_id)
+                if assignment_id:
+                    q = q.eq("assignment_id", assignment_id)
+                else:
+                    q = q.eq("curriculum_assignment_id", curriculum_assignment_id)
+                groups = (q.order("formed_at").execute()).data or []
+            else:
+                raise
 
-    group_ids = [g["id"] for g in groups]
-    member_rows = (
-        supabase_admin.table("assignment_group_members")
-        .select("group_id, student_id, joined_at")
-        .in_("group_id", group_ids)
-        .execute()
-    ).data or []
+        print(f"[groups.list] found {len(groups)} group(s)")
+        if not groups:
+            return []
 
-    profile_ids = list({m["student_id"] for m in member_rows})
-    profiles_by_id: dict = {}
-    if profile_ids:
-        profile_rows = (
-            supabase_admin.table("profiles")
-            .select("id, display_name, avatar_url")
-            .in_("id", profile_ids)
+        group_ids = [g["id"] for g in groups]
+        member_rows = (
+            supabase_admin.table("assignment_group_members")
+            .select("group_id, student_id, joined_at")
+            .in_("group_id", group_ids)
             .execute()
         ).data or []
-        profiles_by_id = {p["id"]: p for p in profile_rows}
 
-    members_by_group: dict = {gid: [] for gid in group_ids}
-    for m in member_rows:
-        p = profiles_by_id.get(m["student_id"]) or {}
-        members_by_group[m["group_id"]].append({
-            "student_id": m["student_id"],
-            "display_name": p.get("display_name"),
-            "avatar_url": p.get("avatar_url"),
-            "joined_at": m.get("joined_at"),
-        })
+        profile_ids = list({m["student_id"] for m in member_rows})
+        profiles_by_id: dict = {}
+        if profile_ids:
+            profile_rows = (
+                supabase_admin.table("profiles")
+                .select("id, display_name, avatar_url")
+                .in_("id", profile_ids)
+                .execute()
+            ).data or []
+            profiles_by_id = {p["id"]: p for p in profile_rows}
 
-    return [
-        {
-            "id": g["id"],
-            "name": g.get("name"),
-            "idea": g.get("idea"),
-            "formed_at": g.get("formed_at"),
-            "members": members_by_group.get(g["id"], []),
-        }
-        for g in groups
-    ]
+        members_by_group: dict = {gid: [] for gid in group_ids}
+        for m in member_rows:
+            p = profiles_by_id.get(m["student_id"]) or {}
+            members_by_group[m["group_id"]].append({
+                "student_id": m["student_id"],
+                "display_name": p.get("display_name"),
+                "avatar_url": p.get("avatar_url"),
+                "joined_at": m.get("joined_at"),
+            })
+
+        return [
+            {
+                "id": g["id"],
+                "name": g.get("name"),
+                "idea": g.get("idea"),
+                "formed_at": g.get("formed_at"),
+                "members": members_by_group.get(g["id"], []),
+            }
+            for g in groups
+        ]
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"list_groups failed: {type(e).__name__}: {e}",
+        )
 
 
 @router.get("/my-group")

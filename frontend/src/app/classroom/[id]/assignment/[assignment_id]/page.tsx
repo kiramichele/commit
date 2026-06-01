@@ -343,11 +343,15 @@ export default function AssignmentEditorPage() {
 
   if (isDiscussion) {
     const role = (profile?.role as 'student' | 'teacher' | 'admin') || 'student'
+    // Students don't have access to /classroom/[id] (that's the teacher
+    // view); send them to /learn/[id] so the logo lands somewhere
+    // they're allowed to see.
+    const homeHref = role === 'student' ? `/learn/${classroomId}` : `/classroom/${classroomId}`
     return (
       <div style={{ minHeight: '100vh', background: '#F8F7F5', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
         <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
         <nav style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(248,247,245,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(14,45,110,0.08)', padding: '0 1.5rem', height: '52px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <Link href={`/classroom/${classroomId}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', textDecoration: 'none' }}>
+          <Link href={homeHref} style={{ display: 'flex', alignItems: 'center', gap: '7px', textDecoration: 'none' }}>
             <div style={{ width: '26px', height: '26px', background: '#1A56DB', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", fontSize: '10px', color: 'white' }}>{'>'}_</div>
           </Link>
           <span style={{ color: '#D3D1C7' }}>/</span>
@@ -373,6 +377,10 @@ export default function AssignmentEditorPage() {
     )
   }
 
+  // Students don't have access to /classroom/[id] (teacher view);
+  // route them to the learn page they actually belong on.
+  const codingHomeHref = profile?.role === 'student' ? `/learn/${classroomId}` : `/classroom/${classroomId}`
+
   return (
     <div style={{ minHeight: '100vh', background: '#1C1C1E', fontFamily: "'DM Sans', sans-serif", display: 'flex', flexDirection: 'column' }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -380,7 +388,7 @@ export default function AssignmentEditorPage() {
       {/* TOPBAR */}
       <div style={{ background: '#2A2A2C', borderBottom: '1px solid rgba(255,255,255,0.06)', padding: '0 1.5rem', height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <Link href={`/classroom/${classroomId}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+          <Link href={codingHomeHref} style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
             <div style={{ width: '26px', height: '26px', background: '#1A56DB', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'DM Mono', monospace", fontSize: '10px', color: 'white' }}>{'>'}_</div>
           </Link>
           <span style={{ color: 'rgba(255,255,255,0.3)' }}>/</span>
