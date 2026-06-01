@@ -110,7 +110,7 @@ async def login(body: LoginRequest):
     # Fetch profile
     profile = (
         supabase_admin.table("profiles")
-        .select("id, role, display_name, email, approval_status")
+        .select("id, role, display_name, email, approval_status, is_demo")
         .eq("auth_user_id", str(response.user.id))
         .single()
         .execute()
@@ -197,12 +197,27 @@ async def logout(user: CurrentUser = Depends(get_current_user)):
 @router.get("/me")
 async def get_me(user: CurrentUser = Depends(get_current_user)):
     """Returns the current user's profile."""
+    is_demo = False
+    try:
+        row = (
+            supabase_admin.table("profiles")
+            .select("is_demo")
+            .eq("id", user.profile_id)
+            .maybe_single()
+            .execute()
+        )
+        if row and row.data:
+            is_demo = bool(row.data.get("is_demo"))
+    except Exception:
+        # is_demo column might not be present yet on older deploys.
+        pass
     return {
         "profile_id": user.profile_id,
         "role": user.role,
         "display_name": user.display_name,
         "email": user.email,
         "approval_status": user.approval_status,
+        "is_demo": is_demo,
     }
 
 # ============================================================

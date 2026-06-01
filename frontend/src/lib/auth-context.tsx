@@ -9,6 +9,7 @@ interface Profile {
   email: string
   approval_status: string
   avatar_url?: string | null
+  is_demo?: boolean
 }
 
 interface AuthContextType {

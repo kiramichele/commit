@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { useEffect, useRef } from 'react'
+import DemoButton from '@/components/DemoButton'
 
 export default function Home() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -86,6 +87,7 @@ export default function Home() {
           <span style={{ fontWeight: 700, fontSize: '18px', color: '#0E2D6E', letterSpacing: '-0.02em' }}>commit</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <DemoButton variant="ghost" label="see a demo" />
           <Link href="/login" style={{ fontSize: '14px', color: '#5F5E5A', textDecoration: 'none', fontWeight: 500 }}>sign in</Link>
           <Link href="/signup" style={{
             fontSize: '14px', fontWeight: 600, color: 'white', textDecoration: 'none',
@@ -139,6 +141,7 @@ export default function Home() {
             apply as teacher
             <span style={{ fontSize: '18px' }}>→</span>
           </Link>
+          <DemoButton label="🎬 try the live demo" />
           <Link href="/login" style={{
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             background: 'white', color: '#0E2D6E', textDecoration: 'none',
