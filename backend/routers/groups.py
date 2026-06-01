@@ -353,12 +353,29 @@ async def list_groups(
         profile_ids = list({m["student_id"] for m in member_rows})
         profiles_by_id: dict = {}
         if profile_ids:
-            profile_rows = (
-                supabase_admin.table("profiles")
-                .select("id, display_name, avatar_url")
-                .in_("id", profile_ids)
-                .execute()
-            ).data or []
+            # Try with avatar_url; if the column is missing on this DB
+            # (early classrooms never ran the migration that added it),
+            # fall back to just display_name so the member list still
+            # renders with initial-letter avatars.
+            try:
+                profile_rows = (
+                    supabase_admin.table("profiles")
+                    .select("id, display_name, avatar_url")
+                    .in_("id", profile_ids)
+                    .execute()
+                ).data or []
+            except Exception as col_err:
+                msg = str(col_err)
+                if "avatar_url" in msg.lower() or "column" in msg.lower():
+                    print(f"[groups.list] retrying profiles without avatar_url ({col_err})")
+                    profile_rows = (
+                        supabase_admin.table("profiles")
+                        .select("id, display_name")
+                        .in_("id", profile_ids)
+                        .execute()
+                    ).data or []
+                else:
+                    raise
             profiles_by_id = {p["id"]: p for p in profile_rows}
 
         members_by_group: dict = {gid: [] for gid in group_ids}
