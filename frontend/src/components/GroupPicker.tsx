@@ -95,20 +95,43 @@ export default function GroupPicker({
   })()
 
   const refresh = async () => {
+    setLoading(true)
+    setError('')
     try {
-      const [cfg, mine, all] = await Promise.all([
-        api.get<ResolvedCollabConfig>(`/groups/config?${queryString}`),
-        api.get<Group | null>(`/groups/my-group?${queryString}`),
-        api.get<Group[]>(`/groups/?${queryString}`),
-      ])
+      // Sequential rather than Promise.all so we know exactly which
+      // call failed when something does. /groups/config is also the
+      // gate — if collab isn't enabled, we skip the rest entirely.
+      let cfg: ResolvedCollabConfig
+      try {
+        cfg = await api.get<ResolvedCollabConfig>(`/groups/config?${queryString}`)
+      } catch (e: any) {
+        console.warn('[collab] /groups/config failed', e)
+        throw e
+      }
       setConfig(cfg)
-      setMyGroup(mine)
-      setGroups(all || [])
-      if (mine && onJoined) onJoined(mine)
-      if (onGroupChange) onGroupChange(mine)
+      if (!cfg.enabled) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        const mine = await api.get<Group | null>(`/groups/my-group?${queryString}`)
+        setMyGroup(mine)
+        if (mine && onJoined) onJoined(mine)
+        if (onGroupChange) onGroupChange(mine)
+      } catch (e) {
+        console.warn('[collab] /groups/my-group failed (continuing)', e)
+      }
+      try {
+        const all = await api.get<Group[]>(`/groups/?${queryString}`)
+        setGroups(all || [])
+      } catch (e) {
+        console.warn('[collab] /groups/ list failed (continuing)', e)
+      }
+
       // First-open modal: show if collab is on AND we haven't shown
       // it before for this assignment. Persist dismiss across reloads.
-      if (cfg?.enabled && typeof window !== 'undefined') {
+      if (cfg.enabled && typeof window !== 'undefined') {
         const seen = localStorage.getItem(dismissKey(assignmentId, curriculumAssignmentId))
         if (!seen) setShowModal(true)
       }
@@ -220,9 +243,31 @@ export default function GroupPicker({
   // teacher / student see what's actually wrong (e.g. a missed
   // migration).
   if (error && !config) {
+    const isNetworkError = /failed to fetch|networkerror|load failed/i.test(error)
     return (
-      <div style={{ padding: '10px 14px', background: '#FEE2E2', borderRadius: '8px', fontSize: '12px', color: '#991B1B', fontFamily: "'DM Sans', sans-serif" }}>
-        couldn&apos;t load collab info: {error}
+      <div style={{ padding: '12px 14px', background: '#FEE2E2', borderRadius: '8px', fontSize: '12px', color: '#991B1B', fontFamily: "'DM Sans', sans-serif" }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 600, marginBottom: '4px' }}>couldn&apos;t load collab info: {error}</div>
+            {isNetworkError && (
+              <div style={{ fontSize: '11px', color: '#7F1D1D', lineHeight: 1.5 }}>
+                The request didn&apos;t reach the backend. Usually one of:
+                <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                  <li>the API server is restarting / down</li>
+                  <li>migration <strong>021_collab_groups.sql</strong> hasn&apos;t been applied (the <code>/groups/*</code> routes need it)</li>
+                  <li>backend hasn&apos;t been deployed with the new <code>routers/groups.py</code> yet</li>
+                </ul>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={refresh}
+            disabled={loading}
+            style={{ padding: '5px 12px', borderRadius: '6px', border: '1.5px solid #991B1B', background: 'white', color: '#991B1B', fontSize: '11px', fontWeight: 600, cursor: loading ? 'wait' : 'pointer', whiteSpace: 'nowrap', fontFamily: "'DM Sans', sans-serif" }}
+          >
+            {loading ? '...' : 'retry'}
+          </button>
+        </div>
       </div>
     )
   }
