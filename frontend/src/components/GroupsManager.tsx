@@ -77,7 +77,7 @@ export default function GroupsManager({
     try {
       const [cfg, all] = await Promise.all([
         api.get<ResolvedConfig>(`/groups/config?${qs}`),
-        api.get<Group[]>(`/groups/?${qs}`),
+        api.get<Group[]>(`/groups?${qs}`),
       ])
       setConfig(cfg)
       setStrategy(cfg.strategy)

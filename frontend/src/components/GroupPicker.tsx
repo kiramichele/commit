@@ -123,7 +123,7 @@ export default function GroupPicker({
         console.warn('[collab] /groups/my-group failed (continuing)', e)
       }
       try {
-        const all = await api.get<Group[]>(`/groups/?${queryString}`)
+        const all = await api.get<Group[]>(`/groups?${queryString}`)
         console.log('[collab] groups for this assignment:', all, 'group_size cap:', cfg.group_size)
         setGroups(all || [])
       } catch (e: any) {
@@ -162,7 +162,7 @@ export default function GroupPicker({
     setBusy(true)
     setError('')
     try {
-      await api.post(`/groups/`, {
+      await api.post(`/groups`, {
         classroom_id: classroomId,
         assignment_id: assignmentId,
         curriculum_assignment_id: curriculumAssignmentId,

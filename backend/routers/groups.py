@@ -286,6 +286,7 @@ async def get_collab_config(
     return _resolve_collab_config(assignment_row, classroom)
 
 
+@router.get("")
 @router.get("/")
 async def list_groups(
     classroom_id: str,
@@ -295,6 +296,12 @@ async def list_groups(
 ):
     """Returns every group for this assignment in this classroom, with
     members + display name + avatar so the picker can render them.
+
+    Implemented as three small selects (groups → members → profiles)
+    instead of one PostgREST join. That keeps the query path robust
+    against the FK-name + nested-resource pitfalls supabase-py has
+    intermittently with deeply nested selects, and it makes failures
+    easier to diagnose because each step is its own roundtrip.
     """
     classroom = _load_classroom(classroom_id)
     _assert_member_or_teacher(classroom, user)
@@ -303,26 +310,57 @@ async def list_groups(
             status_code=400,
             detail="Pass exactly one of assignment_id or curriculum_assignment_id.",
         )
-    res = _groups_query(assignment_id, curriculum_assignment_id, classroom_id).order("formed_at").execute()
-    out = []
-    for g in (res.data or []):
-        members = []
-        for m in (g.get("members") or []):
-            p = m.get("profile") or {}
-            members.append({
-                "student_id": m["student_id"],
-                "display_name": p.get("display_name"),
-                "avatar_url": p.get("avatar_url"),
-                "joined_at": m.get("joined_at"),
-            })
-        out.append({
+
+    q = supabase_admin.table("assignment_groups").select(
+        "id, classroom_id, assignment_id, curriculum_assignment_id, name, idea, formed_at"
+    ).eq("classroom_id", classroom_id)
+    if assignment_id:
+        q = q.eq("assignment_id", assignment_id)
+    else:
+        q = q.eq("curriculum_assignment_id", curriculum_assignment_id)
+    groups = (q.order("formed_at").execute()).data or []
+    if not groups:
+        return []
+
+    group_ids = [g["id"] for g in groups]
+    member_rows = (
+        supabase_admin.table("assignment_group_members")
+        .select("group_id, student_id, joined_at")
+        .in_("group_id", group_ids)
+        .execute()
+    ).data or []
+
+    profile_ids = list({m["student_id"] for m in member_rows})
+    profiles_by_id: dict = {}
+    if profile_ids:
+        profile_rows = (
+            supabase_admin.table("profiles")
+            .select("id, display_name, avatar_url")
+            .in_("id", profile_ids)
+            .execute()
+        ).data or []
+        profiles_by_id = {p["id"]: p for p in profile_rows}
+
+    members_by_group: dict = {gid: [] for gid in group_ids}
+    for m in member_rows:
+        p = profiles_by_id.get(m["student_id"]) or {}
+        members_by_group[m["group_id"]].append({
+            "student_id": m["student_id"],
+            "display_name": p.get("display_name"),
+            "avatar_url": p.get("avatar_url"),
+            "joined_at": m.get("joined_at"),
+        })
+
+    return [
+        {
             "id": g["id"],
             "name": g.get("name"),
             "idea": g.get("idea"),
             "formed_at": g.get("formed_at"),
-            "members": members,
-        })
-    return out
+            "members": members_by_group.get(g["id"], []),
+        }
+        for g in groups
+    ]
 
 
 @router.get("/my-group")
@@ -455,6 +493,7 @@ def _autoplace_student(
 # WRITE ROUTES — STUDENT
 # ============================================================
 
+@router.post("")
 @router.post("/")
 async def create_group(
     body: GroupCreate,
