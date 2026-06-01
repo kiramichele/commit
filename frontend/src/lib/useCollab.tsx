@@ -70,6 +70,11 @@ interface UseCollabResult {
   sendCode: (code: string) => void
   sendCaret: (selectionStart: number, selectionEnd: number, length: number) => void
   sendMouse: (x: number, y: number) => void
+  // Call on every keystroke (before the debounced sendCode fires) so
+  // the receive-handler knows the local user just edited. Without
+  // this, a remote broadcast that lands in the 150ms gap between
+  // keystroke and broadcast can overwrite the user's edit.
+  markEdit: () => void
 }
 
 export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabArgs): UseCollabResult {
@@ -89,6 +94,17 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
   // dozens. Fires ~2.5s after the most recent sendCode call.
   const snapshotSaveTimer = useRef<number | null>(null)
   const latestCodeRef = useRef<string>('')
+  // Local-edit guard window: while the user is actively typing /
+  // deleting we must NOT apply remote broadcasts, otherwise an
+  // in-flight update from the other peer can flash old code back in
+  // mid-edit. We bump this every time sendCode is called and
+  // remote-apply checks "did I edit within the last ~1.5s?".
+  const lastLocalEditAtRef = useRef<number>(0)
+  // First-subscribe snapshot fetch should only happen once per
+  // channel lifecycle. Otherwise a reconnect 30s into a session
+  // would re-fetch a stale snapshot and clobber whatever the user
+  // has typed since.
+  const snapshotLoadedRef = useRef<boolean>(false)
 
   // Subscribe / unsubscribe.
   useEffect(() => {
@@ -180,7 +196,25 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
           log('  ↳ skipped: own broadcast (self filter)')
           return
         }
+        // Guard against an in-flight remote update clobbering the
+        // user mid-keystroke. If they typed within the last 1.5s the
+        // local state is canonically newer than this broadcast — drop
+        // it. Once they pause, the next broadcast (or the next 2.5s
+        // snapshot save → next sendCode round-trip) brings everyone
+        // back in sync.
+        const sinceLocal = Date.now() - lastLocalEditAtRef.current
+        if (sinceLocal < 1500) {
+          log('  ↳ skipped: local edit in flight', { sinceLocal })
+          return
+        }
+        // Skip no-op applies (same content) so React doesn't
+        // re-render the textarea + reset the caret position.
+        if (payload.code === latestCodeRef.current) {
+          log('  ↳ skipped: identical to local code')
+          return
+        }
         log('  ↳ applying to local state', { length: payload.code.length })
+        latestCodeRef.current = payload.code
         onRemoteCodeRef.current(payload.code, payload.user_id)
       })
       .on('broadcast', { event: 'caret' }, ({ payload }: { payload: RemoteCaret }) => {
@@ -217,19 +251,26 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
           // broadcasts go through.
           log('tracked self', { result: trackResult, user_id: me.user_id, display_name: me.display_name })
           setReady(true)
-          // Pull the persisted snapshot so a late joiner sees what
-          // everyone else has been typing instead of an empty buffer.
-          if (groupId) {
+          // Pull the persisted snapshot ONCE per channel lifecycle.
+          // If we reconnect 30s into a session and reload the
+          // snapshot, we'd overwrite whatever the user has typed
+          // since. The first subscribe brings them up to speed; from
+          // then on broadcasts keep everyone in sync.
+          if (groupId && !snapshotLoadedRef.current) {
+            snapshotLoadedRef.current = true
             try {
               const snap = await api.get<{ code: string | null; updated_at: string | null; updated_by: string | null }>(
                 `/groups/${groupId}/snapshot`
               )
               if (snap?.code && onRemoteCodeRef.current) {
                 log('applied snapshot', { length: snap.code.length })
+                latestCodeRef.current = snap.code
                 onRemoteCodeRef.current(snap.code, snap.updated_by || 'snapshot')
               }
             } catch (e) {
               log('snapshot fetch failed', e)
+              // Allow the next subscribe to try again on failure.
+              snapshotLoadedRef.current = false
             }
           }
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -317,6 +358,10 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
     }
     if (!me) return
     console.log('[collab] SEND doc', { length: code.length })
+    // Mark the local edit time so concurrent inbound broadcasts
+    // know to defer to the user's keystrokes for the next ~1.5s.
+    lastLocalEditAtRef.current = Date.now()
+    latestCodeRef.current = code
     const result = ch.send({ type: 'broadcast', event: 'doc', payload: { user_id: me.user_id, code } })
     // .send() returns a Promise<RealtimeSendResult>. Await it via
     // .then() so a rejected broadcast is logged instead of being
@@ -365,5 +410,9 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
     })
   }, [me?.user_id])
 
-  return { ready, members, carets, mice, sendCode, sendCaret, sendMouse }
+  const markEdit = useCallback(() => {
+    lastLocalEditAtRef.current = Date.now()
+  }, [])
+
+  return { ready, members, carets, mice, sendCode, sendCaret, sendMouse, markEdit }
 }

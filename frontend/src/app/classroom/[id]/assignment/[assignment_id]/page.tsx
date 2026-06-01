@@ -91,6 +91,7 @@ export default function AssignmentEditorPage() {
   const {
     ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice,
     sendCode, sendCaret, sendMouse,
+    markEdit,
   } = useCollab({
     channelName,
     me: collabMe,
@@ -566,6 +567,10 @@ export default function AssignmentEditorPage() {
                     api.post(`/code/track-edit?submission_id=${submission.id}`, {}).catch(() => {})
                   }
                   if (collabReady) {
+                    // Mark the edit immediately so an in-flight remote
+                    // broadcast won't clobber this keystroke while
+                    // sendCode is debouncing.
+                    markEdit()
                     if (codeBroadcastTimer.current) window.clearTimeout(codeBroadcastTimer.current)
                     codeBroadcastTimer.current = window.setTimeout(() => sendCode(v), 150)
                   }

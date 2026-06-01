@@ -185,7 +185,7 @@ function CurriculumAssignmentInner() {
     : null
   const channelName = collabGroupId ? `collab:group:${collabGroupId}` : null
 
-  const { ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice, sendCode, sendCaret, sendMouse } = useCollab({
+  const { ready: collabReady, members: collabMembers, carets: collabCarets, mice: collabMice, sendCode, sendCaret, sendMouse, markEdit } = useCollab({
     channelName,
     me: collabMe,
     groupId: collabGroupId,
@@ -923,8 +923,12 @@ function CurriculumAssignmentInner() {
                 setCode(v)
                 setHasEditedSinceRun(true)
                 // Debounce code broadcast — typing bursts collapse into
-                // one message instead of one per keystroke.
+                // one message instead of one per keystroke. Mark the
+                // local edit timestamp immediately so a remote
+                // broadcast that lands in the debounce window can't
+                // overwrite our keystroke.
                 if (collabReady) {
+                  markEdit()
                   if (codeBroadcastTimer.current) window.clearTimeout(codeBroadcastTimer.current)
                   codeBroadcastTimer.current = window.setTimeout(() => sendCode(v), 150)
                 }
