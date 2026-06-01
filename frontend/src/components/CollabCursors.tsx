@@ -110,7 +110,7 @@ export default function CollabCursors({ containerRef, textareaRef, code, members
   return (
     <>
       {/* CARET OVERLAYS — colored bars inside the textarea pane. */}
-      {metrics && Object.values(carets).filter(c => c && typeof c.user_id === 'string').map(caret => {
+      {metrics && Object.values(carets).filter(c => !!(c && c.user_id)).map(caret => {
         const member = memberById.get(caret.user_id)
         const color = colorForUser(caret.user_id)
         const { line, col } = offsetToLineCol(code, caret.selection_start)
@@ -154,7 +154,7 @@ export default function CollabCursors({ containerRef, textareaRef, code, members
       })}
 
       {/* MOUSE CURSOR OVERLAYS — colored arrow + name tag. */}
-      {Object.values(mice).filter(m => m && typeof m.user_id === 'string' && typeof m.x === 'number' && typeof m.y === 'number').map(m => {
+      {Object.values(mice).filter(m => !!(m && m.user_id)).map(m => {
         const member = memberById.get(m.user_id)
         const color = colorForUser(m.user_id)
         return (

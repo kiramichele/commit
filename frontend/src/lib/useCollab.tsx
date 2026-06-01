@@ -110,15 +110,17 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         // means the other tab's track() didn't land.
         log('presence sync (raw)', state)
         const out: CollabMember[] = []
-        for (const arr of Object.values(state)) {
+        for (const [key, arr] of Object.entries(state)) {
+          if (!Array.isArray(arr)) continue
           for (const m of arr) {
-            // Defensive: presence payloads come from the wire and
-            // can arrive partially-populated during a re-track race.
-            // A missing user_id would crash the log line + downstream
-            // renderers, so just skip those entries.
-            if (!m || typeof m.user_id !== 'string') continue
+            if (!m) continue
+            // Fall back to the presence key when the inner payload is
+            // missing user_id — supabase-realtime presence keys are
+            // exactly the user_id we passed at channel-create time.
+            const userId = (typeof m.user_id === 'string' && m.user_id) || key
+            if (!userId) continue
             out.push({
-              user_id: m.user_id,
+              user_id: userId,
               display_name: m.display_name || 'Student',
               avatar_url: m.avatar_url ?? null,
               joined_at: m.joined_at ?? Date.now(),
@@ -178,13 +180,12 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       })
       .on('broadcast', { event: 'caret' }, ({ payload }: { payload: RemoteCaret }) => {
         log('RECV caret', { from: payload?.user_id, start: payload?.selection_start })
-        // Reject malformed broadcasts at the door. A caret payload
-        // with a missing user_id or non-numeric offset would crash
-        // the overlay renderer, take React with it, and the channel
-        // would silently close. Better to ignore the bad message.
-        if (!payload || typeof payload.user_id !== 'string') return
+        // Bare-minimum validation: payload exists, has a user_id, and
+        // isn't from us. Type-strict checks were rejecting valid wire
+        // payloads — the downstream renderer is already defensive
+        // about missing offsets.
+        if (!payload || !payload.user_id) return
         if (payload.user_id === me.user_id) return
-        if (typeof payload.selection_start !== 'number' || typeof payload.selection_end !== 'number') return
         setCarets(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .on('broadcast', { event: 'mouse' }, ({ payload }: { payload: RemoteMouse }) => {
@@ -192,9 +193,8 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         if (Math.floor(Date.now() / 1000) % 10 === 0) {
           log('RECV mouse', { from: payload?.user_id, x: payload?.x, y: payload?.y })
         }
-        if (!payload || typeof payload.user_id !== 'string') return
+        if (!payload || !payload.user_id) return
         if (payload.user_id === me.user_id) return
-        if (typeof payload.x !== 'number' || typeof payload.y !== 'number') return
         setMice(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .subscribe(async status => {
