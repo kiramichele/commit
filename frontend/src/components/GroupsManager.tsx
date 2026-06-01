@@ -112,6 +112,27 @@ export default function GroupsManager({
     }
   }
 
+  const fillRemaining = async () => {
+    if (!confirm('Randomly place every student who hasn\'t joined a group yet? Existing groups stay as they are.')) return
+    setBusy(true)
+    setError('')
+    try {
+      const res = await api.post<{ placed: number }>(`/groups/fill-remaining`, {
+        classroom_id: classroomId,
+        assignment_id: assignmentId,
+        curriculum_assignment_id: curriculumAssignmentId,
+        strategy: 'random',
+        group_size: groupSize,
+      })
+      alert(res.placed === 0 ? 'Everyone is already in a group.' : `Placed ${res.placed} student(s).`)
+      await refresh()
+    } catch (err: any) {
+      setError(err.message || 'Could not fill remaining.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const deleteGroup = async (groupId: string) => {
     if (!confirm('Delete this group? Members will go back to the picker.')) return
     setBusy(true)
@@ -196,6 +217,25 @@ export default function GroupsManager({
               <div style={{ fontSize: '11px', color: '#888780', marginTop: '6px' }}>
                 {STRATEGIES.find(s => s.value === strategy)?.desc}
               </div>
+            </div>
+
+            {/* FILL REMAINING — only really useful for student_choice,
+                but we always expose it: it's a no-op if everyone is
+                already in a group. */}
+            <div style={{ padding: '12px 14px', background: '#FAFAF8', borderRadius: '10px', marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#0E2D6E' }}>students still floating?</div>
+                <div style={{ fontSize: '11px', color: '#888780', lineHeight: 1.5 }}>
+                  Randomly drop anyone who hasn&apos;t joined a group yet into one. Existing groups stay as-is.
+                </div>
+              </div>
+              <button
+                onClick={fillRemaining}
+                disabled={busy}
+                style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', background: '#0E7C66', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}
+              >
+                fill remaining
+              </button>
             </div>
 
             {/* GROUPS LIST */}

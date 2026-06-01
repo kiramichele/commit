@@ -30,6 +30,7 @@ interface Member {
 interface Group {
   id: string
   name: string | null
+  idea: string | null
   formed_at: string
   members: Member[]
 }
@@ -77,6 +78,12 @@ export default function GroupPicker({
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
+  // When student_choice is on, the founder of a new group can put an
+  // idea in here so other students pick the group by topic. Any
+  // member can later edit it from the "you're in a group" view.
+  const [newGroupIdea, setNewGroupIdea] = useState('')
+  const [editingIdea, setEditingIdea] = useState(false)
+  const [ideaDraft, setIdeaDraft] = useState('')
   const [error, setError] = useState('')
   const [showModal, setShowModal] = useState(false)
 
@@ -132,11 +139,28 @@ export default function GroupPicker({
         assignment_id: assignmentId,
         curriculum_assignment_id: curriculumAssignmentId,
         name: newGroupName.trim() || null,
+        idea: newGroupIdea.trim() || null,
       })
       setNewGroupName('')
+      setNewGroupIdea('')
       await refresh()
     } catch (err: any) {
       setError(err?.message || 'Could not create group.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const saveIdea = async () => {
+    if (!myGroup) return
+    setBusy(true)
+    setError('')
+    try {
+      await api.patch(`/groups/${myGroup.id}`, { idea: ideaDraft })
+      setEditingIdea(false)
+      await refresh()
+    } catch (err: any) {
+      setError(err?.message || 'Could not update idea.')
     } finally {
       setBusy(false)
     }
@@ -225,9 +249,14 @@ export default function GroupPicker({
         <span style={{ fontSize: '10px', fontWeight: 700, padding: '2px 8px', borderRadius: '99px', background: '#FEF3C7', color: '#92400E', textTransform: 'uppercase', letterSpacing: '0.05em' }}>collab</span>
         {myGroup ? (
           <>
-            <span style={{ fontSize: '13px', fontWeight: 700, color: '#0E2D6E' }}>
-              {myGroup.name || 'Your group'} · {myGroup.members.length} / {config.group_size}
-            </span>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontSize: '13px', fontWeight: 700, color: '#0E2D6E' }}>
+                {myGroup.name || 'Your group'} · {myGroup.members.length} / {config.group_size}
+              </span>
+              <span style={{ fontSize: '11px', color: myGroup.idea ? '#0C447C' : '#888780', fontStyle: myGroup.idea ? 'normal' : 'italic' }}>
+                idea: {myGroup.idea || 'not sure yet'}
+              </span>
+            </div>
             <div style={{ display: 'flex', gap: '6px' }}>
               {myGroup.members.map(m => (
                 <div key={m.student_id} title={m.display_name || ''} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -288,6 +317,43 @@ export default function GroupPicker({
             <div style={{ fontSize: '11px', fontWeight: 700, color: '#0E2D6E', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '8px' }}>
               {myGroup.name || 'Your group'} · {myGroup.members.length} / {config.group_size}
             </div>
+
+            {/* Idea — any member can set / edit. Empty shows "not
+                sure yet" so the slot is always visible. */}
+            <div style={{ marginBottom: '10px', padding: '8px 10px', background: 'white', borderRadius: '8px', border: '1px solid rgba(14,45,110,0.06)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: editingIdea ? '6px' : 0 }}>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: '#888780', textTransform: 'uppercase', letterSpacing: '0.05em' }}>group idea</span>
+                {!editingIdea && (
+                  <button
+                    onClick={() => { setIdeaDraft(myGroup.idea || ''); setEditingIdea(true) }}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#1A56DB', fontSize: '11px', fontWeight: 600, padding: 0, fontFamily: "'DM Sans', sans-serif" }}
+                  >
+                    {myGroup.idea ? 'edit' : '+ add'}
+                  </button>
+                )}
+              </div>
+              {editingIdea ? (
+                <>
+                  <textarea
+                    value={ideaDraft}
+                    onChange={e => setIdeaDraft(e.target.value)}
+                    rows={2}
+                    placeholder="what's your group thinking? (anyone in the group can edit)"
+                    autoFocus
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: '6px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '12px', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif", lineHeight: 1.55, resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
+                  />
+                  <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '6px' }}>
+                    <button onClick={() => setEditingIdea(false)} disabled={busy} style={{ padding: '4px 10px', borderRadius: '6px', border: '1.5px solid rgba(14,45,110,0.15)', background: 'transparent', color: '#5F5E5A', fontSize: '11px', fontWeight: 600, cursor: busy ? 'wait' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>cancel</button>
+                    <button onClick={saveIdea} disabled={busy} style={{ padding: '4px 12px', borderRadius: '6px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '11px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>save</button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: '13px', color: myGroup.idea ? '#0E2D6E' : '#888780', fontStyle: myGroup.idea ? 'normal' : 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                  {myGroup.idea || 'not sure yet'}
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {myGroup.members.map(m => (
                 <div key={m.student_id} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -312,30 +378,46 @@ export default function GroupPicker({
                     <div style={{ fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' }}>join an open group</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
                       {openGroups.map(g => (
-                        <div key={g.id} style={{ padding: '8px 12px', background: '#FAFAF8', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>{g.name || 'Unnamed group'}</span>
-                            <span style={{ fontSize: '11px', color: '#888780' }}>{g.members.length} / {config.group_size}</span>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              {g.members.map(m => (
-                                <div key={m.student_id} title={m.display_name || ''}>{avatar(m.display_name, m.avatar_url, 22)}</div>
-                              ))}
+                        <div key={g.id} style={{ padding: '10px 12px', background: '#FAFAF8', borderRadius: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '6px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+                              <span style={{ fontSize: '13px', fontWeight: 600, color: '#0E2D6E' }}>{g.name || 'Unnamed group'}</span>
+                              <span style={{ fontSize: '11px', color: '#888780' }}>{g.members.length} / {config.group_size}</span>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                {g.members.map(m => (
+                                  <div key={m.student_id} title={m.display_name || ''}>{avatar(m.display_name, m.avatar_url, 22)}</div>
+                                ))}
+                              </div>
                             </div>
+                            <button onClick={() => joinGroup(g.id)} disabled={busy} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>join</button>
                           </div>
-                          <button onClick={() => joinGroup(g.id)} disabled={busy} style={{ padding: '6px 12px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>join</button>
+                          <div style={{ fontSize: '12px', color: g.idea ? '#0E2D6E' : '#888780', fontStyle: g.idea ? 'normal' : 'italic', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                            <span style={{ color: '#888780', fontWeight: 600, marginRight: '6px' }}>idea:</span>
+                            {g.idea || 'not sure yet'}
+                          </div>
                         </div>
                       ))}
                     </div>
                   </>
                 )}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '14px' }}>
+                <div style={{ padding: '12px', background: '#FAFAF8', borderRadius: '10px', marginBottom: '14px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: '#888780', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '8px' }}>or start your own</div>
                   <input
                     value={newGroupName}
                     onChange={e => setNewGroupName(e.target.value)}
-                    placeholder="optional name"
-                    style={{ flex: 1, minWidth: '180px', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: '#FAFAF8', fontFamily: "'DM Sans', sans-serif", outline: 'none' }}
+                    placeholder="optional group name (e.g. 'team alpha')"
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: 'white', fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box', marginBottom: '6px' }}
                   />
-                  <button onClick={createGroup} disabled={busy} style={{ padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '13px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer' }}>+ start a new group</button>
+                  <textarea
+                    value={newGroupIdea}
+                    onChange={e => setNewGroupIdea(e.target.value)}
+                    placeholder="what's your idea? other students see this when they pick a group — leave blank if you're not sure yet"
+                    rows={2}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1.5px solid rgba(14,45,110,0.12)', fontSize: '13px', background: 'white', fontFamily: "'DM Sans', sans-serif", outline: 'none', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.55, marginBottom: '8px' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <button onClick={createGroup} disabled={busy} style={{ padding: '7px 14px', borderRadius: '8px', border: 'none', background: '#1A56DB', color: 'white', fontSize: '12px', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', fontFamily: "'DM Sans', sans-serif" }}>+ create group</button>
+                  </div>
                 </div>
               </>
             )}

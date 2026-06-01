@@ -34,6 +34,12 @@ class GroupCreate(BaseModel):
     assignment_id: Optional[str] = None
     curriculum_assignment_id: Optional[str] = None
     name: Optional[str] = None
+    idea: Optional[str] = None
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = None
+    idea: Optional[str] = None  # set to "" to clear; None leaves it
 
 
 class GenerateGroups(BaseModel):
@@ -159,7 +165,7 @@ def _assert_member_or_teacher(classroom_row: dict, user: CurrentUser):
 
 def _groups_query(assignment_id: Optional[str], curriculum_assignment_id: Optional[str], classroom_id: str):
     q = supabase_admin.table("assignment_groups").select(
-        "id, classroom_id, assignment_id, curriculum_assignment_id, name, formed_at, "
+        "id, classroom_id, assignment_id, curriculum_assignment_id, name, idea, formed_at, "
         "members:assignment_group_members(student_id, joined_at, "
         "profile:profiles!assignment_group_members_student_id_fkey(display_name, avatar_url))"
     ).eq("classroom_id", classroom_id)
@@ -312,6 +318,7 @@ async def list_groups(
         out.append({
             "id": g["id"],
             "name": g.get("name"),
+            "idea": g.get("idea"),
             "formed_at": g.get("formed_at"),
             "members": members,
         })
@@ -354,6 +361,7 @@ async def get_my_group(
         return {
             "id": g["id"],
             "name": g.get("name"),
+            "idea": g.get("idea"),
             "formed_at": g.get("formed_at"),
             "members": members,
         }
@@ -475,6 +483,7 @@ async def create_group(
         "assignment_id": body.assignment_id,
         "curriculum_assignment_id": body.curriculum_assignment_id,
         "name": (body.name or "").strip() or None,
+        "idea": (body.idea or "").strip() or None,
         "formed_by": user.profile_id,
     }
     created = supabase_admin.table("assignment_groups").insert(row).execute().data[0]
@@ -531,6 +540,66 @@ async def join_group(
         {"group_id": group_id, "student_id": user.profile_id}
     ).execute()
     return {"joined": True}
+
+
+@router.patch("/{group_id}")
+async def update_group(
+    group_id: str,
+    body: GroupUpdate,
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Updates a group's name + idea. Any group member can edit
+    (not just the founder), and the classroom teacher can edit any
+    group in their classroom. Empty string clears a field; None
+    leaves it untouched.
+    """
+    group = (
+        supabase_admin.table("assignment_groups")
+        .select("id, classroom_id")
+        .eq("id", group_id)
+        .maybe_single()
+        .execute()
+    )
+    if not group or not group.data:
+        raise HTTPException(status_code=404, detail="Group not found.")
+    g = group.data
+    # Membership / teacher check.
+    is_teacher = False
+    if user.role in ("teacher", "admin"):
+        cls = (
+            supabase_admin.table("classrooms")
+            .select("teacher_id")
+            .eq("id", g["classroom_id"])
+            .maybe_single()
+            .execute()
+        )
+        if cls and cls.data and (cls.data.get("teacher_id") == user.profile_id or user.role == "admin"):
+            is_teacher = True
+    if not is_teacher:
+        member = (
+            supabase_admin.table("assignment_group_members")
+            .select("student_id")
+            .eq("group_id", group_id)
+            .eq("student_id", user.profile_id)
+            .maybe_single()
+            .execute()
+        )
+        if not member or not member.data:
+            raise HTTPException(status_code=403, detail="Only group members can edit this.")
+
+    updates: dict = {}
+    if body.name is not None:
+        cleaned = body.name.strip()
+        updates["name"] = cleaned or None
+    if body.idea is not None:
+        # Allow empty-string to clear; null means "not sure".
+        cleaned = body.idea.strip()
+        updates["idea"] = cleaned or None
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update.")
+
+    supabase_admin.table("assignment_groups").update(updates).eq("id", group_id).execute()
+    return {"updated": True}
 
 
 @router.post("/{group_id}/leave", status_code=204)
@@ -596,6 +665,58 @@ async def go_solo(
 # ============================================================
 # WRITE ROUTES — TEACHER
 # ============================================================
+
+@router.post("/fill-remaining")
+async def fill_remaining(
+    body: GenerateGroups,
+    user: CurrentUser = Depends(require_teacher),
+):
+    """Drops every still-unassigned student into a group, randomly.
+    Existing groups + members are preserved — this is the "pick up
+    the stragglers" button for student_choice assignments after the
+    teacher has given students a chance to self-form. Reuses the
+    same auto-place helper students hit when they open the
+    assignment, just batched.
+    """
+    classroom = _load_classroom(body.classroom_id)
+    if classroom["teacher_id"] != user.profile_id and user.role != "admin":
+        raise HTTPException(status_code=403, detail="Not your classroom.")
+    if body.group_size < 1 or body.group_size > 6:
+        raise HTTPException(status_code=400, detail="group_size must be 1-6.")
+    _, _assignment_row = _resolve_assignment(body.assignment_id, body.curriculum_assignment_id)
+
+    # Find who's already in a group for this assignment.
+    q = supabase_admin.table("assignment_groups").select(
+        "id, assignment_group_members(student_id)"
+    ).eq("classroom_id", body.classroom_id)
+    if body.assignment_id:
+        q = q.eq("assignment_id", body.assignment_id)
+    else:
+        q = q.eq("curriculum_assignment_id", body.curriculum_assignment_id)
+    existing = q.execute().data or []
+    assigned: set = set()
+    for g in existing:
+        for m in (g.get("assignment_group_members") or []):
+            assigned.add(m["student_id"])
+
+    all_members = set(_classroom_member_ids(body.classroom_id))
+    unassigned = list(all_members - assigned)
+
+    if not unassigned:
+        return {"placed": 0, "remaining": 0}
+
+    _rand.shuffle(unassigned)
+    for sid in unassigned:
+        _autoplace_student(
+            student_id=sid,
+            classroom_id=body.classroom_id,
+            assignment_id=body.assignment_id,
+            curriculum_assignment_id=body.curriculum_assignment_id,
+            group_size=int(body.group_size),
+        )
+
+    return {"placed": len(unassigned), "remaining": 0}
+
 
 @router.post("/generate")
 async def generate_groups(

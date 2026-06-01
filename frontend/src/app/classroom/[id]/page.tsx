@@ -392,6 +392,16 @@ export default function ClassroomPage() {
 
   const isOverdue = (due: string | null) => due && new Date(due) < new Date()
 
+  const handleDeleteAssignment = async (assignmentId: string, title: string) => {
+    if (!confirm(`Delete "${title}"? This removes the assignment AND every student submission tied to it. This can't be undone.`)) return
+    try {
+      await api.delete(`/assignments/${assignmentId}`)
+      fetchAll()
+    } catch (err: any) {
+      alert(err.message || 'Could not delete assignment.')
+    }
+  }
+
   const timeAgo = (iso: string | null) => {
     if (!iso) return 'never'
     const diff = Date.now() - new Date(iso).getTime()
@@ -621,6 +631,13 @@ export default function ClassroomPage() {
                           currentHtmlPath={a.instructions_html_path}
                           onUploaded={fetchAll}
                         />
+                        <button
+                          onClick={() => handleDeleteAssignment(a.id, a.title)}
+                          title="delete this assignment"
+                          style={{ padding: '7px 12px', borderRadius: '8px', border: '1.5px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#991B1B', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}
+                        >
+                          delete
+                        </button>
                       </div>
                     )
                   })}
@@ -899,6 +916,13 @@ export default function ClassroomPage() {
                             ⚏ groups
                           </button>
                           <Link href={ta.assignment_type === 'code' || !ta.assignment_type ? `/classroom/${classroomId}/submissions/${ta.id}` : `/classroom/${classroomId}/curriculum-submissions/${ta.id}`} style={{ padding: '6px 14px', borderRadius: '8px', background: '#EBF1FD', color: '#0C447C', fontSize: '12px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>submissions →</Link>
+                          <button
+                            onClick={() => handleDeleteAssignment(ta.id, ta.title)}
+                            title="delete this assignment"
+                            style={{ padding: '6px 10px', borderRadius: '8px', border: '1.5px solid rgba(239,68,68,0.3)', background: 'transparent', color: '#991B1B', fontSize: '11px', fontWeight: 600, cursor: 'pointer', fontFamily: "'DM Sans', sans-serif", whiteSpace: 'nowrap' }}
+                          >
+                            delete
+                          </button>
                         </div>
                       )
                     })}
