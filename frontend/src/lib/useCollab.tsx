@@ -105,6 +105,10 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
     channel
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState() as Record<string, Array<{ user_id: string; display_name: string; avatar_url: string | null; joined_at: number }>>
+        // Log the *raw* state so we can tell if presence sync is even
+        // firing and what shape it has. Empty state on every sync
+        // means the other tab's track() didn't land.
+        log('presence sync (raw)', state)
         const out: CollabMember[] = []
         for (const arr of Object.values(state)) {
           for (const m of arr) {
@@ -120,8 +124,14 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         const byId = new Map<string, CollabMember>()
         for (const m of out) byId.set(m.user_id, m)
         const final = [...byId.values()]
-        log('presence sync', final.map(m => m.display_name))
+        log('presence sync (deduped)', final.map(m => `${m.display_name} (${m.user_id.slice(0, 8)})`))
         setMembers(final)
+      })
+      .on('presence', { event: 'join' }, ({ key, newPresences }) => {
+        log('presence JOIN', { key, newPresences })
+      })
+      .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+        log('presence LEAVE', { key, leftPresences })
       })
       .on('broadcast', { event: 'code' }, ({ payload }: { payload: { user_id: string; code: string } }) => {
         log('RECV code', { from: payload?.user_id, length: payload?.code?.length })
@@ -145,12 +155,17 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       .subscribe(async status => {
         log('subscribe status', status)
         if (status === 'SUBSCRIBED') {
-          await channel.track({
+          const trackResult = await channel.track({
             user_id: me.user_id,
             display_name: me.display_name,
             avatar_url: me.avatar_url,
             joined_at: Date.now(),
           })
+          // Log whether track() actually succeeded — when this comes
+          // back as anything other than 'ok' the user never appears
+          // in the other peer's presence state, even though their
+          // broadcasts go through.
+          log('tracked self', { result: trackResult, user_id: me.user_id, display_name: me.display_name })
           setReady(true)
           // Pull the persisted snapshot so a late joiner sees what
           // everyone else has been typing instead of an empty buffer.

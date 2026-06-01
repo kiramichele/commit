@@ -40,14 +40,23 @@ export default function CollabStatusBadge({ hasGroup, ready, members, meUserId }
     textColor = '#FDE68A'
     bg = 'rgba(245,158,11,0.15)'
   } else {
-    const peers = members.filter(m => m.user_id !== meUserId)
-    if (peers.length === 0) {
-      label = 'collab · live, alone'
+    const total = members.length
+    const peers = members.filter(m => m.user_id !== meUserId).length
+    if (total === 0) {
+      // SUBSCRIBED but presence sync hasn't reported anybody — not
+      // even you. Either presence is disabled on the Supabase
+      // project or track() silently failed.
+      label = 'collab · live but presence empty'
+      dotColor = '#F59E0B'
+      textColor = '#FDE68A'
+      bg = 'rgba(245,158,11,0.2)'
+    } else if (peers === 0) {
+      label = `collab · live · just you (${total})`
       dotColor = '#22C55E'
       textColor = '#86EFAC'
       bg = 'rgba(34,197,94,0.15)'
     } else {
-      label = `collab · live · ${peers.length} other${peers.length === 1 ? '' : 's'} here`
+      label = `collab · live · ${total} students here`
       dotColor = '#22C55E'
       textColor = '#86EFAC'
       bg = 'rgba(34,197,94,0.2)'
