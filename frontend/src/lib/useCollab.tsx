@@ -154,8 +154,19 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       // payload structure is unchanged.
       .on('broadcast', { event: 'doc' }, ({ payload }: { payload: { user_id: string; code: string } }) => {
         log('RECV doc', { from: payload?.user_id, length: payload?.code?.length })
-        if (!payload || !onRemoteCodeRef.current) return
-        if (payload.user_id === me.user_id) return
+        if (!payload) {
+          log('  ↳ skipped: no payload')
+          return
+        }
+        if (!onRemoteCodeRef.current) {
+          log('  ↳ skipped: no onRemoteCode handler registered')
+          return
+        }
+        if (payload.user_id === me.user_id) {
+          log('  ↳ skipped: own broadcast (self filter)')
+          return
+        }
+        log('  ↳ applying to local state', { length: payload.code.length })
         onRemoteCodeRef.current(payload.code, payload.user_id)
       })
       .on('broadcast', { event: 'caret' }, ({ payload }: { payload: RemoteCaret }) => {
