@@ -124,15 +124,21 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         setMembers(final)
       })
       .on('broadcast', { event: 'code' }, ({ payload }: { payload: { user_id: string; code: string } }) => {
+        log('RECV code', { from: payload?.user_id, length: payload?.code?.length })
         if (!payload || !onRemoteCodeRef.current) return
         if (payload.user_id === me.user_id) return
         onRemoteCodeRef.current(payload.code, payload.user_id)
       })
       .on('broadcast', { event: 'caret' }, ({ payload }: { payload: RemoteCaret }) => {
+        log('RECV caret', { from: payload?.user_id, start: payload?.selection_start })
         if (!payload || payload.user_id === me.user_id) return
         setCarets(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .on('broadcast', { event: 'mouse' }, ({ payload }: { payload: RemoteMouse }) => {
+        // Mouse fires constantly — only log occasionally.
+        if (Math.floor(Date.now() / 1000) % 10 === 0) {
+          log('RECV mouse', { from: payload?.user_id, x: payload?.x, y: payload?.y })
+        }
         if (!payload || payload.user_id === me.user_id) return
         setMice(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
@@ -197,8 +203,21 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
 
   const sendCode = useCallback((code: string) => {
     const ch = channelRef.current
-    if (!ch || !me) return
-    ch.send({ type: 'broadcast', event: 'code', payload: { user_id: me.user_id, code } })
+    if (!ch) {
+      console.warn('[collab] sendCode skipped — no channel yet')
+      return
+    }
+    if (!me) return
+    console.log('[collab] SEND code', { length: code.length })
+    const result = ch.send({ type: 'broadcast', event: 'code', payload: { user_id: me.user_id, code } })
+    // .send() returns a Promise<RealtimeSendResult>. Await it via
+    // .then() so a rejected broadcast is logged instead of being
+    // silently dropped — that's a key diagnostic when the other
+    // student's typing isn't appearing.
+    Promise.resolve(result as unknown as Promise<unknown>).then(
+      r => console.log('[collab] code ack', r),
+      e => console.warn('[collab] code send failed', e),
+    )
     // Mirror the latest local edit into the persisted snapshot so a
     // student who joins the group later loads what's actually on
     // screen, not what was there hours ago. Debounced to keep the

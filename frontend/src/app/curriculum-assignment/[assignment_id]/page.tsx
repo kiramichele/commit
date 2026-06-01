@@ -10,6 +10,7 @@ import DiscussionBoard from '@/components/DiscussionBoard'
 import GroupPicker from '@/components/GroupPicker'
 import CollabPresence from '@/components/CollabPresence'
 import CollabCursors from '@/components/CollabCursors'
+import CollabStatusBadge from '@/components/CollabStatusBadge'
 import { useCollab } from '@/lib/useCollab'
 
 type AssignmentType = 'code' | 'activity' | 'checkin' | 'quiz' | 'project' | 'code_review' | 'discussion'
@@ -853,6 +854,12 @@ function CurriculumAssignmentInner() {
                 <span style={{ fontSize: '11px', color: commits.length >= minCommits ? '#22C55E' : '#F59E0B', fontWeight: 600 }}>
                   {commits.length}/{minCommits} commits {flashCommit && '✓'}
                 </span>
+                <CollabStatusBadge
+                  hasGroup={!!collabGroupId}
+                  ready={collabReady}
+                  members={collabMembers}
+                  meUserId={profile?.profile_id || null}
+                />
                 {collabReady && profile && (
                   <CollabPresence members={collabMembers} meUserId={profile.profile_id} />
                 )}

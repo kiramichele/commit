@@ -12,6 +12,7 @@ import DiscussionBoard from '@/components/DiscussionBoard'
 import GroupPicker from '@/components/GroupPicker'
 import CollabPresence from '@/components/CollabPresence'
 import CollabCursors from '@/components/CollabCursors'
+import CollabStatusBadge from '@/components/CollabStatusBadge'
 import { useCollab } from '@/lib/useCollab'
 
 interface Assignment {
@@ -532,11 +533,17 @@ export default function AssignmentEditorPage() {
 
         {/* CENTER — EDITOR + OUTPUT */}
         <div ref={editorContainerRef} style={{ display: 'flex', flexDirection: 'column', minHeight: 0, position: 'relative' }}>
-          {collabReady && profile && (
-            <div style={{ position: 'absolute', top: '8px', right: '12px', zIndex: 11 }}>
+          <div style={{ position: 'absolute', top: '8px', right: '12px', zIndex: 11, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <CollabStatusBadge
+              hasGroup={!!collabGroupId}
+              ready={collabReady}
+              members={collabMembers}
+              meUserId={profile?.profile_id || null}
+            />
+            {collabReady && profile && (
               <CollabPresence members={collabMembers} meUserId={profile.profile_id} />
-            </div>
-          )}
+            )}
+          </div>
           <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
             {viewingCode !== null && (
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, background: '#0E2D6E', padding: '8px 1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
