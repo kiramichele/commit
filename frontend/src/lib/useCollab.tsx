@@ -104,7 +104,7 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState() as Record<string, Array<{ user_id: string; display_name: string; avatar_url: string | null; joined_at: number }>>
+        const state = channel.presenceState() as Record<string, Array<{ user_id?: string; display_name?: string; avatar_url?: string | null; joined_at?: number }>>
         // Log the *raw* state so we can tell if presence sync is even
         // firing and what shape it has. Empty state on every sync
         // means the other tab's track() didn't land.
@@ -112,11 +112,16 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         const out: CollabMember[] = []
         for (const arr of Object.values(state)) {
           for (const m of arr) {
+            // Defensive: presence payloads come from the wire and
+            // can arrive partially-populated during a re-track race.
+            // A missing user_id would crash the log line + downstream
+            // renderers, so just skip those entries.
+            if (!m || typeof m.user_id !== 'string') continue
             out.push({
               user_id: m.user_id,
-              display_name: m.display_name,
-              avatar_url: m.avatar_url,
-              joined_at: m.joined_at,
+              display_name: m.display_name || 'Student',
+              avatar_url: m.avatar_url ?? null,
+              joined_at: m.joined_at ?? Date.now(),
             })
           }
         }
@@ -124,20 +129,22 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         const byId = new Map<string, CollabMember>()
         for (const m of out) byId.set(m.user_id, m)
         const final = [...byId.values()]
-        log('presence sync (deduped)', final.map(m => `${m.display_name} (${m.user_id.slice(0, 8)})`))
+        log('presence sync (deduped)', final.map(m => `${m.display_name} (${(m.user_id || '?????').slice(0, 8)})`))
 
         // Self-heal: if presence comes back empty but we're supposed
         // to be tracked, immediately re-track. Otherwise we'd wait
         // for the next 5s heartbeat to fix it.
-        const meAbsent = !final.some(m => m.user_id === me.user_id)
-        if (meAbsent) {
-          log('not in presence — re-tracking self')
-          channel.track({
-            user_id: me.user_id,
-            display_name: me.display_name,
-            avatar_url: me.avatar_url,
-            joined_at: Date.now(),
-          }).then(r => log('re-track', r)).catch(e => log('re-track failed', e))
+        if (me.user_id) {
+          const meAbsent = !final.some(m => m.user_id === me.user_id)
+          if (meAbsent) {
+            log('not in presence — re-tracking self')
+            channel.track({
+              user_id: me.user_id,
+              display_name: me.display_name || 'Student',
+              avatar_url: me.avatar_url ?? null,
+              joined_at: Date.now(),
+            }).then(r => log('re-track', r)).catch(e => log('re-track failed', e))
+          }
         }
 
         setMembers(final)
@@ -171,7 +178,13 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
       })
       .on('broadcast', { event: 'caret' }, ({ payload }: { payload: RemoteCaret }) => {
         log('RECV caret', { from: payload?.user_id, start: payload?.selection_start })
-        if (!payload || payload.user_id === me.user_id) return
+        // Reject malformed broadcasts at the door. A caret payload
+        // with a missing user_id or non-numeric offset would crash
+        // the overlay renderer, take React with it, and the channel
+        // would silently close. Better to ignore the bad message.
+        if (!payload || typeof payload.user_id !== 'string') return
+        if (payload.user_id === me.user_id) return
+        if (typeof payload.selection_start !== 'number' || typeof payload.selection_end !== 'number') return
         setCarets(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .on('broadcast', { event: 'mouse' }, ({ payload }: { payload: RemoteMouse }) => {
@@ -179,7 +192,9 @@ export function useCollab({ channelName, me, onRemoteCode, groupId }: UseCollabA
         if (Math.floor(Date.now() / 1000) % 10 === 0) {
           log('RECV mouse', { from: payload?.user_id, x: payload?.x, y: payload?.y })
         }
-        if (!payload || payload.user_id === me.user_id) return
+        if (!payload || typeof payload.user_id !== 'string') return
+        if (payload.user_id === me.user_id) return
+        if (typeof payload.x !== 'number' || typeof payload.y !== 'number') return
         setMice(prev => ({ ...prev, [payload.user_id]: { ...payload, updated_at: Date.now() } }))
       })
       .subscribe(async status => {

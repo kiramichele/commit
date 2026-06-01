@@ -36,12 +36,17 @@ interface CaretMetrics {
   paddingLeft: number
 }
 
-function offsetToLineCol(code: string, offset: number): { line: number; col: number } {
+function offsetToLineCol(code: string | undefined, offset: number | undefined): { line: number; col: number } {
+  // Defensive defaults — caret broadcasts and code state arrive from
+  // separate sources; if either is mid-load when we render, the
+  // helper used to throw "Cannot read properties of undefined".
+  const text = typeof code === 'string' ? code : ''
+  const safeOffset = typeof offset === 'number' && offset >= 0 ? offset : 0
   let line = 0
   let lastBreak = -1
-  const upTo = Math.min(offset, code.length)
+  const upTo = Math.min(safeOffset, text.length)
   for (let i = 0; i < upTo; i++) {
-    if (code.charCodeAt(i) === 10 /* \n */) {
+    if (text.charCodeAt(i) === 10 /* \n */) {
       line += 1
       lastBreak = i
     }
@@ -105,7 +110,7 @@ export default function CollabCursors({ containerRef, textareaRef, code, members
   return (
     <>
       {/* CARET OVERLAYS — colored bars inside the textarea pane. */}
-      {metrics && Object.values(carets).map(caret => {
+      {metrics && Object.values(carets).filter(c => c && typeof c.user_id === 'string').map(caret => {
         const member = memberById.get(caret.user_id)
         const color = colorForUser(caret.user_id)
         const { line, col } = offsetToLineCol(code, caret.selection_start)
@@ -149,7 +154,7 @@ export default function CollabCursors({ containerRef, textareaRef, code, members
       })}
 
       {/* MOUSE CURSOR OVERLAYS — colored arrow + name tag. */}
-      {Object.values(mice).map(m => {
+      {Object.values(mice).filter(m => m && typeof m.user_id === 'string' && typeof m.x === 'number' && typeof m.y === 'number').map(m => {
         const member = memberById.get(m.user_id)
         const color = colorForUser(m.user_id)
         return (
